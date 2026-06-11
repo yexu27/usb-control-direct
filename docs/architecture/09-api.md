@@ -1,0 +1,782 @@
+# 09 私有协议与接口设计
+
+---
+
+## 说明
+
+本系统管理端与装置端之间使用自定义私有协议通信（TCP + TLS + 二进制消息帧）。本文档定义：
+
+1. 协议帧格式
+2. 连接、鉴权与登出流程
+3. 所有消息类型（命令码）及其载荷结构
+
+载荷使用 Protocol Buffers 序列化，`.proto` 文件在 `proto/` 目录中定义，两端共享。
+
+---
+
+## 1. 协议帧格式
+
+每条消息由一个固定头部 + 可变长度载荷组成：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  [4字节] Magic Number  │  0x55534243 ("USBC")           │
+├─────────────────────────────────────────────────────────┤
+│  [4字节] Message Type  │  uint32，消息类型码             │
+├─────────────────────────────────────────────────────────┤
+│  [4字节] Sequence ID   │  uint32，请求序列号（响应与请求匹配）│
+├─────────────────────────────────────────────────────────┤
+│  [4字节] Payload Length│  uint32，载荷字节数（最大 128MB）  │
+├─────────────────────────────────────────────────────────┤
+│  [N字节] Payload       │  Protobuf 序列化的载荷，可以为空   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**约定：**
+- Magic Number 校验失败，立即关闭连接
+- Payload Length 超过 128MB，立即关闭连接
+- 所有整数大端字节序（Big Endian）
+
+---
+
+## 2. 连接、登录、登出与授权流程
+
+**登录页三项输入：装置 IP、用户名、密码。管理端不保存默认 IP，不记住最近 IP。**
+
+1. 装置 IP → 发起 TCP 连接 + TLS 握手，校验证书指纹
+2. 用户名 + 密码 → 发送到装置端，由装置侧用户表校验
+3. 鉴权通过后，装置端检查授权状态并返回角色、会话 token 和授权分支
+
+```
+管理端                               装置端
+   │                                    │
+   │─── TCP Connect ───────────────────→│
+   │←── TLS Handshake ─────────────────→│
+   │    (装置侧使用构建时内置的自签名证书；
+   │     管理端安装包内置对应证书的 SHA256 指纹；
+   │     TLS 握手后校验指纹是否与安装包内置值一致，
+   │     不一致则拒绝连接并提示"版本不兼容，请升级管理端")
+   │                                    │
+   │─── CMD_LOGIN(username,password) ───→│
+   │←── RSP_LOGIN(token,role,auth...) ───│
+   │                                    │
+   [未授权 + 任一有效账号分支]            │
+   │─── CMD_GET_MACHINE_CODE ──────────→│
+   │←── RSP_MACHINE_CODE ──────────────│
+   │─── CMD_UPLOAD_LICENSE ────────────→│
+   │←── RSP_UPLOAD_LICENSE_RESULT ─────│
+   │                                    │
+   [已授权分支：发送带 token 的管理命令]   │
+   │─── CMD_BUSINESS_REQUEST(session_token, ...) ────→│
+   │←── RSP_BUSINESS_RESPONSE ────────────────────────│
+   │                                    │
+   [主动登出]                            │
+   │─── CMD_LOGOUT(session_token) ─────→│
+   │←── RSP_COMMON ────────────────────│
+```
+
+**说明：装置端负责用户鉴权、会话 token、授权状态和角色权限校验。管理端只在进程内保存当前 token 和角色，不落盘保存账号、token 或最近 IP。装置未授权时，系统管理员、操作员、审计员任一有效账号鉴权通过后均进入独立授权页；授权成功后返回登录页并要求重新登录。进入主系统后的系统管理授权信息管理仍仅系统管理员可调用。用户主动登出时，管理端应调用 `CMD_LOGOUT` 使装置侧当前会话 token 失效，并清空管理端进程内会话状态。**
+
+---
+
+## 3. 消息类型码定义
+
+消息类型码分区间分配：
+
+| 区间 | 用途 |
+|---|---|
+| 0x0001 - 0x00FF | 连接、登录、登出与授权管理 |
+| 0x0100 - 0x01FF | 白名单管理 |
+| 0x0200 - 0x02FF | 文件访问控制策略 |
+| 0x0300 - 0x03FF | 策略导入导出 |
+| 0x0400 - 0x04FF | 日志查询 |
+| 0x0500 - 0x05FF | 系统管理（升级/授权/设备描述） |
+| 0x0600 - 0x06FF | 用户管理 |
+| 0x0700 - 0x07FF | 当前未分配，本版本不使用主动通知消息 |
+| 0xFF00 - 0xFFFF | 心跳与通用响应 |
+
+---
+
+## 4. 连接、登录、登出与授权消息
+
+### CMD_LOGIN（0x0001）
+登录装置。无需 session token。
+
+**请求载荷：**
+```protobuf
+message CmdLogin {
+    string username = 1;
+    string password = 2;
+}
+```
+
+**响应 RSP_LOGIN（0x0002）：**
+```protobuf
+message RspLogin {
+    bool success = 1;
+    string session_token = 2;      // 成功时返回，仅管理端进程内保存
+    string username = 3;
+    string role = 4;               // admin / operator / auditor
+    bool authorized = 5;           // 兼容性字段，true 表示 auth_status=authorized
+    string auth_expire_time = 6;
+    string device_description = 7;
+    string error_code = 8;         // USER_OR_PASSWORD_ERROR / ACCOUNT_LOCKED / DEVICE_UNAUTHORIZED
+    string error_message = 9;
+    string auth_status = 10;       // authorized / unauthorized / expired / failed
+}
+```
+
+登录成功时装置侧清零失败计数；登录失败时装置侧递增失败计数，连续 5 次锁定 5 分钟；锁定超时自动解除后清零失败计数。
+
+### CMD_AUTH_STATUS_QUERY（0x0003）
+查询装置授权状态。登录后接口，需 session token。
+
+**请求载荷：**
+```protobuf
+message CmdAuthStatusQuery {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_AUTH_STATUS（0x0004）：**
+```protobuf
+message RspAuthStatus {
+    bool authorized = 1;          // 兼容性字段，true 表示 auth_status=authorized
+    string expire_time = 2;       // 授权到期时间（ISO8601，未授权时为空）
+    string device_description = 3; // 设备描述
+    string auth_status = 4;       // authorized / unauthorized / expired / failed
+}
+```
+
+---
+
+### CMD_GET_MACHINE_CODE（0x0005）
+获取机器码（用于生成授权文件）。
+
+权限规则：
+- 装置未授权且处于独立授权页流程时，系统管理员、操作员、审计员任一有效账号鉴权通过后均可调用。
+- 装置已授权且从“系统管理-授权信息管理”进入时，仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdGetMachineCode {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_MACHINE_CODE（0x0006）：**
+```protobuf
+message RspMachineCode {
+    string machine_code = 1;    // 机器码文本（Base64）
+    bytes qrcode_png = 2;       // 二维码 PNG 图片字节流
+}
+```
+
+---
+
+### CMD_UPLOAD_LICENSE（0x0007）
+上传授权文件。
+
+权限规则：
+- 装置未授权且处于独立授权页流程时，系统管理员、操作员、审计员任一有效账号鉴权通过后均可调用。
+- 装置已授权且从“系统管理-授权信息管理”进入时，仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdUploadLicense {
+    string session_token = 1;
+    bytes license_data = 2;     // 授权文件内容（.txt 文件字节流）
+}
+```
+
+**响应 RSP_UPLOAD_LICENSE（0x0008）：**
+```protobuf
+message RspUploadLicense {
+    bool success = 1;
+    string expire_time = 2;     // 成功时：授权到期时间
+    string error_message = 3;   // 失败时：失败原因
+}
+```
+
+---
+
+### CMD_LOGOUT（0x0009）
+登出并使会话 token 失效。
+
+**请求载荷：**
+```protobuf
+message CmdLogout {
+    string session_token = 1;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+**处理规则：**
+- `session_token` 有效时，装置侧立即使该会话 token 失效。
+- `session_token` 无效或已过期时，返回 `UNAUTHENTICATED`；管理端仍需清空本地进程内会话状态并返回登录页。
+- 登出动作由装置侧记录操作日志，操作日志类型为“登录认证”。
+
+---
+
+## 5. 白名单管理消息
+
+### CMD_LIST_WHITELIST（0x0100）
+获取全量白名单列表。
+
+**请求载荷：**
+```protobuf
+message CmdListWhitelist {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_LIST_WHITELIST（0x0101）：**
+```protobuf
+message WhitelistDevice {
+    string serial_number = 1;
+    string vid = 2;
+    string pid = 3;
+    string device_name = 4;
+    int64 capacity_bytes = 5;
+    string permission = 6;      // readonly / readwrite
+    string description = 7;
+    string add_method = 8;      // device / management
+    string created_at = 9;
+    string device_type = 10;    // storage，页面不展示
+}
+
+message RspListWhitelist {
+    repeated WhitelistDevice devices = 1;
+}
+```
+
+---
+
+### CMD_GET_CONNECTED_DEVICES（0x0102）
+获取当前连接装置的 USB 设备列表（用于装置端添加白名单）。
+
+**请求载荷：**
+```protobuf
+message CmdGetConnectedDevices {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_CONNECTED_DEVICES（0x0103）：**
+```protobuf
+message ConnectedDevice {
+    string serial_number = 1;
+    string device_name = 2;
+    string vid = 3;
+    string pid = 4;
+    int64 capacity_bytes = 5;
+    string device_type = 6;       // storage / keyboard / mouse / unsupported / unknown
+    string interface_type = 7;    // mass_storage / hid_keyboard / hid_mouse / unsupported / unknown
+    string admission_status = 8;  // addable / unsupported / spoof_suspected / blocked
+    string fail_reason = 9;       // 不可添加或禁止映射原因
+}
+
+message RspConnectedDevices {
+    repeated ConnectedDevice devices = 1;
+}
+```
+
+---
+
+### CMD_ADD_WHITELIST（0x0104）
+添加白名单设备。
+
+**请求载荷：**
+```protobuf
+message CmdAddWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+    string vid = 3;
+    string pid = 4;
+    string device_name = 5;
+    int64 capacity_bytes = 6;
+    string permission = 7;
+    string description = 8;
+    string add_method = 9;
+    string device_type = 10;     // storage
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+**安全准入约束：**
+- 白名单只对已识别为普通大容量存储设备的对象生效。
+- 装置端根据 USB 描述符、接口类、接口子类、协议号和端点能力判断设备类型；不得仅依据设备名称、厂商字符串、产品字符串或序列号放行。
+- `device_type` 或 `interface_type` 为 `unknown`、`unsupported`，以及描述符与接口能力不一致或疑似伪装的设备，不允许通过白名单接口添加为可映射 U 盘。
+
+---
+
+### CMD_REMOVE_WHITELIST（0x0105）
+删除白名单设备（按序列号）。
+
+**请求载荷：**
+```protobuf
+message CmdRemoveWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+### CMD_UPDATE_WHITELIST（0x0106）
+修改白名单设备的权限或描述。
+
+**请求载荷：**
+```protobuf
+message CmdUpdateWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+    string permission = 3;   // 可选，不修改时为空
+    string description = 4;  // 可选，不修改时为空
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 6. 文件访问控制策略消息
+
+### CMD_GET_FILE_POLICY（0x0200）
+获取文件访问控制策略（三开关 + 黑名单）。
+
+**请求载荷：**
+```protobuf
+message CmdGetFilePolicy {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_FILE_POLICY（0x0201）：**
+```protobuf
+message FileTypeBlacklistItem {
+    string extension = 1;
+    string description = 2;
+    bool is_default = 3;
+    string created_at = 4;
+}
+
+message RspFilePolicy {
+    bool exec_control_enabled = 1;
+    bool auto_read_control_enabled = 2;
+    bool file_type_blacklist_enabled = 3;
+    repeated FileTypeBlacklistItem blacklist = 4;
+}
+```
+
+---
+
+### CMD_UPDATE_FILE_POLICY_SWITCH（0x0202）
+修改文件访问控制开关。
+
+**请求载荷：**
+```protobuf
+message CmdUpdateFilePolicySwitch {
+    string session_token = 1;
+    string policy_key = 2;  // exec_control / auto_read_control / file_type_blacklist_control
+    bool enabled = 3;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+### CMD_ADD_BLACKLIST_EXTENSION（0x0203）
+添加文件类型黑名单条目。
+
+**请求载荷：**
+```protobuf
+message CmdAddBlacklistExtension {
+    string session_token = 1;
+    string extension = 2;
+    string description = 3;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+### CMD_REMOVE_BLACKLIST_EXTENSION（0x0204）
+删除文件类型黑名单条目。
+
+**请求载荷：**
+```protobuf
+message CmdRemoveBlacklistExtension {
+    string session_token = 1;
+    string extension = 2;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 7. 策略导入导出消息
+
+### CMD_EXPORT_POLICY（0x0300）
+导出当前全量策略为加密 .bin 文件。
+
+**请求载荷：**
+```protobuf
+message CmdExportPolicy {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_EXPORT_POLICY（0x0301）：**
+```protobuf
+message RspExportPolicy {
+    bool success = 1;
+    bytes policy_data = 2;      // 加密后的 .bin 文件字节流
+    string error_message = 3;
+}
+```
+
+---
+
+### CMD_IMPORT_POLICY（0x0302）
+导入策略文件，整体覆盖。
+
+**请求载荷：**
+```protobuf
+message CmdImportPolicy {
+    string session_token = 1;
+    bytes policy_data = 2;      // .bin 文件字节流
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 8. 日志查询消息
+
+### CMD_QUERY_LOGS（0x0400）
+查询装置侧日志（USB 审计日志、恶意代码检测日志或操作日志）。
+
+**请求载荷：**
+```protobuf
+message CmdQueryLogs {
+    string session_token = 1;
+    string log_type = 2;        // usb_audit / malware / operation
+    string start_time = 3;      // ISO8601 UTC，包含
+    string end_time = 4;        // ISO8601 UTC，包含
+    string keyword = 5;         // 关键字搜索，可为空
+    string event_type = 6;      // USB 审计事件类型筛选，可为空
+    int32 page = 7;             // 页码（从 1 开始）
+    int32 page_size = 8;        // 每页条数（默认 50）
+    string log_category = 9;    // 操作日志 PRD 页面分类筛选，可为空
+    string action_type = 10;    // 操作日志具体动作筛选，可为空
+}
+```
+
+**响应 RSP_QUERY_LOGS（0x0401）：**
+```protobuf
+message LogEntry {
+    int64 id = 1;
+    string event_time = 2;
+    string device_sn = 3;
+    string device_name = 4;
+    string device_type = 5;
+    string interface_type = 6;
+    string event_type = 7;       // USB 审计日志专有
+    string permission = 8;       // USB 审计日志专有
+    int64 capacity_bytes = 9;    // USB 审计日志专有
+    string file_path = 10;       // USB 审计日志/恶意代码日志专有
+    string matched_policy = 11;  // USB 审计日志专有
+    string scan_time = 12;       // 恶意代码日志专有
+    string scan_result = 13;     // 恶意代码日志专有
+    string virus_name = 14;      // 恶意代码日志专有
+    string virus_db_version = 15;// 恶意代码日志专有
+    string process_result = 16;  // 恶意代码日志专有
+    string op_time = 17;         // 操作日志专有
+    string username = 18;        // 操作日志专有
+    string role = 19;            // 操作日志专有
+    string module = 20;          // 操作日志专有
+    string log_category = 21;    // 操作日志 PRD 页面分类，对应 T10.log_type
+    string action_type = 22;     // 操作日志具体动作
+    string target = 23;          // 操作日志专有
+    string related_file = 24;    // 操作日志专有
+    string related_version = 25; // 操作日志专有
+    string source_ip = 26;       // 排查字段，页面默认不展示
+    string app_version = 27;     // 排查字段，页面默认不展示
+    string session_id = 28;      // 排查字段，页面默认不展示
+    string request_id = 29;      // 排查字段，页面默认不展示
+    string result = 30;
+    string fail_reason = 31;
+    string detail = 32;
+}
+
+message RspQueryLogs {
+    bool success = 1;
+    repeated LogEntry entries = 2;
+    int32 total = 3;            // 符合条件的总记录数
+    int32 page = 4;
+    int32 page_size = 5;
+}
+```
+
+---
+
+### CMD_EXPORT_LOGS（0x0402）
+导出装置侧日志为 .zip 压缩包。
+
+**请求载荷：**
+```protobuf
+message CmdExportLogs {
+    string session_token = 1;
+    string log_type = 2;
+    string start_time = 3;
+    string end_time = 4;
+    string keyword = 5;
+    string event_type = 6;
+    string log_category = 7;
+    string action_type = 8;
+}
+```
+
+**响应 RSP_EXPORT_LOGS（0x0403）：**
+```protobuf
+message RspExportLogs {
+    bool success = 1;
+    bytes zip_data = 2;         // .zip 文件字节流
+    string error_message = 3;
+}
+```
+
+---
+
+### CMD_DELETE_LOGS（0x0404）
+清理装置侧日志。
+
+**请求载荷：**
+```protobuf
+message CmdDeleteLogs {
+    string session_token = 1;
+    string log_type = 2;
+    string start_time = 3;
+    string end_time = 4;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 9. 系统管理消息
+
+### CMD_GET_SYSTEM_INFO（0x0500）
+获取系统基本信息（版本、病毒库版本、授权信息、设备描述）。
+
+**请求载荷：**
+```protobuf
+message CmdGetSystemInfo {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_SYSTEM_INFO（0x0501）：**
+```protobuf
+message RspSystemInfo {
+    string system_version = 1;
+    string virus_db_version = 2;
+    bool authorized = 3;          // 兼容性字段，true 表示 auth_status=authorized
+    string auth_expire_time = 4;
+    string device_description = 5;
+    string virus_db_updated_at = 6;
+    string auth_status = 7;       // authorized / unauthorized / expired / failed
+}
+```
+
+---
+
+### CMD_UPLOAD_SYSTEM_UPGRADE（0x0502）
+上传系统升级包。
+
+**请求载荷：**
+```protobuf
+message CmdUploadSystemUpgrade {
+    string session_token = 1;
+    bytes upgrade_data = 2;     // .bin 升级包字节流
+    string target_version = 3;  // 目标版本号（升级包内声明）
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+### CMD_UPLOAD_VIRUSDB_UPGRADE（0x0503）
+上传病毒库升级包。
+
+**请求载荷：**
+```protobuf
+message CmdUploadVirusdbUpgrade {
+    string session_token = 1;
+    bytes upgrade_data = 2;     // .zip 升级包字节流
+    string target_version = 3;  // 版本递增逢数字 4 跳过
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+### CMD_UPDATE_DEVICE_DESC（0x0504）
+修改设备描述。
+
+**请求载荷：**
+```protobuf
+message CmdUpdateDeviceDesc {
+    string session_token = 1;
+    string description = 2;     // 最大 32 字符，仅字母/数字/下划线
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 10. 用户管理消息
+
+### CMD_LIST_USERS（0x0600）
+获取用户列表。仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdListUsers {
+    string session_token = 1;
+}
+```
+
+**响应 RSP_LIST_USERS（0x0601）：**
+```protobuf
+message UserItem {
+    string username = 1;
+    string role = 2;       // admin / operator / auditor
+    string status = 3;     // active / locked / deleted
+    bool is_builtin = 4;
+    string created_at = 5; // 内置用户可返回"内置"
+}
+
+message RspListUsers {
+    repeated UserItem users = 1;
+}
+```
+
+### CMD_CREATE_USER（0x0602）
+新建用户。仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdCreateUser {
+    string session_token = 1;
+    string username = 2;
+    string role = 3;
+    string password = 4;
+    string confirm_password = 5;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+### CMD_DELETE_USER（0x0603）
+删除非内置用户。仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdDeleteUser {
+    string session_token = 1;
+    string username = 2;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+### CMD_RESET_PASSWORD（0x0604）
+重置用户密码。仅系统管理员可调用。
+
+**请求载荷：**
+```protobuf
+message CmdResetPassword {
+    string session_token = 1;
+    string username = 2;
+    string new_password = 3;
+    string confirm_password = 4;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+### CMD_CHANGE_PASSWORD（0x0605）
+修改本人密码。所有已登录角色可调用。
+
+**请求载荷：**
+```protobuf
+message CmdChangePassword {
+    string session_token = 1;
+    string old_password = 2;
+    string new_password = 3;
+    string confirm_password = 4;
+}
+```
+
+**响应：** 通用响应 RSP_COMMON
+
+---
+
+## 11. 预留消息区间
+
+消息码区间 0x0701-0x07FF 当前未分配。本版本管理端通过请求/响应方式读取装置侧数据，不定义装置端主动通知消息。
+
+---
+
+## 12. 心跳消息
+
+### CMD_HEARTBEAT（0xFF01）
+心跳保活，30 秒发送一次，超过 3 次无响应视为连接断开。
+
+**请求/响应载荷：** 空
+
+---
+
+## 13. 通用响应（RSP_COMMON）
+
+所有无特定响应载荷的命令使用通用响应：
+
+```protobuf
+message RspCommon {
+    bool success = 1;
+    string error_code = 2;      // 失败时的错误码（字符串枚举）
+    string error_message = 3;   // 失败时的提示文本（中文，直接展示给用户）
+}
+```
+
+**通用错误码：**
+
+| 错误码 | 含义 |
+|---|---|
+| DEVICE_BUSY | 装置正在执行其他操作（如扫描中）|
+| VALIDATION_FAILED | 请求参数校验失败 |
+| ALREADY_EXISTS | 资源已存在（如重复序列号） |
+| NOT_FOUND | 目标资源不存在 |
+| VERSION_TOO_LOW | 升级包版本低于当前版本 |
+| VERSION_INCOMPATIBLE | 策略文件或升级包版本不兼容 |
+| VERSION_NUMBER_FORBIDDEN | 病毒库版本号命中逢 4 跳过规则 |
+| FORMAT_ERROR | 文件格式错误 |
+| UNAUTHORIZED | 装置未授权 |
+| UNAUTHENTICATED | session token 无效或已过期 |
+| PERMISSION_DENIED | 当前角色无权限 |
+| ACCOUNT_LOCKED | 账号已锁定 |
+| INTERNAL_ERROR | 装置内部错误 |

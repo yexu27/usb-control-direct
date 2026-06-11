@@ -1,0 +1,428 @@
+# 08 数据库设计
+
+---
+
+## 说明
+
+- 装置端数据库：SQLite，路径 `/var/lib/usb-control/device.db`
+- 管理端不创建业务数据库，不持久化账号、日志、最近 IP、当前页面进程内状态或查询结果
+- 日期时间统一存储为 INTEGER（Unix 时间戳，秒级精度），范围查询直接使用整数比较，性能优于字符串比较
+
+---
+
+## 数据库运行配置
+
+装置端程序启动时执行以下 PRAGMA 配置：
+
+```sql
+PRAGMA auto_vacuum = FULL;       -- 删除后自动回收磁盘空间（必须在建表前设置）
+PRAGMA journal_mode = WAL;       -- 写前日志模式，支持读写并发
+PRAGMA busy_timeout = 5000;      -- 写入竞争时等待 5 秒，避免 SQLITE_BUSY
+PRAGMA wal_checkpoint(TRUNCATE); -- 启动时执行一次完整 checkpoint
+```
+
+**WAL 模式说明：**
+
+- WAL 模式下，读操作不阻塞写操作，写操作不阻塞读操作，适合装置端同时存在 USB 事件写入日志和管理端查询日志的场景。
+- WAL 文件（`device.db-wal`）和共享内存文件（`device.db-shm`）与主数据库文件位于同一目录，备份时需一并处理。
+- 装置端为单进程多线程架构，SQLite 连接池大小设置为 1 写 + N 读；N 根据并发查询需求调整，推荐取值为 2-4。
+
+---
+
+## 装置端数据库表
+
+### T01 白名单表（usb_whitelist）
+
+存储普通 U 盘白名单。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| serial_number | TEXT | NOT NULL UNIQUE | 序列号，唯一 |
+| vid | TEXT | | USB Vendor ID（十六进制字符串，如 "0930"） |
+| pid | TEXT | | USB Product ID（十六进制字符串） |
+| device_name | TEXT | | 设备名称（从 USB 描述符读取） |
+| capacity_bytes | INTEGER | | 存储容量（字节） |
+| device_type | TEXT | NOT NULL DEFAULT 'storage' | 设备类型 |
+| description | TEXT | | 用户自定义描述 |
+| permission | INTEGER | NOT NULL DEFAULT 0 | 权限：0=只读 / 1=读写 |
+| add_method | INTEGER | NOT NULL | 添加方式：0=装置端添加 / 1=管理端添加 |
+| created_at | INTEGER | NOT NULL | 创建时间（Unix 时间戳） |
+
+索引：`serial_number`（唯一索引，查询用）
+
+---
+
+### T02 文件类型黑名单表（file_type_blacklist）
+
+存储文件类型黑名单条目。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| extension | TEXT | NOT NULL UNIQUE | 文件后缀（含 . 号，小写存储，如 ".mp3"） |
+| description | TEXT | | 用户自定义描述 |
+| is_default | INTEGER | NOT NULL DEFAULT 0 | 是否为默认预置（1=预置，0=用户添加） |
+| created_at | INTEGER | NOT NULL | 创建时间（Unix 时间戳） |
+
+索引：`extension`（唯一索引）
+
+**注：**
+- PRD 定义 38 种默认黑名单后缀，在系统初始化时插入，`is_default=1`
+- 与可执行访问控制内置 4 项（dll / exe / PE / ELF）重复的项不进入文件类型黑名单
+- 用户添加的条目 `is_default=0`
+- 查询时大小写不敏感（存储统一小写）
+
+---
+
+### T03 文件访问控制开关表（file_access_policy）
+
+存储三个控制开关的当前状态（固定3行，以 policy_key 区分）。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| policy_key | TEXT | PRIMARY KEY | 策略键名 |
+| enabled | INTEGER | NOT NULL DEFAULT 0 | 是否启用（1=启用，0=禁用） |
+| updated_at | INTEGER | NOT NULL | 最后修改时间（Unix 时间戳） |
+
+**预置的三个 policy_key：**
+
+| policy_key | 含义 |
+|---|---|
+| exec_control | 可执行程序访问控制 |
+| auto_read_control | 介质自动读取功能控制 |
+| file_type_blacklist_control | 文件类型黑名单（总开关）|
+
+---
+
+### T04 可执行程序控制表（exec_type）
+
+存储可执行程序内置类型列表。PRD 定义 4 种内置类型，不可删除，只能通过 T03 的 `exec_control` 开关统一启用/禁用。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| type_name | TEXT | NOT NULL UNIQUE | 类型标识（dll / exe / PE / ELF） |
+| description | TEXT | | 类型说明 |
+
+**预置数据：**
+
+| type_name | description |
+|---|---|
+| dll | 动态链接库 |
+| exe | Windows 可执行文件 |
+| PE | Windows PE 可执行文件格式 |
+| ELF | Linux 原生可执行文件格式 |
+
+**注：**
+- 可执行程序类型基于文件实际格式识别，不仅依赖文件后缀名
+- 内置 4 项不可增删，仅通过 T03 `exec_control` 开关控制是否生效
+
+---
+
+### T05 USB 审计日志表（usb_audit_log）
+
+存储所有 USB 设备的接入、映射、访问控制相关事件。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| event_time | INTEGER | NOT NULL | 事件时间（Unix 时间戳） |
+| interface_class | INTEGER | | USB 接口类（bInterfaceClass，如 0x08=Mass Storage, 0x03=HID） |
+| interface_subclass | INTEGER | | USB 接口子类（bInterfaceSubClass） |
+| interface_protocol | INTEGER | | USB 接口协议（bInterfaceProtocol，HID 下 1=键盘, 2=鼠标） |
+| device_name | TEXT | | 设备名称 |
+| device_sn | TEXT | | 序列号 |
+| vid | TEXT | | USB Vendor ID |
+| pid | TEXT | | USB Product ID |
+| event_type | TEXT | NOT NULL | 事件类型（见下方枚举） |
+| permission | INTEGER | | 权限：0=只读 / 1=读写 |
+| capacity_bytes | INTEGER | | 存储容量（字节） |
+| file_path | TEXT | | 文件访问控制相关事件的文件路径 |
+| matched_policy | TEXT | | 命中策略：virus / exec_control / file_type_blacklist / auto_read_control / whitelist |
+| result | TEXT | NOT NULL | 处理结果（allowed/denied/mapped/removed/blocked/failed） |
+| fail_reason | TEXT | | 失败原因 |
+| detail | TEXT | | 附加信息（JSON 格式，仅保存无法结构化的补充信息） |
+
+**event_type 枚举（存储值 → PRD 页面展示文案）：**
+
+| 存储值 | PRD 页面展示文案 |
+|---|---|
+| device_insert | USB 插入成功 |
+| device_remove | USB 移除成功 |
+| whitelist_denied | 禁止 |
+| mapped | 映射成功 |
+| map_failed | 映射失败 |
+| file_access_denied | 阻断 |
+| keyboard_verify_pass | 验证成功 |
+| keyboard_verify_fail | 验证失败 |
+| scan_interrupted | 扫描中断 |
+
+索引：`event_time`（范围查询），`device_sn`（设备筛选），`event_type`（类型筛选），`matched_policy`（策略筛选）
+
+---
+
+### T06 恶意代码检测日志表（malware_log）
+
+存储病毒扫描的检测结果。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| scan_time | INTEGER | NOT NULL | 扫描时间（Unix 时间戳） |
+| device_sn | TEXT | | 序列号 |
+| device_name | TEXT | | 设备名称 |
+| file_path | TEXT | | 命中或处理的文件路径；整盘扫描结果可为空 |
+| scan_result | INTEGER | NOT NULL | 扫描结果：0=未发现 / 1=发现病毒 / 2=扫描失败 |
+| virus_name | TEXT | | 病毒名称（scan_result=1 时有值，来自 ClamAV 报告） |
+| virus_db_version | TEXT | | 扫描时使用的病毒库版本 |
+| process_result | INTEGER | | 处理结果：0=已重命名 / 1=已阻断 / 2=处理失败 / 3=无需处理 |
+| fail_reason | TEXT | | 失败原因 |
+| detail | TEXT | | 附加信息（JSON 格式） |
+
+索引：`scan_time`（范围查询），`device_sn`（设备筛选），`scan_result`（结果筛选），`virus_name`（病毒名称筛选）
+
+**注：** 多个病毒文件命中时，每个命中文件写入一条记录，便于按文件路径、病毒名称和处理结果导出与校验。
+
+---
+
+### T07 系统配置表（system_config）
+
+通用 key-value 配置存储（替代独立的配置项字段）。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| config_key | TEXT | PRIMARY KEY | 配置键名 |
+| config_value | TEXT | | 配置值（JSON 序列化） |
+| updated_at | INTEGER | NOT NULL | 最后修改时间（Unix 时间戳） |
+
+**预置 config_key 列表：**
+
+| config_key | 说明 |
+|---|---|
+| device_description | 设备描述（最大 32 字符） |
+| auth_status | 授权状态（authorized/unauthorized/expired/failed） |
+| auth_expire_time | 授权到期时间（Unix 时间戳）|
+| machine_code | 机器码（Base64 编码） |
+| system_version | 当前系统版本号 |
+| virus_db_version | 当前病毒库版本 |
+| virus_db_updated_at | 当前病毒库更新时间（Unix 时间戳） |
+
+**注：** 授权失败的具体失败原因以操作日志记录为准；授权到期可由 `auth_status=expired` 或 `auth_expire_time` 与当前时间计算得到，接口返回时需统一转换为 PRD 定义的授权状态。
+
+---
+
+### T08 用户表（users）
+
+存储装置侧用户账号、角色、状态和登录失败锁定信息。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| username | TEXT | NOT NULL UNIQUE | 用户名 |
+| password_hash | TEXT | NOT NULL | bcrypt hash |
+| role | INTEGER | NOT NULL | 角色：0=系统管理员 / 1=操作员 / 2=审计员 |
+| status | INTEGER | NOT NULL DEFAULT 0 | 状态：0=正常 / 1=锁定 / 2=已删除 |
+| is_builtin | INTEGER | NOT NULL DEFAULT 0 | 是否内置账号（1=不可删除） |
+| login_fail_count | INTEGER | NOT NULL DEFAULT 0 | 连续登录失败次数 |
+| lock_until | INTEGER | | 锁定到期时间（Unix 时间戳），为 NULL 表示未锁定 |
+| created_at | INTEGER | NOT NULL | 创建时间（Unix 时间戳） |
+| updated_at | INTEGER | NOT NULL | 最后修改时间（Unix 时间戳） |
+
+索引：`username`（唯一索引），`status`（状态筛选）
+
+**注：** 删除用户时，status 设置为 `2`，username 保留不复用。
+
+---
+
+### T09 角色权限表（role_permission）
+
+存储角色与页面的访问权限映射。装置端 API 校验权限时查询此表，管理端登录后拉取当前角色权限控制菜单可见性和路由守卫。表中存在记录即表示可访问，不存在即无权限。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| role | INTEGER | NOT NULL | 角色：0=系统管理员 / 1=操作员 / 2=审计员 |
+| page_key | TEXT | NOT NULL | 页面标识 |
+
+约束：`UNIQUE(role, page_key)`
+
+**预置数据：**
+
+| role | page_key | 说明 |
+|---|---|---|
+| 0 | system_management | 系统管理员 - 系统管理 |
+| 0 | user_management | 系统管理员 - 用户管理 |
+| 1 | file_access_control | 操作员 - 文件访问控制 |
+| 1 | usb_device_control | 操作员 - U盘设备控制 |
+| 1 | policy_management | 操作员 - 策略管理 |
+| 2 | log_management | 审计员 - 日志管理 |
+
+---
+
+### T10 操作日志表（operation_log）
+
+存储系统管理、策略管理、用户管理、授权、升级、日志清理等关键管理操作。该表位于装置端数据库，管理端只通过协议查询展示。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| op_time | INTEGER | NOT NULL | 操作时间（Unix 时间戳） |
+| username | TEXT | NOT NULL | 操作账号 |
+| role | INTEGER | NOT NULL | 操作时的角色：0=系统管理员 / 1=操作员 / 2=审计员 |
+| log_type | TEXT | NOT NULL | 操作日志类型（PRD 页面筛选分类，见下方枚举） |
+| action_type | TEXT | | 具体操作类型，如 login_failed/user_create/whitelist_add/policy_import/system_upgrade |
+| target | TEXT | | 操作对象（如序列号、用户名等） |
+| before_value | TEXT | | 操作前值（JSON 格式） |
+| after_value | TEXT | | 操作后值（JSON 格式） |
+| related_file | TEXT | | 关联文件名，如策略文件、升级包、授权文件、日志导出文件 |
+| related_version | TEXT | | 关联版本号，如系统版本、病毒库版本 |
+| result | INTEGER | NOT NULL | 结果：0=成功 / 1=失败 |
+| fail_reason | TEXT | | 失败原因 |
+| source_ip | TEXT | | 来源 IP，用于排查，不在页面默认展示 |
+| app_version | TEXT | | 管理端 App 版本，用于排查，不在页面默认展示 |
+| session_id | TEXT | | 会话 ID，用于排查，不在页面默认展示 |
+| request_id | TEXT | | 请求 ID，用于排查，不在页面默认展示 |
+| detail | TEXT | | 附加信息（JSON 格式，仅保存无法结构化的补充信息） |
+
+**log_type 枚举（对应 PRD 页面筛选分类）：**
+
+| 值 | 含义 |
+|---|---|
+| login_auth | 登录认证 |
+| user_management | 用户管理 |
+| security_config | 安全配置变更 |
+| auth_management | 授权管理 |
+| system_management | 系统管理 |
+| program_upgrade | 程序升级 |
+| log_management | 日志管理 |
+
+**action_type 示例（用于记录具体动作，不作为页面主筛选分类）：**
+
+| action_type | 含义 |
+|---|---|
+| login | 用户登录 |
+| logout | 用户登出 |
+| login_failed | 登录失败 |
+| password_change | 修改密码 |
+| password_reset | 重置他人密码 |
+| user_create | 新建用户 |
+| user_delete | 删除用户 |
+| whitelist_add | 添加白名单设备 |
+| whitelist_remove | 删除白名单设备 |
+| whitelist_update | 修改白名单（权限/描述） |
+| file_policy_update | 修改文件访问控制策略 |
+| blacklist_add | 添加文件类型黑名单 |
+| blacklist_remove | 删除文件类型黑名单 |
+| policy_import | 导入策略 |
+| policy_export | 导出策略 |
+| system_upgrade | 系统升级 |
+| virusdb_upgrade | 病毒库升级 |
+| auth_upload | 上传授权文件 |
+| device_desc_update | 修改设备描述 |
+| log_clean | 清理日志 |
+
+索引：`op_time`（范围查询），`username`（账号筛选），`log_type`（类型筛选），`request_id`（问题排查）
+
+**日志清理"半年以内"定义：** 从当前日期回退 6 个完整日历月（自然月），跨年同规则。例如当前为 2025-08-15，则 2025-02-15 及之后的日志禁止清理。
+
+---
+
+### T11 日志覆盖追溯表（log_retention_event）
+
+记录装置整体存储使用率超过 80% 后触发的三类业务日志自动滚动覆盖行为。该表位于装置端数据库，不作为独立页面展示；日志导出和问题排查场景可按需纳入内部数据。
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | 自增主键 |
+| trigger_time | INTEGER | NOT NULL | 触发时间（Unix 时间戳） |
+| log_category | TEXT | NOT NULL | 覆盖类别：usb_audit / malware / operation |
+| storage_usage_percent | INTEGER | NOT NULL | 触发时装置整体存储使用率 |
+| covered_from_time | INTEGER | | 被覆盖日志的最早时间（Unix 时间戳） |
+| covered_to_time | INTEGER | | 被覆盖日志的最晚时间（Unix 时间戳） |
+| covered_count | INTEGER | NOT NULL DEFAULT 0 | 覆盖记录数量 |
+| result | INTEGER | NOT NULL | 结果：0=成功 / 1=失败 |
+| fail_reason | TEXT | | 失败原因，如当前类别无可覆盖旧日志 |
+
+索引：`trigger_time`（范围查询），`log_category`（类别筛选）
+
+---
+
+## 数据库初始化
+
+**装置端初始化（首次启动执行）：**
+1. 执行数据库运行配置（WAL 模式、busy_timeout、auto_vacuum=FULL）
+2. 创建 T01-T11 所有表
+3. 插入 38 种默认文件类型黑名单（T02，is_default=1）
+4. 插入三个文件访问控制开关初始值（T03，均默认关闭）
+5. 插入 4 种内置可执行程序类型（T04）
+6. 插入系统配置初始值（T07）
+7. 插入三个内置账号（T08，is_builtin=1，初始密码 bcrypt hash：`admin@123` / `operator@123` / `audit@123`）
+8. 插入角色权限预置数据（T09，6 行）
+
+**管理端初始化：**
+
+无业务数据库初始化。管理端启动时只初始化进程内状态、路由和协议客户端。
+
+---
+
+## 数据库 Schema 版本管理
+
+装置端通过 `user_version` pragma 管理 Schema 版本，程序启动时检查版本，自动执行迁移 SQL，不依赖外部迁移工具。管理端无本地业务 Schema。
+
+```sql
+PRAGMA user_version = 1; -- 当前 schema 版本
+```
+
+---
+
+## 日志存储与滚动覆盖策略
+
+### 三类业务日志自动滚动覆盖（一进一出）
+
+装置整体存储使用率超过 80% 时，写入某类日志触发自动覆盖：
+
+1. 写入前检查装置整体存储使用率
+2. 超过 80% 时，删除**该类别**中时间最早的 1 条日志记录
+3. 写入新日志记录
+4. 记录覆盖行为到 T11 日志覆盖追溯表
+
+**约束：**
+- 只覆盖当前写入类别（usb_audit / malware / operation）的最旧记录，**不跨类别覆盖**
+- 当前类别无可覆盖旧日志时，返回空间不足或写入失败，不自动删除其他类别日志
+- 每次只删除 1 条最旧记录（一进一出），不做批量删除
+
+### 人工清理
+
+审计员可按日志类型和时间范围清理日志：
+
+- 装置侧强校验：禁止清理半年以内日志（从当前日期回退 6 个完整日历月）
+- 清理前管理端二次确认
+- 清理操作由装置侧记录操作日志（T10）
+- 人工清理可能涉及较大范围删除，装置侧应分批执行（每批 500-1000 条），避免长时间阻塞写入
+
+### Rust 服务运行日志
+
+Rust 服务运行日志用于记录装置端程序自身运行状态，保存为装置侧本地文件，不进入 T05/T06/T10 三类业务日志表，不通过日志管理页面查询、导出或清理。
+
+**约束：**
+- 日志级别支持 `trace`、`debug`、`info`、`warn`、`error`
+- 日志内容不得写入用户密码、授权文件内容、策略密钥、SM4 密钥、SM2 私钥等敏感信息
+- 装置整体存储使用率超过 80% 时，Rust 服务运行日志按自身日志文件滚动规则清理最旧运行日志文件，不占用三类业务日志的覆盖额度，也不跨类别删除业务日志
+
+---
+
+## 空间回收策略
+
+SQLite DELETE 操作默认不释放磁盘空间。装置端需要删除后立即回收空间（无论是自动滚动覆盖还是人工清理）。
+
+装置端数据库创建时启用全自动回收模式：
+
+```sql
+PRAGMA auto_vacuum = FULL;
+```
+
+**说明：**
+- `auto_vacuum = FULL` 模式下，每次 DELETE 后 SQLite 自动回收释放的页面，磁盘空间立即释放
+- 必须在数据库首次创建时设置，建表前执行
+- 相比手动 VACUUM，无需额外调度，自动滚动覆盖（一进一出）和人工批量清理均立即生效
