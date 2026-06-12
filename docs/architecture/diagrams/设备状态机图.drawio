@@ -1,6 +1,6 @@
 <mxfile host="Electron" pages="3">
   <diagram name="U盘设备状态机" id="d06-usb-state">
-    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1300" pageHeight="860" math="0" shadow="0">
+    <mxGraphModel dx="1478" dy="787" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="860" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -79,6 +79,16 @@
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="610" y="243" as="sourcePoint" />
             <mxPoint x="610" y="318" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-cls-mountfail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;dashed=1;" value="mount 失败">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="420" y="245" />
+              <mxPoint x="420" y="456" />
+            </Array>
+            <mxPoint x="480" y="245" as="sourcePoint" />
+            <mxPoint x="290" y="456" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         <mxCell id="e-scan-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="扫描失败">

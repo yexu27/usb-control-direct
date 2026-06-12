@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="装置端程序实现模块图" id="d02-device-modules">
-    <mxGraphModel dx="2160" dy="1195" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1280" math="0" shadow="0">
+    <mxGraphModel dx="2808" dy="1496" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1280" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -111,7 +111,7 @@
             <mxPoint x="735" y="318" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e-s10-d1-l" connectable="0" parent="e-s10-d1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#1F77B4;labelBackgroundColor=#FFFFFF;" value="管理命令路由" vertex="1">
+        <mxCell id="e-s10-d1-l" connectable="0" parent="e-s10-d1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#1F77B4;labelBackgroundColor=#FFFFFF;" value="路由到 S05 白名单 · S07 日志" vertex="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="-30" as="offset" />
           </mxGeometry>
@@ -126,7 +126,7 @@
             <mxPoint x="1535" y="318" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e-s10-d2-l" connectable="0" parent="e-s10-d2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#1F77B4;labelBackgroundColor=#FFFFFF;" value="管理命令路由" vertex="1">
+        <mxCell id="e-s10-d2-l" connectable="0" parent="e-s10-d2" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#1F77B4;labelBackgroundColor=#FFFFFF;" value="路由到 S06 策略 · S08 会话 · S09 授权" vertex="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="30" as="offset" />
           </mxGeometry>
@@ -176,6 +176,14 @@
         <mxCell id="e-s03-clam-l" connectable="0" parent="e-s03-clam" style="edgeLabel;html=1;align=right;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#666666;labelBackgroundColor=#FFFFFF;" value="Unix socket 扫描" vertex="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="40" y="-62" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-s04-s05" edge="1" parent="1" source="s04" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#666666;fontSize=10;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" target="s05">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s04-s05-l" connectable="0" parent="e-s04-s05" style="edgeLabel;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#666666;labelBackgroundColor=#FFFFFF;" value="查询设备权限" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="8" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="e-s04-sys" edge="1" parent="1" source="s04" style="rounded=1;curved=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#666666;fontSize=10;exitX=0.35;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="nbd">

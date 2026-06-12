@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="装置侧数据库 ER 图" id="d07-database-er">
-    <mxGraphModel dx="2006" dy="1110" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1650" math="0" shadow="0">
+    <mxGraphModel dx="2340" dy="1247" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1650" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -47,10 +47,10 @@
           <mxGeometry height="204" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t08" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T08 users（用户表）" vertex="1">
-          <mxGeometry height="250" width="280" x="420" y="490" as="geometry" />
+          <mxGeometry height="268" width="280" x="420" y="490" as="geometry" />
         </mxCell>
-        <mxCell id="t08f" parent="t08" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  username  TEXT NOT NULL&#xa;    password_hash  TEXT NOT NULL (bcrypt)&#xa;    role  INT NOT NULL&#xa;        (0=系统管理员/1=操作员/2=审计员)&#xa;    status  INT NOT NULL DEFAULT 0&#xa;        (0=正常/1=锁定/2=已删除)&#xa;    is_builtin  INT NOT NULL DEFAULT 0&#xa;        (1=不可删除)&#xa;    login_fail_count  INT NOT NULL DEFAULT 0&#xa;    lock_until  INT (NULL=未锁定)&#xa;    created_at  INTEGER NOT NULL&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;删除用 status=2, username 保留不复用" vertex="1">
-          <mxGeometry height="224" width="280" y="26" as="geometry" />
+        <mxCell id="t08f" parent="t08" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  username  TEXT NOT NULL&#xa;    password_hash  TEXT NOT NULL (bcrypt)&#xa;    role  INT NOT NULL&#xa;        (0=系统管理员/1=操作员/2=审计员)&#xa;    status  INT NOT NULL DEFAULT 0&#xa;        (0=正常/1=锁定/2=已删除)&#xa;    is_builtin  INT NOT NULL DEFAULT 0&#xa;        (1=不可删除)&#xa;    login_fail_count  INT NOT NULL DEFAULT 0&#xa;    lock_until  INT (NULL=未锁定)&#xa;    created_at  INTEGER NOT NULL&#xa;    updated_at  INTEGER NOT NULL&#xa;    password_changed_at  INT (NULL=初始密码)&#xa;────────────&#xa;删除用 status=2, username 保留不复用" vertex="1">
+          <mxGeometry height="242" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t09" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T09 role_permission（角色权限）" vertex="1">
           <mxGeometry height="200" width="280" x="810" y="490" as="geometry" />
@@ -62,22 +62,22 @@
           <mxGeometry height="26" width="300" x="70" y="840" as="geometry" />
         </mxCell>
         <mxCell id="t05" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T05 usb_audit_log（USB 审计日志）" vertex="1">
-          <mxGeometry height="290" width="280" x="70" y="870" as="geometry" />
+          <mxGeometry height="348" width="280" x="70" y="870" as="geometry" />
         </mxCell>
-        <mxCell id="t05f" parent="t05" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    event_time  INT NOT NULL&#xa;    interface_class  INT&#xa;    interface_subclass  INT&#xa;    interface_protocol  INT&#xa;    device_name  TEXT&#xa;    device_sn  TEXT&#xa;    vid  TEXT / pid  TEXT&#xa;    event_type  TEXT NOT NULL (11种枚举)&#xa;    permission  INT&#xa;    capacity_bytes  INT&#xa;    file_path  TEXT&#xa;    matched_policy  TEXT&#xa;    result  TEXT NOT NULL&#xa;    fail_reason  TEXT&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: event_time, device_sn,&#xa;      event_type, matched_policy" vertex="1">
-          <mxGeometry height="264" width="280" y="26" as="geometry" />
+        <mxCell id="t05f" parent="t05" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    event_time  INT NOT NULL&#xa;    device_type  TEXT&#xa;    interface_type  TEXT&#xa;    interface_class  INT&#xa;    interface_subclass  INT&#xa;    interface_protocol  INT&#xa;    device_name  TEXT&#xa;    device_sn  TEXT&#xa;    vid  TEXT / pid  TEXT&#xa;    event_type  TEXT NOT NULL (11种枚举)&#xa;    permission  INT&#xa;    capacity_bytes  INT&#xa;    file_path  TEXT&#xa;    matched_policy  TEXT&#xa;    result  TEXT NOT NULL&#xa;    fail_reason  TEXT&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: event_time, device_sn,&#xa;      event_type, matched_policy&#xa;      (event_time, event_type) 复合索引" vertex="1">
+          <mxGeometry height="322" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t06" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T06 malware_log（恶意代码检测日志）" vertex="1">
-          <mxGeometry height="250" width="280" x="420" y="870" as="geometry" />
+          <mxGeometry height="270" width="280" x="420" y="870" as="geometry" />
         </mxCell>
         <mxCell id="t06f" parent="t06" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    scan_time  INT NOT NULL&#xa;    device_sn  TEXT&#xa;    device_name  TEXT&#xa;    file_path  TEXT&#xa;    scan_result  INT NOT NULL&#xa;        (0=未发现/1=发现病毒/2=扫描失败)&#xa;    virus_name  TEXT&#xa;    virus_db_version  TEXT&#xa;    process_result  INT&#xa;        (0=已标记阻断/1=已阻断/2=处理失败/3=无需处理)&#xa;    fail_reason  TEXT&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: scan_time, device_sn,&#xa;      scan_result, virus_name" vertex="1">
-          <mxGeometry height="224" width="280" y="26" as="geometry" />
+          <mxGeometry height="244" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t10" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T10 operation_log（操作日志）" vertex="1">
-          <mxGeometry height="310" width="280" x="770" y="870" as="geometry" />
+          <mxGeometry height="330" width="280" x="770" y="870" as="geometry" />
         </mxCell>
         <mxCell id="t10f" parent="t10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    op_time  INT NOT NULL&#xa;    username  TEXT NOT NULL&#xa;    role  INT NOT NULL&#xa;    log_type  TEXT NOT NULL (7类PRD分类)&#xa;    action_type  TEXT (21种具体动作)&#xa;    target  TEXT&#xa;    before_value  TEXT (JSON)&#xa;    after_value  TEXT (JSON)&#xa;    related_file  TEXT&#xa;    related_version  TEXT&#xa;    result  INT NOT NULL (0=成功/1=失败)&#xa;    fail_reason  TEXT&#xa;    source_ip  TEXT (排查用)&#xa;    app_version  TEXT (排查用)&#xa;    session_id  TEXT (排查用)&#xa;    request_id  TEXT (排查用)&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: op_time, username,&#xa;      log_type, request_id" vertex="1">
-          <mxGeometry height="284" width="280" y="26" as="geometry" />
+          <mxGeometry height="304" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t11" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T11 log_retention_event（日志覆盖追溯）" vertex="1">
           <mxGeometry height="220" width="280" x="1120" y="870" as="geometry" />
