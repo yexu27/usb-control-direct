@@ -1,0 +1,194 @@
+<mxfile host="Electron">
+  <diagram name="装置侧数据库 ER 图" id="d07-database-er">
+    <mxGraphModel dx="2006" dy="1110" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1650" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="装置侧数据库 ER 图" vertex="1">
+          <mxGeometry height="36" width="1940" x="30" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="SQLite · 路径 /var/lib/usb-control/device.db · WAL 模式 · auto_vacuum=FULL · busy_timeout=5000 · 单进程多线程 1写+N读连接池" vertex="1">
+          <mxGeometry height="24" width="1860" x="70" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-biz" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#E67E22;" value="业务配置表（T01 - T04）" vertex="1">
+          <mxGeometry height="26" width="300" x="70" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="t01" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#FFF4E6;strokeColor=#E67E22;rounded=0;whiteSpace=wrap;html=1;" value="T01 usb_whitelist（U盘白名单）" vertex="1">
+          <mxGeometry height="230" width="280" x="70" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="t01f" parent="t01" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  serial_number  TEXT NOT NULL&#xa;    vid  TEXT&#xa;    pid  TEXT&#xa;    device_name  TEXT&#xa;    capacity_bytes  INTEGER&#xa;    device_type  TEXT NOT NULL DEFAULT &#39;storage&#39;&#xa;    permission  INT NOT NULL DEFAULT 0&#xa;        (0=只读 / 1=读写)&#xa;    add_method  INT NOT NULL&#xa;        (0=装置端添加 / 1=管理端添加)&#xa;    description  TEXT&#xa;    created_at  INTEGER NOT NULL (Unix 时间戳)" vertex="1">
+          <mxGeometry height="204" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t02" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#FFF4E6;strokeColor=#E67E22;rounded=0;whiteSpace=wrap;html=1;" value="T02 file_type_blacklist（文件类型黑名单）" vertex="1">
+          <mxGeometry height="170" width="280" x="420" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="t02f" parent="t02" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  extension  TEXT NOT NULL&#xa;        (含 . 号, 小写存储, 如 &quot;.mp3&quot;)&#xa;    description  TEXT&#xa;    is_default  INT NOT NULL DEFAULT 0&#xa;        (1=预置 38 项 / 0=用户添加)&#xa;    created_at  INTEGER NOT NULL (Unix 时间戳)&#xa;────────────&#xa;与 T04 内置 4 项(dll/exe/PE/ELF)无重复" vertex="1">
+          <mxGeometry height="144" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t03" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#FFF4E6;strokeColor=#E67E22;rounded=0;whiteSpace=wrap;html=1;" value="T03 file_access_policy（文件访问控制开关）" vertex="1">
+          <mxGeometry height="185" width="280" x="770" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="t03f" parent="t03" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  policy_key  TEXT（固定 3 行）&#xa;    enabled  INT NOT NULL DEFAULT 0&#xa;        (0=禁用 / 1=启用)&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;exec_control  可执行程序访问控制&#xa;auto_read_control  介质自动读取&#xa;file_type_blacklist_control  黑名单总开关&#xa;初始值：三个开关均默认关闭" vertex="1">
+          <mxGeometry height="159" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t04" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#FFF4E6;strokeColor=#E67E22;rounded=0;whiteSpace=wrap;html=1;" value="T04 exec_type（可执行程序内置类型）" vertex="1">
+          <mxGeometry height="170" width="280" x="1120" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="t04f" parent="t04" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  type_name  TEXT NOT NULL&#xa;    description  TEXT&#xa;────────────&#xa;预置: dll / exe / PE / ELF（固定 4 项）&#xa;不可增删&#xa;由 T03 exec_control 开关统一控制&#xa;基于文件实际格式识别, 非仅后缀" vertex="1">
+          <mxGeometry height="144" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-sys" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#8E44AD;" value="系统与权限表（T07 - T09）" vertex="1">
+          <mxGeometry height="26" width="300" x="70" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="t07" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T07 system_config（系统配置 KV）" vertex="1">
+          <mxGeometry height="230" width="280" x="70" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="t07f" parent="t07" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  config_key  TEXT&#xa;    config_value  TEXT (JSON 序列化)&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;device_description  设备描述(≤32字符)&#xa;auth_status  授权状态&#xa;    (authorized/unauthorized/expired/failed)&#xa;auth_expire_time  授权到期时间&#xa;machine_code  机器码(Base64)&#xa;system_version  系统版本号&#xa;virus_db_version  病毒库版本&#xa;virus_db_updated_at  病毒库更新时间" vertex="1">
+          <mxGeometry height="204" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t08" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T08 users（用户表）" vertex="1">
+          <mxGeometry height="250" width="280" x="420" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="t08f" parent="t08" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;UK  username  TEXT NOT NULL&#xa;    password_hash  TEXT NOT NULL (bcrypt)&#xa;    role  INT NOT NULL&#xa;        (0=系统管理员/1=操作员/2=审计员)&#xa;    status  INT NOT NULL DEFAULT 0&#xa;        (0=正常/1=锁定/2=已删除)&#xa;    is_builtin  INT NOT NULL DEFAULT 0&#xa;        (1=不可删除)&#xa;    login_fail_count  INT NOT NULL DEFAULT 0&#xa;    lock_until  INT (NULL=未锁定)&#xa;    created_at  INTEGER NOT NULL&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;删除用 status=2, username 保留不复用" vertex="1">
+          <mxGeometry height="224" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t09" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T09 role_permission（角色权限）" vertex="1">
+          <mxGeometry height="200" width="280" x="810" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="t09f" parent="t09" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    role  INT NOT NULL&#xa;    page_key  TEXT NOT NULL&#xa;    UNIQUE(role, page_key)&#xa;────────────&#xa;预置 6 行:&#xa;  0 → system_management&#xa;  0 → user_management&#xa;  1 → file_access_control&#xa;  1 → usb_device_control&#xa;  1 → policy_management&#xa;  2 → log_management" vertex="1">
+          <mxGeometry height="174" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-log" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#16A085;" value="日志表（T05 - T06, T10 - T11）" vertex="1">
+          <mxGeometry height="26" width="300" x="70" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="t05" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T05 usb_audit_log（USB 审计日志）" vertex="1">
+          <mxGeometry height="290" width="280" x="70" y="870" as="geometry" />
+        </mxCell>
+        <mxCell id="t05f" parent="t05" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    event_time  INT NOT NULL&#xa;    interface_class  INT&#xa;    interface_subclass  INT&#xa;    interface_protocol  INT&#xa;    device_name  TEXT&#xa;    device_sn  TEXT&#xa;    vid  TEXT / pid  TEXT&#xa;    event_type  TEXT NOT NULL (11种枚举)&#xa;    permission  INT&#xa;    capacity_bytes  INT&#xa;    file_path  TEXT&#xa;    matched_policy  TEXT&#xa;    result  TEXT NOT NULL&#xa;    fail_reason  TEXT&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: event_time, device_sn,&#xa;      event_type, matched_policy" vertex="1">
+          <mxGeometry height="264" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t06" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T06 malware_log（恶意代码检测日志）" vertex="1">
+          <mxGeometry height="250" width="280" x="420" y="870" as="geometry" />
+        </mxCell>
+        <mxCell id="t06f" parent="t06" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    scan_time  INT NOT NULL&#xa;    device_sn  TEXT&#xa;    device_name  TEXT&#xa;    file_path  TEXT&#xa;    scan_result  INT NOT NULL&#xa;        (0=未发现/1=发现病毒/2=扫描失败)&#xa;    virus_name  TEXT&#xa;    virus_db_version  TEXT&#xa;    process_result  INT&#xa;        (0=已标记阻断/1=已阻断/2=处理失败/3=无需处理)&#xa;    fail_reason  TEXT&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: scan_time, device_sn,&#xa;      scan_result, virus_name" vertex="1">
+          <mxGeometry height="224" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t10" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T10 operation_log（操作日志）" vertex="1">
+          <mxGeometry height="310" width="280" x="770" y="870" as="geometry" />
+        </mxCell>
+        <mxCell id="t10f" parent="t10" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    op_time  INT NOT NULL&#xa;    username  TEXT NOT NULL&#xa;    role  INT NOT NULL&#xa;    log_type  TEXT NOT NULL (7类PRD分类)&#xa;    action_type  TEXT (21种具体动作)&#xa;    target  TEXT&#xa;    before_value  TEXT (JSON)&#xa;    after_value  TEXT (JSON)&#xa;    related_file  TEXT&#xa;    related_version  TEXT&#xa;    result  INT NOT NULL (0=成功/1=失败)&#xa;    fail_reason  TEXT&#xa;    source_ip  TEXT (排查用)&#xa;    app_version  TEXT (排查用)&#xa;    session_id  TEXT (排查用)&#xa;    request_id  TEXT (排查用)&#xa;    detail  TEXT (JSON)&#xa;────────────&#xa;索引: op_time, username,&#xa;      log_type, request_id" vertex="1">
+          <mxGeometry height="284" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t11" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#E8F8F5;strokeColor=#16A085;rounded=0;whiteSpace=wrap;html=1;" value="T11 log_retention_event（日志覆盖追溯）" vertex="1">
+          <mxGeometry height="220" width="280" x="1120" y="870" as="geometry" />
+        </mxCell>
+        <mxCell id="t11f" parent="t11" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  id  INTEGER AUTOINCREMENT&#xa;    trigger_time  INT NOT NULL&#xa;    log_category  TEXT NOT NULL&#xa;        (usb_audit / malware / operation)&#xa;    storage_usage_percent  INT NOT NULL&#xa;    covered_from_time  INT&#xa;    covered_to_time  INT&#xa;    covered_count  INT NOT NULL DEFAULT 0&#xa;    result  INT NOT NULL (0=成功/1=失败)&#xa;    fail_reason  TEXT&#xa;────────────&#xa;索引: trigger_time, log_category" vertex="1">
+          <mxGeometry height="194" width="280" y="26" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" edge="1" parent="1" source="t05" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmandOne;endFill=0;startArrow=ERmany;startFill=0;dashed=1;strokeColor=#7F8C8D;strokeWidth=1.5;exitX=0;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;curved=0;" target="t01">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="38" y="928" />
+              <mxPoint x="38" y="291" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r1-label" connectable="0" parent="r1" style="edgeLabel;html=1;align=left;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#7F8C8D;labelBackgroundColor=#FFFFFF;" value="N:1  device_sn = serial_number" vertex="1">
+          <mxGeometry relative="1" x="-0.05" as="geometry">
+            <mxPoint x="-38" y="133" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r2" edge="1" parent="1" source="t06" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmandOne;endFill=0;startArrow=ERmany;startFill=0;dashed=1;strokeColor=#7F8C8D;strokeWidth=1.5;exitX=0;exitY=0.12;exitDx=0;exitDy=0;entryX=1;entryY=0.7;entryDx=0;entryDy=0;curved=0;" target="t01">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="388" y="900" />
+              <mxPoint x="388" y="291" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r2-label" connectable="0" parent="r2" style="edgeLabel;html=1;align=right;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#7F8C8D;labelBackgroundColor=#FFFFFF;" value="N:1  device_sn = serial_number" vertex="1">
+          <mxGeometry relative="1" x="-0.45" as="geometry">
+            <mxPoint x="8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r3" edge="1" parent="1" source="t10" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmandOne;endFill=0;startArrow=ERmany;startFill=0;dashed=1;strokeColor=#7F8C8D;strokeWidth=1.5;exitX=0;exitY=0.08;exitDx=0;exitDy=0;entryX=1;entryY=0.55;entryDx=0;entryDy=0;curved=0;" target="t08">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="738" y="895" />
+              <mxPoint x="738" y="628" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r3-label" connectable="0" parent="r3" style="edgeLabel;html=1;align=right;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#7F8C8D;labelBackgroundColor=#FFFFFF;" value="N:1  username 追溯操作人" vertex="1">
+          <mxGeometry relative="1" x="-0.3" as="geometry">
+            <mxPoint x="-4" y="-2" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r4" edge="1" parent="1" source="t09" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmandOne;endFill=0;startArrow=ERmany;startFill=0;dashed=1;strokeColor=#7F8C8D;strokeWidth=1.5;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;" target="t08">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r4-label" connectable="0" parent="r4" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];fontSize=10;fontColor=#7F8C8D;labelBackgroundColor=#FFFFFF;" value="N:1  role 关联权限" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r5" edge="1" parent="1" source="t03" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#E67E22;strokeWidth=1.5;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" target="t04">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r5-label" connectable="0" parent="r5" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];fontSize=10;fontColor=#E67E22;labelBackgroundColor=#FFFFFF;" value="exec_control 开关控制" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-8" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r6a" edge="1" parent="1" source="t11" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;dashPattern=8 4;strokeColor=#16A085;strokeWidth=1.5;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.699;entryY=1.154;entryDx=0;entryDy=0;curved=0;entryPerimeter=0;" target="grp-log">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="780" />
+              <mxPoint x="280" y="780" />
+            </Array>
+            <mxPoint x="1190" y="850.0000000000002" as="sourcePoint" />
+            <mxPoint x="280" y="850.0000000000002" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r6b" edge="1" parent="1" source="t11" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;dashPattern=8 4;strokeColor=#16A085;strokeWidth=1.5;exitX=0.15;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;curved=0;" target="t06">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1162" y="815" />
+              <mxPoint x="630" y="815" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r6c" edge="1" parent="1" source="t11" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;dashed=1;dashPattern=8 4;strokeColor=#16A085;strokeWidth=1.5;exitX=0;exitY=0.35;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;" target="t10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r6-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#16A085;fontStyle=2;" value="← T11 按 log_category 覆盖三类日志" vertex="1">
+          <mxGeometry height="18" width="280" x="1120" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="rules" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="业务规则与约束" vertex="1">
+          <mxGeometry height="240" width="330" x="1470" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="rules-f" parent="rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="日志滚动覆盖（一进一出）:&#xa;  装置整体存储 &gt; 80% → 删该类最旧 1 条&#xa;  不跨类别覆盖&#xa;  覆盖行为记录到 T11&#xa;&#xa;人工清理:&#xa;  半年以内日志禁止清理&#xa;  分批执行(500-1000条/批)&#xa;&#xa;Rust 服务运行日志:&#xa;  本地文件, 不进 T05/T06/T10&#xa;&#xa;Schema 版本: PRAGMA user_version = 1&#xa;空间回收: auto_vacuum = FULL" vertex="1">
+          <mxGeometry height="216" width="330" y="24" as="geometry" />
+        </mxCell>
+        <mxCell id="init" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="数据库初始化（首次启动）" vertex="1">
+          <mxGeometry height="210" width="330" x="1470" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 创建 T01-T11 所有表&#xa;3. T02: 38 种默认文件类型黑名单 (is_default=1)&#xa;4. T03: 3 个开关初始关闭&#xa;5. T04: 4 种内置可执行程序类型&#xa;6. T07: 7 项系统配置&#xa;7. T08: 3 个内置账号 (is_builtin=1)&#xa;     admin@123 / operator@123 / audit@123&#xa;8. T09: 6 行角色权限预置数据&#xa;9. PRAGMA user_version = 1" vertex="1">
+          <mxGeometry height="186" width="330" y="24" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="图例" vertex="1">
+          <mxGeometry height="180" width="330" x="1470" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-f" parent="legend" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="橙色: 业务配置表 (T01-T04)&#xa;紫色: 系统与权限表 (T07-T09)&#xa;绿色: 日志表 (T05-T06, T10-T11)&#xa;黄色: 规则与初始化&#xa;────────────&#xa;N:1 灰色虚线: 业务关联 (非外键约束)&#xa;橙色虚线: 开关控制关系&#xa;绿色虚线: 日志覆盖关系&#xa;PK = 主键 / UK = 唯一约束" vertex="1">
+          <mxGeometry height="156" width="330" y="24" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="关键说明" vertex="1">
+          <mxGeometry height="180" width="330" x="1470" y="850" as="geometry" />
+        </mxCell>
+        <mxCell id="notes-f" parent="notes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. 装置端共 11 张表, S11 统一封装访问&#xa;2. 管理端不创建业务数据库&#xa;3. 关系为业务关联, 不使用数据库外键&#xa;4. 日志通过 device_sn / username /&#xa;   log_category 做追溯和覆盖&#xa;5. 所有时间字段存 Unix 时间戳 (INTEGER)&#xa;6. JSON 字段用于不可结构化的补充信息&#xa;7. 连续登录失败 5 次锁定 5 分钟" vertex="1">
+          <mxGeometry height="156" width="330" y="24" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

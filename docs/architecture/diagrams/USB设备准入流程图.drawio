@@ -1,0 +1,258 @@
+<mxfile host="Electron">
+  <diagram name="USB 设备准入流程图" id="d05-usb-admission">
+    <mxGraphModel dx="2160" dy="1195" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1350" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="USB 设备准入流程图" vertex="1">
+          <mxGeometry height="36" width="1540" x="30" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="S01 识别设备类型后分四路处理：大容量存储设备走白名单→病毒扫描→NBD 映射全链路；键盘需验证输入；鼠标自动映射；未知设备默认拒绝。" vertex="1">
+          <mxGeometry height="28" width="1480" x="60" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="usb-event" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=14;arcSize=8;fontStyle=1;align=center;verticalAlign=middle;" value="USB 插入事件（udev）" vertex="1">
+          <mxGeometry height="48" width="300" x="450" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="s01" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=6;align=center;verticalAlign=middle;" value="S01 USB 设备识别与映射引擎&#xa;读取设备描述符、接口类、接口子类、协议号、端点能力" vertex="1">
+          <mxGeometry height="55" width="600" x="300" y="178" as="geometry" />
+        </mxCell>
+        <mxCell id="e-usb-s01" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="600" y="153" as="sourcePoint" />
+            <mxPoint x="600" y="178" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="col1-hdr" parent="1" style="text;html=1;strokeColor=none;fillColor=#F8CECC;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontStyle=1;rounded=1;arcSize=12;" value="未知 / 不支持 / 伪装" vertex="1">
+          <mxGeometry height="25" width="200" x="55" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="col2-hdr" parent="1" style="text;html=1;strokeColor=none;fillColor=#DAE8FC;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontStyle=1;rounded=1;arcSize=12;" value="大容量存储设备（U 盘）" vertex="1">
+          <mxGeometry height="25" width="200" x="400" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="col3-hdr" parent="1" style="text;html=1;strokeColor=none;fillColor=#FFE6CC;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontStyle=1;rounded=1;arcSize=12;" value="键盘设备" vertex="1">
+          <mxGeometry height="25" width="200" x="880" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="col4-hdr" parent="1" style="text;html=1;strokeColor=none;fillColor=#D5E8D4;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontStyle=1;rounded=1;arcSize=12;" value="鼠标设备" vertex="1">
+          <mxGeometry height="25" width="160" x="1260" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s01-col1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="非存储/未知/伪装">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="268" />
+              <mxPoint x="155" y="268" />
+            </Array>
+            <mxPoint x="400" y="233" as="sourcePoint" />
+            <mxPoint x="155" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-s01-col2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="大容量存储">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="233" as="sourcePoint" />
+            <mxPoint x="500" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-s01-col3" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" value="键盘">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="275" />
+              <mxPoint x="980" y="275" />
+            </Array>
+            <mxPoint x="700" y="233" as="sourcePoint" />
+            <mxPoint x="980" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-s01-col4" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" value="鼠标">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="250" />
+              <mxPoint x="1340" y="250" />
+            </Array>
+            <mxPoint x="800" y="233" as="sourcePoint" />
+            <mxPoint x="1340" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rejected" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="禁止映射 ×&#xa;默认拒绝&#xa;记录 USB 审计日志（S07）" vertex="1">
+          <mxGeometry height="65" width="200" x="55" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="e-col1-rej" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="155" y="315" as="sourcePoint" />
+            <mxPoint x="155" y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s05" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="S05 白名单查询&#xa;序列号在白名单？" vertex="1">
+          <mxGeometry height="80" width="250" x="375" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="e-col2-s05" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="315" as="sourcePoint" />
+            <mxPoint x="500" y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="blocked" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="禁止映射 ×&#xa;未认证设备&#xa;记录 USB 审计日志（S07）" vertex="1">
+          <mxGeometry height="60" width="200" x="55" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s05-no" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="不在白名单">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="370" />
+              <mxPoint x="310" y="475" />
+            </Array>
+            <mxPoint x="375" y="370" as="sourcePoint" />
+            <mxPoint x="255" y="475" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="mount" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="kernel mount /mnt/usb_raw" vertex="1">
+          <mxGeometry height="40" width="180" x="410" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s05-yes" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="在白名单">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="410" as="sourcePoint" />
+            <mxPoint x="500" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s03" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="S03 病毒扫描&#xa;（ClamAV clamd 全盘扫描）" vertex="1">
+          <mxGeometry height="42" width="220" x="390" y="508" as="geometry" />
+        </mxCell>
+        <mxCell id="e-mount-s03" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="480" as="sourcePoint" />
+            <mxPoint x="500" y="508" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scan-check" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="扫描结果" vertex="1">
+          <mxGeometry height="60" width="180" x="410" y="578" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s03-scan" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="550" as="sourcePoint" />
+            <mxPoint x="500" y="578" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="scan-failed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="禁止映射 ×&#xa;扫描失败/病毒库不可用&#xa;记录恶意代码日志（S07）" vertex="1">
+          <mxGeometry height="65" width="200" x="55" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="e-scan-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="失败">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="608" as="sourcePoint" />
+            <mxPoint x="255" y="608" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="virus-note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;dashed=1;" value="发现病毒时：&lt;br&gt;• S03 输出病毒文件路径列表&lt;br&gt;• S04 对命中文件添加 [病毒禁止访问] 前缀标记&lt;br&gt;• 非病毒文件仍可正常访问" vertex="1">
+          <mxGeometry height="75" width="235" x="655" y="578" as="geometry" />
+        </mxCell>
+        <mxCell id="e-scan-virus" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#D4A72C;fontSize=10;" value="发现病毒">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="608" />
+              <mxPoint x="650" y="608" />
+            </Array>
+            <mxPoint x="590" y="608" as="sourcePoint" />
+            <mxPoint x="625" y="608" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="s04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="S04 构建受控文件树&#xa;文件访问控制策略生效" vertex="1">
+          <mxGeometry height="45" width="220" x="390" y="675" as="geometry" />
+        </mxCell>
+        <mxCell id="e-scan-ok" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="扫描完成">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="638" as="sourcePoint" />
+            <mxPoint x="500" y="675" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="nbd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="NBD 虚拟 FAT32&#xa;块设备启动 /dev/nbdX" vertex="1">
+          <mxGeometry height="42" width="220" x="390" y="748" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s04-nbd" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="720" as="sourcePoint" />
+            <mxPoint x="500" y="748" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gadget" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="f_mass_storage&#xa;LUN 绑定 /dev/nbdX" vertex="1">
+          <mxGeometry height="42" width="220" x="390" y="818" as="geometry" />
+        </mxCell>
+        <mxCell id="e-nbd-gad" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="790" as="sourcePoint" />
+            <mxPoint x="500" y="818" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="otg-usb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=8;align=center;verticalAlign=middle;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;OTG 映射到受控主机&lt;br&gt;受控主机可见受控 U 盘&lt;/span&gt;" vertex="1">
+          <mxGeometry height="50" width="230" x="385" y="888" as="geometry" />
+        </mxCell>
+        <mxCell id="e-gad-otg" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="860" as="sourcePoint" />
+            <mxPoint x="500" y="888" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="log-usb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F7;strokeColor=#00A3A3;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="记录 USB 审计日志（S07）" vertex="1">
+          <mxGeometry height="35" width="200" x="400" y="968" as="geometry" />
+        </mxCell>
+        <mxCell id="e-otg-log" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#00A3A3;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="938" as="sourcePoint" />
+            <mxPoint x="500" y="968" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hid" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="HID 接管&#xa;阻断透传到受控主机" vertex="1">
+          <mxGeometry height="45" width="220" x="870" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="e-col3-hid" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="980" y="315" as="sourcePoint" />
+            <mxPoint x="980" y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wait" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="等待用户键盘&#xa;顺序输入 1234&#xa;（键值序列监听，不透传）" vertex="1">
+          <mxGeometry height="55" width="220" x="870" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="e-hid-wait" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="980" y="375" as="sourcePoint" />
+            <mxPoint x="980" y="405" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kb-mapped" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="OTG 映射键盘到受控主机&#xa;记录审计日志（S07）" vertex="1">
+          <mxGeometry height="45" width="220" x="870" y="515" as="geometry" />
+        </mxCell>
+        <mxCell id="e-wait-ok" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" value="输入正确 ✓">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="980" y="460" as="sourcePoint" />
+            <mxPoint x="980" y="515" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="loop-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="← 输入错误：&#xa;清空序列，继续等待" vertex="1">
+          <mxGeometry height="35" width="125" x="740" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="remove-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="USB 拔出 →&#xa;释放 HID 接管&#xa;记录拔出日志" vertex="1">
+          <mxGeometry height="40" width="110" x="1098" y="412" as="geometry" />
+        </mxCell>
+        <mxCell id="auto-map" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="自动 OTG 映射&#xa;到受控主机" vertex="1">
+          <mxGeometry height="45" width="160" x="1260" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="e-col4-map" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#82B366;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="315" as="sourcePoint" />
+            <mxPoint x="1340" y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="log-mouse" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F7;strokeColor=#00A3A3;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="记录 USB 审计日志（S07）" vertex="1">
+          <mxGeometry height="35" width="160" x="1260" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="e-map-log" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#00A3A3;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="375" as="sourcePoint" />
+            <mxPoint x="1340" y="405" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="mouse-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="鼠标无安全注入风险&#xa;插入后自动映射，零用户干预" vertex="1">
+          <mxGeometry height="30" width="200" x="1240" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="principles" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=4;align=left;verticalAlign=top;spacing=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;# 设备安全准入原则&lt;br&gt;1. 不按设备名称、厂商字符串、产品字符串或单一序列号判断整台设备可信。&lt;br&gt;2. 白名单只对已识别为普通大容量存储设备的对象生效，不自动放行键盘、鼠标、未知或不支持设备。&lt;br&gt;3. 设备描述符、接口类、接口子类、协议号、端点能力与预期类型不一致时，按伪装或未知设备处理，默认拒绝映射并记录审计日志。&lt;br&gt;4. INFECTED 状态下允许映射，但命中病毒的文件由 NBD 层返回 I/O error，不向受控主机暴露真实内容。&lt;br&gt;5. 键盘验证不设置固定等待超时；键盘拔出时结束验证流程，释放 HID 接管状态和临时输入缓冲。&lt;/font&gt;" vertex="1">
+          <mxGeometry height="140" width="925" x="55" y="1060" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

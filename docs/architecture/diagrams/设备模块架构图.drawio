@@ -1,0 +1,415 @@
+<mxfile host="Electron">
+  <diagram name="D01-C 设备模块架构图" id="d01-module-architecture">
+    <mxGraphModel dx="2808" dy="1554" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1560" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=25;fontStyle=1;fontColor=#1F2937;" value="USB 管控系统直连版 · 设备模块架构图" vertex="1">
+          <mxGeometry height="44" width="850" x="40" y="25" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontStyle=2;fontColor=#5A6B85;" value="按实际产品模块组织：访问入口、管理协议、需求功能、装置运行能力、装置侧数据、安全与审计" vertex="1">
+          <mxGeometry height="24" width="1100" x="42" y="68" as="geometry" />
+        </mxCell>
+        <mxCell id="access_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;访问层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="130" width="120" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="access_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="130" width="1770" x="160" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;接入协议层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="82" width="120" x="40" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="gateway_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="82" width="1770" x="160" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="service_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;装置&lt;br&gt;服务层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="290" width="120" x="40" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="service_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9AB7D8;strokeWidth=1.2;dashed=1;dashPattern=6 4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="290" width="1770" x="160" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;运行与&lt;br&gt;集成层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="198" width="120" x="40" y="732" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="198" width="1770" x="160" y="732" as="geometry" />
+        </mxCell>
+        <mxCell id="data_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;数据&lt;br&gt;存储层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="170" width="120" x="40" y="957" as="geometry" />
+        </mxCell>
+        <mxCell id="data_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="170" width="1770" x="160" y="957" as="geometry" />
+        </mxCell>
+        <mxCell id="security_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;安全与&lt;br&gt;审计层&lt;/font&gt;" vertex="1">
+          <mxGeometry height="175" width="120" x="40" y="1162" as="geometry" />
+        </mxCell>
+        <mxCell id="security_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="175" width="1770" x="160" y="1162" as="geometry" />
+        </mxCell>
+        <mxCell id="notes_label" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;关键&lt;br&gt;说明&lt;/font&gt;" vertex="1">
+          <mxGeometry height="150" width="120" x="40" y="1372" as="geometry" />
+        </mxCell>
+        <mxCell id="notes_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;strokeWidth=1.4;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="150" width="1770" x="160" y="1372" as="geometry" />
+        </mxCell>
+        <mxCell id="ico_admin" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#2F73D2;strokeColor=#2F73D2;fontColor=#FFFFFF;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" value="管" vertex="1">
+          <mxGeometry height="34" width="34" x="265" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="access_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7FBFF;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;系统管理员&lt;br&gt;Windows 管理端&lt;br&gt;系统管理 / 用户管理&lt;/font&gt;" vertex="1">
+          <mxGeometry height="86" width="245" x="315" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="ico_operator" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#2D8A4F;strokeColor=#2D8A4F;fontColor=#FFFFFF;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" value="操" vertex="1">
+          <mxGeometry height="34" width="34" x="620" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="access_operator" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7FBFF;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;操作员&lt;br&gt;Windows 管理端&lt;br&gt;文件控制 / U盘控制 / 策略&lt;/font&gt;" vertex="1">
+          <mxGeometry height="86" width="280" x="670" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="ico_auditor" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#F28E2B;strokeColor=#F28E2B;fontColor=#FFFFFF;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" value="审" vertex="1">
+          <mxGeometry height="34" width="34" x="1010" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="access_auditor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7FBFF;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;审计员&lt;br&gt;Windows 管理端&lt;br&gt;日志查询 / 导出 / 清理&lt;/font&gt;" vertex="1">
+          <mxGeometry height="86" width="260" x="1060" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="access_host" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0F4FF;strokeColor=#4E79A7;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;受控主机&lt;br&gt;Windows / Linux&lt;br&gt;免安装软件，仅看到标准 USB 设备&lt;/font&gt;" vertex="1">
+          <mxGeometry height="86" width="260" x="1380" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="access_usb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0F4FF;strokeColor=#4E79A7;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB 外设&lt;br&gt;普通 U盘 / 键盘 / 鼠标&lt;br&gt;未知设备默认拒绝&lt;/font&gt;" vertex="1">
+          <mxGeometry height="86" width="205" x="1690" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="api_bar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF3FF;strokeColor=#2F73D2;strokeWidth=1.5;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;arcSize=6;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;私有协议服务 / 装置接入网关&lt;br&gt;TCP/TLS + Protobuf，登录、授权、策略、日志、升级统一入口；装置端执行 token / role / license 校验&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="1130" x="220" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="usb_bar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF7ED;strokeColor=#2D8A4F;strokeWidth=1.5;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;arcSize=6;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;USB 内容管控通道&lt;br&gt;USB Host → kernel mount → Rust NBD 虚拟 FAT32 → USB Gadget → 受控主机&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="480" x="1400" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F01" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;登录与授权&lt;br&gt;账号鉴权&lt;br&gt;未授权导入授权&lt;br&gt;重新登录验证&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="205" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F02" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;文件访问控制&lt;br&gt;可执行 4 项 / 类型 38 项&lt;br&gt;介质自动读取控制&lt;br&gt;I/O error 阻断&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="431" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F03" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;U盘设备控制&lt;br&gt;白名单&lt;br&gt;只读/读写&lt;br&gt;描述与权限&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="657" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略管理&lt;br&gt;导入/导出 .bin&lt;br&gt;国密校验&lt;br&gt;失败不覆盖&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="883" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F05" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;日志管理&lt;br&gt;USB审计&lt;br&gt;恶意代码&lt;br&gt;操作日志&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="1109" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F06" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;系统管理&lt;br&gt;系统升级&lt;br&gt;病毒库升级&lt;br&gt;设备描述/授权&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="1335" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;用户管理&lt;br&gt;内置用户&lt;br&gt;新建/删除&lt;br&gt;重置密码&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="200" x="1561" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F08" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB 准入与映射&lt;br&gt;存储/键盘/鼠标&lt;br&gt;多接口设备逐接口判断&lt;br&gt;未知默认拒绝&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="235" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_F09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;恶意代码检测&lt;br&gt;ClamAV 全盘扫描&lt;br&gt;命中文件加前缀&lt;br&gt;扫描失败拒绝映射&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="505" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_S04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD 文件控制&lt;br&gt;虚拟 FAT32&lt;br&gt;扇区级策略判定&lt;br&gt;READ 返回 I/O error&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="775" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_S07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;日志审计服务&lt;br&gt;事件归类&lt;br&gt;装置侧写入&lt;br&gt;同类日志覆盖&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="1045" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_S10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;私有协议服务&lt;br&gt;TLS 指纹&lt;br&gt;Protobuf 帧&lt;br&gt;错误码&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="1315" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_S11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;数据访问层&lt;br&gt;SQLite DAO&lt;br&gt;本地文件&lt;br&gt;migration&lt;/font&gt;" vertex="1">
+          <mxGeometry height="96" width="240" x="1585" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="client_group" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F0;strokeColor=#F28E2B;strokeWidth=1.2;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=10;" value="Windows 管理端客户端" vertex="1">
+          <mxGeometry height="137" width="510" x="200" y="753" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;路由&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="220" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;会话内存&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="375" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;通信客户端&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="530" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;页面快照&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="220" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;文件适配&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="375" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="client_chip_5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE8D6;strokeColor=#F28E2B;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;断连提示&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="135" x="530" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="device_group" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=10;" value="装置端 USB 运行链路" vertex="1">
+          <mxGeometry height="156" width="650" x="760" y="753" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;识别映射&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="785" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;键鼠准入&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="985" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;ClamAV&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="1185" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD 控制&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="785" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;白名单&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="985" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;升级维护&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="1185" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略包&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="785" y="879" as="geometry" />
+        </mxCell>
+        <mxCell id="device_chip_7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;用户会话&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="170" x="985" y="879" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_group" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;strokeWidth=1.2;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=10;" value="Linux 内核与系统能力" vertex="1">
+          <mxGeometry height="137" width="420" x="1460" y="753" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB Host&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1485" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;kernel mount&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1610" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD client&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1735" y="803" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB Gadget&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1485" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;systemd&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1610" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="kernel_chip_5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;UTF-8/Unicode&lt;/font&gt;" vertex="1">
+          <mxGeometry height="28" width="105" x="1735" y="841" as="geometry" />
+        </mxCell>
+        <mxCell id="db_sqlite" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#F1E5FF;strokeColor=#7B61A8;strokeWidth=1.4;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;SQLite&lt;br&gt;账号 / 授权 / 策略 / 白名单&lt;br&gt;USB审计 / 恶意代码 / 操作日志&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="320" x="230" y="994" as="geometry" />
+        </mxCell>
+        <mxCell id="file_policy" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略包 / 授权文件&lt;br&gt;策略 .bin 国密加密签名&lt;br&gt;license 由授权服务生成后导入&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="300" x="640" y="994" as="geometry" />
+        </mxCell>
+        <mxCell id="file_virus" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;病毒库与升级包&lt;br&gt;病毒库 .zip&lt;br&gt;系统升级 .bin&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="260" x="1030" y="994" as="geometry" />
+        </mxCell>
+        <mxCell id="memory_state" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F0;strokeColor=#F28E2B;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;管理端进程内状态&lt;br&gt;token / role / 页面快照&lt;br&gt;不落盘、不记住 IP&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="260" x="1380" y="994" as="geometry" />
+        </mxCell>
+        <mxCell id="local_files" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;装置本地运行文件&lt;br&gt;证书 / 配置 / 安装元数据&lt;br&gt;旧程序副本用于失败回滚&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="190" x="1700" y="994" as="geometry" />
+        </mxCell>
+        <mxCell id="sec_rbac" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;权限控制&lt;br&gt;三权分立&lt;br&gt;装置端强制校验&lt;br&gt;UI 权限仅作展示&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="310" x="215" y="1202" as="geometry" />
+        </mxCell>
+        <mxCell id="sec_spoof" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;防伪装准入&lt;br&gt;描述符 / 接口类 / 协议号&lt;br&gt;端点能力综合判断&lt;br&gt;不按名称字符串放行&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="310" x="560" y="1202" as="geometry" />
+        </mxCell>
+        <mxCell id="sec_audit" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;操作与安全审计&lt;br&gt;登录 / 策略 / 用户 / 升级&lt;br&gt;USB 映射与阻断事件&lt;br&gt;日志装置侧存储&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="310" x="905" y="1202" as="geometry" />
+        </mxCell>
+        <mxCell id="sec_data" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;数据安全&lt;br&gt;国密策略包&lt;br&gt;TLS 指纹校验&lt;br&gt;管理端零业务持久化&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="310" x="1250" y="1202" as="geometry" />
+        </mxCell>
+        <mxCell id="sec_fail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;故障安全&lt;br&gt;未知设备拒绝&lt;br&gt;扫描失败拒绝映射&lt;br&gt;断连只提示动作失败&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="310" x="1595" y="1202" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_panel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8AA0BD;strokeWidth=1.4;arcSize=4;" value="" vertex="1">
+          <mxGeometry height="1195" width="290" x="1980" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF3F9;strokeColor=#EEF3F9;fontColor=#0D2C54;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=18;" value="图例说明" vertex="1">
+          <mxGeometry height="52" width="290" x="1980" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_type_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1F2937;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;模块类型&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="120" x="2010" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_access" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0F4FF;strokeColor=#4E79A7;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_access_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;访问与接入&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="246" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_client" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F0;strokeColor=#F28E2B;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="288" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_client_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;管理端&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="284" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_func" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="326" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_func_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;需求功能&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="322" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_server" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="364" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_server_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;装置端&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_sys" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="402" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_sys_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;系统/内核能力&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="398" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_sec" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_sec_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;安全与审计&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="436" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_doc" parent="1" style="shape=document;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="478" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_doc_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;本地文件/安装包&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="474" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_db" parent="1" style="shape=cylinder3d;boundedLbl=1;backgroundOutline=1;size=15;whiteSpace=wrap;html=1;fillColor=#F1E5FF;strokeColor=#7B61A8;strokeWidth=1.2;" value="" vertex="1">
+          <mxGeometry height="18" width="34" x="2020" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_db_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;SQLite 数据库&lt;/font&gt;" vertex="1">
+          <mxGeometry height="26" width="150" x="2070" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_line_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1F2937;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;连接说明&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="120" x="2010" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_l1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="同步请求">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2020" y="625" as="sourcePoint" />
+            <mxPoint x="2090" y="625" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_l1_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;同步请求 / 主链路&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="130" x="2110" y="613" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_l2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#2D8A4F;fontSize=10;fontStyle=1;" value="控制流向">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2020" y="670" as="sourcePoint" />
+            <mxPoint x="2090" y="670" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_l2_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;控制流向&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="130" x="2110" y="658" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_l3" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.4;strokeColor=#F28E2B;fontSize=10;fontStyle=1;" value="日志流向">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="2020" y="715" as="sourcePoint" />
+            <mxPoint x="2090" y="715" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_l3_t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;日志/审计流向&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="130" x="2110" y="703" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_note_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#1F2937;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;架构说明&lt;/font&gt;" vertex="1">
+          <mxGeometry height="24" width="120" x="2010" y="775" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F9FC;strokeColor=#D7DEE8;fontSize=10;align=left;verticalAlign=top;spacing=10;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;· 管理端无业务数据库&lt;br&gt;· 账号、授权、策略、日志在装置侧&lt;br&gt;· 文件访问阻断以 I/O error 为主&lt;br&gt;· 防伪装不依赖设备名称字符串&lt;br&gt;· 详细依赖以 03-模块划分.md 为准&lt;/font&gt;" vertex="1">
+          <mxGeometry height="135" width="240" x="2010" y="815" as="geometry" />
+        </mxCell>
+        <mxCell id="a_admin_api" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="240" as="sourcePoint" />
+            <mxPoint x="450" y="275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_operator_api" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="810" y="240" as="sourcePoint" />
+            <mxPoint x="810" y="275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_auditor_api" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1190" y="240" as="sourcePoint" />
+            <mxPoint x="1190" y="275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_usb_channel" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#2D8A4F;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1790" y="240" as="sourcePoint" />
+            <mxPoint x="1790" y="275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="api_to_service" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="785" y="357" as="sourcePoint" />
+            <mxPoint x="785" y="395" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="usb_to_runtime" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#2D8A4F;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1640" y="380" />
+              <mxPoint x="1960" y="380" />
+              <mxPoint x="1960" y="700" />
+              <mxPoint x="1640" y="700" />
+            </Array>
+            <mxPoint x="1640" y="357" as="sourcePoint" />
+            <mxPoint x="1640" y="730" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="service_to_runtime" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;entryX=0.508;entryY=0.026;entryDx=0;entryDy=0;entryPerimeter=0;" target="runtime_box" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1060" y="685" as="sourcePoint" />
+            <mxPoint x="1060" y="720" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="runtime_to_data" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1070" y="940" as="sourcePoint" />
+            <mxPoint x="1070" y="957" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="service_to_audit" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.4;strokeColor=#F28E2B;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="710" />
+              <mxPoint x="1950" y="710" />
+              <mxPoint x="1950" y="1135" />
+              <mxPoint x="1060" y="1135" />
+            </Array>
+            <mxPoint x="1160" y="685" as="sourcePoint" />
+            <mxPoint x="1060" y="1160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="data_to_security" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.4;strokeColor=#F28E2B;fontSize=10;fontStyle=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1120" y="1127" as="sourcePoint" />
+            <mxPoint x="1120" y="1162" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note1_num" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFFFFF;strokeColor=#2F73D2;strokeWidth=1.5;fontColor=#2F73D2;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" value="1" vertex="1">
+          <mxGeometry height="38" width="38" x="200" y="1402" as="geometry" />
+        </mxCell>
+        <mxCell id="note1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;&lt;font style=&quot;&quot;&gt;主业务链路&lt;br&gt;USB 外设经装置准入、扫描和 NBD 文件控制后，&lt;/font&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(51, 51, 51), rgb(0, 0, 0));&quot;&gt;通过 USB Gadget 暴露给受控主机。&lt;/span&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="360" x="255" y="1397" as="geometry" />
+        </mxCell>
+        <mxCell id="note2_num" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFFFFF;strokeColor=#2F73D2;strokeWidth=1.5;fontColor=#2F73D2;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" value="2" vertex="1">
+          <mxGeometry height="38" width="38" x="650" y="1402" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;管理链路&lt;br&gt;管理端通过私有协议访问装置端；断连时页面保留，动作下发失败提示。&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="360" x="705" y="1397" as="geometry" />
+        </mxCell>
+        <mxCell id="note3_num" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFFFFF;strokeColor=#2F73D2;strokeWidth=1.5;fontColor=#2F73D2;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" value="3" vertex="1">
+          <mxGeometry height="38" width="38" x="1100" y="1402" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;数据边界&lt;br&gt;SQLite 与日志均在装置侧；管理端只保留进程内状态，不持久化业务数据。&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="360" x="1155" y="1397" as="geometry" />
+        </mxCell>
+        <mxCell id="note4_num" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFFFFF;strokeColor=#2F73D2;strokeWidth=1.5;fontColor=#2F73D2;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" value="4" vertex="1">
+          <mxGeometry height="38" width="38" x="1550" y="1402" as="geometry" />
+        </mxCell>
+        <mxCell id="note4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;安全边界&lt;br&gt;装置端强制执行权限、防伪装准入、国密策略包校验和故障安全规则。&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="315" x="1605" y="1385" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

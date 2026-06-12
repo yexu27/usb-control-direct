@@ -1,0 +1,345 @@
+<mxfile host="Electron" pages="3">
+  <diagram name="U盘设备状态机" id="d06-usb-state">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1300" pageHeight="860" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" value="U 盘设备状态机" vertex="1">
+          <mxGeometry height="32" width="1240" x="30" y="15" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="每个接入的 U 盘设备维护一个独立状态机实例，由 S01 管理。详细状态转换表见 06-状态机设计.md §1。" vertex="1">
+          <mxGeometry height="22" width="1180" x="60" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="600" y="78" as="geometry" />
+        </mxCell>
+        <mxCell id="detected" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="DETECTED&#xa;已检测" vertex="1">
+          <mxGeometry height="42" width="200" x="510" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="classifying" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="CLASSIFYING&#xa;识别中（读取描述符/接口/端点能力）" vertex="1">
+          <mxGeometry height="45" width="260" x="480" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="rejected" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="REJECTED ×&#xa;禁止映射" vertex="1">
+          <mxGeometry height="45" width="180" x="80" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="blocked" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" value="BLOCKED ×&#xa;禁止映射（不在白名单）" vertex="1">
+          <mxGeometry height="45" width="200" x="80" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="scanning" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="SCANNING&#xa;扫描中（ClamAV 全盘）" vertex="1">
+          <mxGeometry height="42" width="240" x="490" y="318" as="geometry" />
+        </mxCell>
+        <mxCell id="scan_failed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" value="SCAN_FAILED ×&#xa;扫描失败/病毒库不可用" vertex="1">
+          <mxGeometry height="42" width="220" x="70" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="clean" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="CLEAN&#xa;干净" vertex="1">
+          <mxGeometry height="42" width="160" x="440" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="infected" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="INFECTED&#xa;检出病毒" vertex="1">
+          <mxGeometry height="42" width="160" x="650" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="mapped" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;MAPPED&lt;br&gt;受控主机可见受控 U 盘&lt;br&gt;NBD 按 5 级策略响应读写&lt;/span&gt;" vertex="1">
+          <mxGeometry height="55" width="260" x="400" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="map_failed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" value="MAP_FAILED ×&#xa;映射失败" vertex="1">
+          <mxGeometry height="45" width="190" x="780" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="removed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=11;arcSize=8;strokeWidth=2;align=center;verticalAlign=middle;" value="REMOVED — 任意状态 + USB 拔出 → REMOVED&#xa;MAPPED 时：卸载 /mnt/usb_raw，停止 NBD server，清理 OTG 映射 ｜ 其他状态：清理已分配资源" vertex="1">
+          <mxGeometry height="50" width="900" x="150" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="e-start" edge="1" parent="1" style="endArrow=block;endFill=1;strokeColor=#333333;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="98" as="sourcePoint" />
+            <mxPoint x="610" y="115" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-det-cls" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" value="USB 插入">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="157" as="sourcePoint" />
+            <mxPoint x="610" y="198" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-cls-rej" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="非存储/未知/伪装">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="218" as="sourcePoint" />
+            <mxPoint x="260" y="218" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-cls-blk" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="不在白名单">
+          <mxGeometry relative="1" x="0.3758" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="340" y="233" />
+              <mxPoint x="340" y="338" />
+            </Array>
+            <mxPoint x="480" y="233" as="sourcePoint" />
+            <mxPoint x="280" y="338" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-cls-scan" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="在白名单，mount + 提交扫描">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="243" as="sourcePoint" />
+            <mxPoint x="610" y="318" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-scan-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="扫描失败">
+          <mxGeometry relative="1" x="0.1335" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="375" y="339" />
+              <mxPoint x="375" y="456" />
+            </Array>
+            <mxPoint x="490" y="339" as="sourcePoint" />
+            <mxPoint x="290" y="456" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-scan-clean" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="clean" value="未发现病毒">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="400" />
+              <mxPoint x="520" y="400" />
+            </Array>
+            <mxPoint x="560" y="360" as="sourcePoint" />
+            <mxPoint x="420" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-scan-inf" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" target="infected" value="发现病毒">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="400" />
+              <mxPoint x="730" y="400" />
+            </Array>
+            <mxPoint x="680" y="360" as="sourcePoint" />
+            <mxPoint x="860" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-clean-map" edge="1" parent="1" source="clean" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82B366;fontSize=10;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" value="NBD+OTG 成功">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="490" y="482" />
+            </Array>
+            <mxPoint x="420" y="482" as="sourcePoint" />
+            <mxPoint x="490" y="580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-inf-map" edge="1" parent="1" source="infected" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82B366;fontSize=10;exitX=0.406;exitY=1.024;exitDx=0;exitDy=0;exitPerimeter=0;" value="NBD+OTG 成功">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="715" y="538" />
+              <mxPoint x="590" y="538" />
+            </Array>
+            <mxPoint x="860" y="482" as="sourcePoint" />
+            <mxPoint x="590" y="580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-clean-fail" edge="1" parent="1" source="clean" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" target="map_failed" value="失败">
+          <mxGeometry relative="1" x="0.4087" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="560" y="520" />
+              <mxPoint x="828" y="520" />
+              <mxPoint x="828" y="570" />
+            </Array>
+            <mxPoint x="500" y="470" as="sourcePoint" />
+            <mxPoint x="940" y="580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-inf-fail" edge="1" parent="1" source="infected" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" value="失败">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="770" y="500" />
+              <mxPoint x="905" y="500" />
+            </Array>
+            <mxPoint x="860" y="471" as="sourcePoint" />
+            <mxPoint x="905" y="590" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-mapped-rem" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;dashed=1;" value="USB 拔出">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="530" y="635" as="sourcePoint" />
+            <mxPoint x="530" y="700" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note-infected" parent="1" style="dashed=1;text;html=1;strokeColor=#E8D48B;fillColor=#FFFDF0;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;rounded=1;arcSize=10;spacing=4;" value="检出病毒仍允许映射：&#xa;病毒文件由 NBD 返回 I/O error 阻断访问" vertex="1">
+          <mxGeometry height="35" width="200" x="820" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="note-removed" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="REJECTED / BLOCKED / SCAN_FAILED / MAP_FAILED&#xa;状态下设备不映射到受控主机" vertex="1">
+          <mxGeometry height="30" width="640" x="280" y="760" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="键盘设备状态机" id="d06-kb-state">
+    <mxGraphModel dx="1404" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="kb-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" value="键盘设备状态机" vertex="1">
+          <mxGeometry height="32" width="940" x="30" y="15" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="键盘验证不设置固定等待超时；键盘拔出时结束验证流程，释放 HID 接管状态和临时输入缓冲。" vertex="1">
+          <mxGeometry height="22" width="880" x="60" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="290" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-detected" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="KB_DETECTED&#xa;已检测为键盘" vertex="1">
+          <mxGeometry height="42" width="200" x="200" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-waiting" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="KB_WAITING&#xa;等待用户输入（HID 接管，不透传）" vertex="1">
+          <mxGeometry height="45" width="260" x="170" y="218" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-mapped" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="KB_MAPPED&#xa;键盘已映射到受控主机" vertex="1">
+          <mxGeometry height="42" width="200" x="200" y="339" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-removed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;" value="KB_REMOVED&#xa;验证结束 / 已拔出" vertex="1">
+          <mxGeometry height="42" width="200" x="610" y="221" as="geometry" />
+        </mxCell>
+        <mxCell id="e-kb-start" edge="1" parent="1" style="endArrow=block;endFill=1;strokeColor=#333333;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="105" as="sourcePoint" />
+            <mxPoint x="300" y="125" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-det-wait" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" value="HID 接管成功">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="167" as="sourcePoint" />
+            <mxPoint x="300" y="218" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-wait-map" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82B366;fontSize=10;" value="顺序输入 1234 匹配 ✓">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="263" as="sourcePoint" />
+            <mxPoint x="300" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-wait-rem" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="kb-removed" value="USB 拔出">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="430" y="241" as="sourcePoint" />
+            <mxPoint x="600" y="255" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-map-rem" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" target="kb-removed" value="USB 拔出">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="361" />
+              <mxPoint x="520" y="360" />
+              <mxPoint x="660" y="360" />
+            </Array>
+            <mxPoint x="400" y="361" as="sourcePoint" />
+            <mxPoint x="600" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-det-rem" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;dashed=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="kb-removed" value="USB 拔出">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="146" />
+            </Array>
+            <mxPoint x="400" y="146" as="sourcePoint" />
+            <mxPoint x="600" y="248" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-kb-loop" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;curved=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="252" />
+              <mxPoint x="140" y="228" />
+            </Array>
+            <mxPoint x="170" y="252" as="sourcePoint" />
+            <mxPoint x="170" y="228" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="kb-loop-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="输入错误：&#xa;清空序列，继续等待&#xa;记录验证失败日志" vertex="1">
+          <mxGeometry height="45" width="115" x="20" y="218" as="geometry" />
+        </mxCell>
+        <mxCell id="kb-note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;说明：&lt;br&gt;• KB_WAITING 状态下键盘 HID 输入由装置侧捕获，不透传到受控主机&lt;br&gt;• 1234 必须顺序输入，中途错误清空当前序列，继续等待下一次完整输入&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="680" x="60" y="430" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="鼠标设备状态机" id="d06-mouse-state">
+    <mxGraphModel dx="900" dy="500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ms-title" value="鼠标设备状态机" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="15" width="840" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-subtitle" value="鼠标无安全注入风险，插入后自动映射，零用户干预。不需要白名单、不需要病毒扫描、不需要验证。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="60" y="48" width="780" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="340" y="85" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-detected" value="MOUSE_DETECTED&#xa;已检测为鼠标" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="125" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-mapped" value="MOUSE_MAPPED&#xa;鼠标已映射" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="230" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-rejected" value="MOUSE_REJECTED&#xa;映射失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="450" y="230" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="ms-removed" value="MOUSE_REMOVED&#xa;已移除" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="250" y="340" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="e-ms-start" value="" style="endArrow=block;endFill=1;strokeColor=#333333;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="350" y="105" as="sourcePoint" />
+            <mxPoint x="350" y="125" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ms-det-map" value="OTG 映射成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="167" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="300" y="195" />
+              <mxPoint x="250" y="195" />
+            </Array>
+            <mxPoint x="250" y="230" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ms-det-rej" value="OTG 映射失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="400" y="167" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="400" y="195" />
+              <mxPoint x="550" y="195" />
+            </Array>
+            <mxPoint x="550" y="230" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ms-map-rem" value="USB 拔出" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="272" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="250" y="310" />
+              <mxPoint x="310" y="310" />
+            </Array>
+            <mxPoint x="310" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ms-rej-rem" value="USB 拔出" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="550" y="272" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="550" y="310" />
+              <mxPoint x="390" y="310" />
+            </Array>
+            <mxPoint x="390" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ms-det-rem" value="USB 拔出" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="155" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="700" y="155" />
+              <mxPoint x="700" y="361" />
+            </Array>
+            <mxPoint x="450" y="361" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

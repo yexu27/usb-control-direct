@@ -1,0 +1,166 @@
+<mxfile host="Electron">
+  <diagram name="文件访问控制优先级图" id="d04-file-access-priority">
+    <mxGraphModel dx="2553" dy="1413" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="文件访问控制优先级图" vertex="1">
+          <mxGeometry height="36" width="1540" x="30" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="S04 NBD Server 对文件读取/写入请求执行 5 级短路判断；规则 1-4 通过 I/O error 阻断，规则 5 使用 SCSI 写保护。" vertex="1">
+          <mxGeometry height="28" width="1480" x="60" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="req" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=14;arcSize=8;fontStyle=1;align=center;verticalAlign=middle;" value="受控主机文件访问请求" vertex="1">
+          <mxGeometry height="48" width="310" x="545" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="datapath" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=6;align=center;verticalAlign=middle;" value="SCSI READ(10) / WRITE(10) → f_mass_storage → /dev/nbdX → NBD Server (S04)&#xa;扇区地址 → 虚拟 FAT32 布局解析 → /mnt/usb_raw 文件路径 + 块内偏移" vertex="1">
+          <mxGeometry height="55" width="520" x="440" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="① 病毒标记阻断？&#xa;文件名含 [病毒禁止访问] 前缀" vertex="1">
+          <mxGeometry height="90" width="290" x="555" y="295" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="② 可执行程序访问控制？&#xa;开关开启 + 文件为 dll/exe/PE/ELF&#xa;（基于文件实际格式识别）" vertex="1">
+          <mxGeometry height="90" width="290" x="555" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="③ 文件类型黑名单？&#xa;文件后缀命中黑名单（大小写不敏感）&#xa;38 项预置 + 用户新增" vertex="1">
+          <mxGeometry height="90" width="290" x="555" y="555" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="④ 介质自动读取控制？&#xa;开关开启 + 操作为 Autorun 等自动读取" vertex="1">
+          <mxGeometry height="90" width="290" x="555" y="685" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;align=center;verticalAlign=middle;" value="⑤ 白名单只读写保护？&#xa;设备权限为只读 + 写操作" vertex="1">
+          <mxGeometry height="90" width="290" x="555" y="815" as="geometry" />
+        </mxCell>
+        <mxCell id="deny1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="目录可见&#xa;读取数据扇区返回 I/O error" vertex="1">
+          <mxGeometry height="70" width="310" x="1010" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="deny2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="目录可见&#xa;读取数据扇区返回 I/O error" vertex="1">
+          <mxGeometry height="70" width="310" x="1010" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="deny3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="目录可见&#xa;读取数据扇区返回 I/O error" vertex="1">
+          <mxGeometry height="70" width="310" x="1010" y="565" as="geometry" />
+        </mxCell>
+        <mxCell id="deny4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="自动读取请求返回 I/O error&#xa;Autorun 触发被阻断" vertex="1">
+          <mxGeometry height="70" width="310" x="1010" y="695" as="geometry" />
+        </mxCell>
+        <mxCell id="deny5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="整盘写保护&#xa;f_mass_storage write-protect（SCSI 层拒绝）" vertex="1">
+          <mxGeometry height="70" width="310" x="1010" y="825" as="geometry" />
+        </mxCell>
+        <mxCell id="allow" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="全部未命中 → 允许访问&#xa;从 /mnt/usb_raw 按需读取原始文件内容，返回真实扇区数据" vertex="1">
+          <mxGeometry height="65" width="340" x="530" y="950" as="geometry" />
+        </mxCell>
+        <mxCell id="config" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#F1E5FF;strokeColor=#7B61A8;fontSize=12;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略输入&lt;br&gt;T01 白名单权限（只读/读写）&lt;br&gt;T02 文件类型黑名单（38 项 + 用户新增）&lt;br&gt;T03 文件访问控制三开关&lt;br&gt;T04 可执行程序内置类型（4 项）&lt;br&gt;S03 病毒文件标记（运行时输入）&lt;/font&gt;" vertex="1">
+          <mxGeometry height="150" width="285" x="70" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="audit" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F7;strokeColor=#00A3A3;fontSize=12;arcSize=8;align=center;verticalAlign=middle;" value="审计输出（通过 S07）&#xa;规则 1-4 命中事件 → USB 审计日志（T05）&#xa;病毒扫描结果 → 恶意代码检测日志（T06）" vertex="1">
+          <mxGeometry height="100" width="320" x="1510" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="e-req-dp" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="153" as="sourcePoint" />
+            <mxPoint x="700" y="180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-dp-c1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="进入 5 级策略短路判断">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="235" as="sourcePoint" />
+            <mxPoint x="700" y="295" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c1-n" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="否，继续">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="385" as="sourcePoint" />
+            <mxPoint x="700" y="425" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c2-n" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="否，继续">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="515" as="sourcePoint" />
+            <mxPoint x="700" y="555" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c3-n" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="否，继续">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="645" as="sourcePoint" />
+            <mxPoint x="700" y="685" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c4-n" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="否，继续">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="775" as="sourcePoint" />
+            <mxPoint x="700" y="815" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c5-n" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=11;" value="否">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="905" as="sourcePoint" />
+            <mxPoint x="700" y="950" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c1-y" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=11;" value="是，命中">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="845" y="340" as="sourcePoint" />
+            <mxPoint x="1010" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c2-y" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=11;" value="是，命中">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="845" y="470" as="sourcePoint" />
+            <mxPoint x="1010" y="470" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c3-y" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=11;" value="是，命中">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="845" y="600" as="sourcePoint" />
+            <mxPoint x="1010" y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c4-y" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=11;" value="是，命中">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="845" y="730" as="sourcePoint" />
+            <mxPoint x="1010" y="730" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-c5-y" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=11;" value="是，命中">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="845" y="860" as="sourcePoint" />
+            <mxPoint x="1010" y="860" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-cfg" edge="1" parent="1" source="config" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#888888;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" value="策略读取（覆盖全部 5 级判断）">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="420" y="470" />
+              <mxPoint x="420" y="600" />
+            </Array>
+            <mxPoint x="375" y="470" as="sourcePoint" />
+            <mxPoint x="555" y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="priority-table" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CCCCCC;fontSize=11;arcSize=4;align=left;verticalAlign=top;spacing=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略优先级与受控主机实际效果&lt;br&gt;┌──────┬───────────┬─────────────┬───────────────┐&lt;br&gt;│ 优先级&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ 策略&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 触发条件&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 受控主机可见效果&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&lt;br&gt;├──────┼───────────┼─────────────┼───────────────┤&lt;br&gt;│ 1 最高&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 病毒标记阻断&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 文件名含前缀&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ 目录可见，打开时报 I/O error&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│&lt;br&gt;│ 2&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 可执行程序访问控制&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 开关开启+文件格式识别&amp;nbsp; &amp;nbsp; &amp;nbsp;│ 目录可见，打开时报 I/O error&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&lt;br&gt;│ 3&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 文件类型黑名单&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&amp;nbsp; 后缀命中黑名单&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 目录可见，打开时报 I/O error&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│&lt;br&gt;│ 4&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 介质自动读取控制&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ 开关开启+Autorun&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ Autorun 被阻断&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │&lt;br&gt;│ 5 最低&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp;│ 白名单只读写保护&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ 只读权限+写操作&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; │ 整盘写保护（SCSI Write Protect）    │&lt;br&gt;└──────┴───────────┴─────────── ─┴────────────────┘&lt;br&gt;FAT32 无文件级 ACL，阻断由 NBD server 在数据扇区返回 I/O error 实现。&lt;/font&gt;" vertex="1">
+          <mxGeometry height="280" width="800" x="55" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="25VC2Ix-OHY7DOhYMukk-6" edge="1" parent="1" source="deny1" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;endFill=1;" target="audit" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="1400" y="370" as="sourcePoint" />
+            <mxPoint x="1450" y="320" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="25VC2Ix-OHY7DOhYMukk-7" connectable="0" parent="25VC2Ix-OHY7DOhYMukk-6" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;拦截事件&lt;/font&gt;" vertex="1">
+          <mxGeometry relative="1" x="0.1053" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-deny2-audit" edge="1" parent="1" source="deny2" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.65;entryDx=0;entryDy=0;endFill=1;strokeColor=#888888;" target="audit" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-deny3-audit" edge="1" parent="1" source="deny3" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;endFill=1;strokeColor=#888888;" target="audit" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-deny4-audit" edge="1" parent="1" source="deny4" style="endArrow=classic;dashed=1;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.85;entryDx=0;entryDy=0;endFill=1;strokeColor=#888888;" target="audit" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

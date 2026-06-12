@@ -1,0 +1,448 @@
+<mxfile host="Electron" pages="4">
+  <diagram name="管理端连接状态机" id="d06-conn-state">
+    <mxGraphModel dx="1404" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" value="管理端连接状态机" vertex="1">
+          <mxGeometry height="32" width="1040" x="30" y="15" as="geometry" />
+        </mxCell>
+        <mxCell id="sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="管理端（Electron 客户端）与装置端之间的 TCP 连接生命周期。装置端同一时间只接受一个管理端连接。" vertex="1">
+          <mxGeometry height="22" width="980" x="60" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="440" y="78" as="geometry" />
+        </mxCell>
+        <mxCell id="s-disc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="DISCONNECTED&#xa;未连接" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="108" as="geometry" />
+        </mxCell>
+        <mxCell id="s-conn" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="CONNECTING&#xa;TCP 连接中" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="s-auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="AUTHENTICATING&#xa;密码认证中" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="293" as="geometry" />
+        </mxCell>
+        <mxCell id="s-lic" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="CHECK_LICENSE&#xa;License 校验中" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="408" as="geometry" />
+        </mxCell>
+        <mxCell id="s-load" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" value="LOADING_CONFIG&#xa;按角色加载权限菜单与默认页面" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="558" as="geometry" />
+        </mxCell>
+        <mxCell id="s-ok" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" value="CONNECTED&#xa;已连接" vertex="1">
+          <mxGeometry height="42" width="200" x="350" y="653" as="geometry" />
+        </mxCell>
+        <mxCell id="s-afail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;arcSize=12;strokeWidth=2;" value="AUTH_REQUIRED&#xa;未授权（独立授权页）" vertex="1">
+          <mxGeometry height="42" width="220" x="730" y="468" as="geometry" />
+        </mxCell>
+        <mxCell id="s-lfail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" value="LICENSE_EXPIRED&#xa;授权到期（系统停用）" vertex="1">
+          <mxGeometry height="42" width="220" x="730" y="408" as="geometry" />
+        </mxCell>
+        <mxCell id="s-authfail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;arcSize=12;strokeWidth=2;" value="认证失败&#xa;提示密码错误" vertex="1">
+          <mxGeometry height="42" width="180" x="730" y="293" as="geometry" />
+        </mxCell>
+        <mxCell id="e-s" edge="1" parent="1" style="endArrow=block;endFill=1;strokeColor=#333333;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="98" as="sourcePoint" />
+            <mxPoint x="450" y="108" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" value="用户发起连接">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="150" as="sourcePoint" />
+            <mxPoint x="450" y="198" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="TCP 建立成功">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="240" as="sourcePoint" />
+            <mxPoint x="450" y="293" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="密码验证通过">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="335" as="sourcePoint" />
+            <mxPoint x="450" y="408" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" value="已授权（License 有效）">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="450" as="sourcePoint" />
+            <mxPoint x="450" y="558" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#82B366;fontSize=10;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="600" as="sourcePoint" />
+            <mxPoint x="450" y="653" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-auth-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" value="密码错误">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="550" y="314" as="sourcePoint" />
+            <mxPoint x="730" y="314" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-auth-retry" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" value="重新输入密码">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="670" y="306" />
+              <mxPoint x="670" y="265" />
+              <mxPoint x="500" y="265" />
+            </Array>
+            <mxPoint x="730" y="306" as="sourcePoint" />
+            <mxPoint x="500" y="293" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-lic-expired" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="授权到期">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="550" y="429" as="sourcePoint" />
+            <mxPoint x="730" y="429" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-lic-noauth" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" value="未授权">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="440" />
+              <mxPoint x="620" y="489" />
+            </Array>
+            <mxPoint x="550" y="440" as="sourcePoint" />
+            <mxPoint x="730" y="489" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-authreq-disc" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;dashed=1;" value="授权成功 → 跳登录页&#xa;清空临时会话">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="960" y="489" />
+              <mxPoint x="960" y="129" />
+            </Array>
+            <mxPoint x="950" y="489" as="sourcePoint" />
+            <mxPoint x="550" y="129" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-conn-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="连接超时/拒绝">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="213" />
+              <mxPoint x="290" y="135" />
+            </Array>
+            <mxPoint x="350" y="213" as="sourcePoint" />
+            <mxPoint x="350" y="135" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ok-disc" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;dashed=1;" value="断开 / 网络中断 / 心跳超时">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="230" y="674" />
+              <mxPoint x="230" y="123" />
+            </Array>
+            <mxPoint x="350" y="674" as="sourcePoint" />
+            <mxPoint x="350" y="123" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="说明：&#xa;• 装置端同一时间只接受一个管理端连接，新连接到来时旧连接断开&#xa;• CONNECTED 状态下定期发送心跳，超时未收到响应则断开&#xa;• LICENSE_EXPIRED 终态：管理端提示用户联系管理员，不自动重试&#xa;• AUTH_REQUIRED：装置未授权时进入独立授权页，授权成功后返回登录页重新登录" vertex="1">
+          <mxGeometry height="72" width="680" x="60" y="730" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="病毒扫描任务状态机" id="d06-scan-state">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="580" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="sc-title" value="病毒扫描任务状态机" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="15" width="840" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-sub" value="每次 U 盘挂载后由 S03 创建一个扫描任务。FIFO 调度，同一时间只运行一个扫描任务（clamd 单并发）。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="60" y="48" width="780" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="385" y="80" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-pending" value="PENDING&#xa;等待扫描（FIFO 排队）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="115" width="210" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-running" value="RUNNING&#xa;扫描中（clamd 全盘扫描）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="215" width="210" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-clean" value="CLEAN&#xa;干净" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="340" width="150" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-infected" value="INFECTED&#xa;检出病毒" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4CC;strokeColor=#D4A72C;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="340" width="150" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-cancelled" value="CANCELLED&#xa;已取消" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="470" y="340" width="150" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-failed" value="FAILED&#xa;扫描失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="680" y="340" width="150" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sc-s" value="" style="endArrow=block;endFill=1;strokeColor=#333333;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="395" y="100" as="sourcePoint" />
+            <mxPoint x="395" y="115" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-sc-pr" value="获取扫描槽" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="395" y="157" as="sourcePoint" />
+            <mxPoint x="395" y="215" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-sc-rc" value="未发现病毒" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340" y="257" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="340" y="295" />
+              <mxPoint x="135" y="295" />
+            </Array>
+            <mxPoint x="135" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-sc-ri" value="发现病毒文件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#D4A72C;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="395" y="257" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="395" y="305" />
+              <mxPoint x="335" y="305" />
+            </Array>
+            <mxPoint x="335" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-sc-rx" value="USB 拔出 / 取消" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#666666;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="450" y="257" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="450" y="305" />
+              <mxPoint x="545" y="305" />
+            </Array>
+            <mxPoint x="545" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-sc-rf" value="clamd 错误 / 超时" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="240" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="600" y="240" />
+              <mxPoint x="600" y="295" />
+              <mxPoint x="755" y="295" />
+            </Array>
+            <mxPoint x="755" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sc-note-inf" value="INFECTED：&#xa;病毒文件名加 [病毒禁止访问] 前缀，&#xa;FAT size=0，进入文件访问 5 级策略第 1 级" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="240" y="395" width="280" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sc-note" value="说明：&#xa;• 扫描通过 Unix socket 连接 clamd 守护进程，不是 clamscan 子进程&#xa;• 终态（CLEAN/INFECTED/CANCELLED/FAILED）触发后续 U 盘状态机转换（见设备状态机图 Tab 1）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="460" width="760" height="55" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="系统程序升级状态机" id="d06-upgrade-state">
+    <mxGraphModel dx="1000" dy="550" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="530" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="up-title" value="系统程序升级状态机" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="15" width="790" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="up-sub" value="管理端推送升级包后触发。SHA256 校验 + 版本号必须高于当前版本。升级失败自动回滚。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="60" y="48" width="730" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="up-start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="365" y="78" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="up-idle" value="IDLE&#xa;空闲" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="295" y="108" width="160" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="up-val" value="VALIDATING&#xa;SHA256 + 版本校验" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="280" y="200" width="190" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="up-upg" value="UPGRADING&#xa;程序替换中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="280" y="298" width="190" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="up-restart" value="RESTARTING&#xa;重启中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="160" y="400" width="160" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="up-roll" value="ROLLBACK&#xa;回滚中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="440" y="400" width="160" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="e-up-s" value="" style="endArrow=block;endFill=1;strokeColor=#333333;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="98" as="sourcePoint" />
+            <mxPoint x="375" y="108" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-iv" value="收到升级包" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="150" as="sourcePoint" />
+            <mxPoint x="375" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-vu" value="校验通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="242" as="sourcePoint" />
+            <mxPoint x="375" y="298" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-vi" value="校验失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="280" y="215" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="230" y="215" />
+              <mxPoint x="230" y="135" />
+            </Array>
+            <mxPoint x="295" y="135" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-ur" value="替换完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340" y="340" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="340" y="370" />
+              <mxPoint x="240" y="370" />
+            </Array>
+            <mxPoint x="240" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-ub" value="升级异常" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="410" y="340" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="410" y="370" />
+              <mxPoint x="520" y="370" />
+            </Array>
+            <mxPoint x="520" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-ri" value="新程序启动成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="160" y="421" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="100" y="421" />
+              <mxPoint x="100" y="123" />
+            </Array>
+            <mxPoint x="295" y="123" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-up-bi" value="回滚完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="600" y="421" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="680" y="421" />
+              <mxPoint x="680" y="129" />
+            </Array>
+            <mxPoint x="455" y="129" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="up-note" value="说明：版本号只允许升级（version &gt; current），不允许降级。回滚恢复原二进制，回滚完成后状态归 IDLE。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="470" width="700" height="35" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="病毒库升级状态机" id="d06-vdb-state">
+    <mxGraphModel dx="1000" dy="550" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="530" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="vdb-title" value="病毒库升级状态机" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="15" width="790" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-sub" value="管理端推送 .zip 病毒库包后触发。升级过程不需要重启 clamd 进程，通过 RELOAD 命令热重载签名。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="60" y="48" width="730" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="365" y="78" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-idle" value="IDLE&#xa;空闲" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="295" y="108" width="160" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-val" value="VDB_VALIDATING&#xa;病毒库包校验" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="275" y="200" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-rep" value="VDB_REPLACING&#xa;文件替换中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="275" y="298" width="200" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-reload" value="VDB_RELOAD&#xa;clamd 重载签名" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="155" y="400" width="170" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="vdb-roll" value="VDB_ROLLBACK&#xa;回滚中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="440" y="400" width="160" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="e-vdb-s" value="" style="endArrow=block;endFill=1;strokeColor=#333333;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="98" as="sourcePoint" />
+            <mxPoint x="375" y="108" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-iv" value="收到 .zip 病毒库包" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="150" as="sourcePoint" />
+            <mxPoint x="375" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-vr" value="校验通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="375" y="242" as="sourcePoint" />
+            <mxPoint x="375" y="298" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-vi" value="校验失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="275" y="215" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="230" y="215" />
+              <mxPoint x="230" y="135" />
+            </Array>
+            <mxPoint x="295" y="135" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-rr" value="替换完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="335" y="340" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="335" y="370" />
+              <mxPoint x="240" y="370" />
+            </Array>
+            <mxPoint x="240" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-rb" value="替换失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="415" y="340" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="415" y="370" />
+              <mxPoint x="520" y="370" />
+            </Array>
+            <mxPoint x="520" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-li" value="clamd RELOAD 成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="155" y="421" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="100" y="421" />
+              <mxPoint x="100" y="123" />
+            </Array>
+            <mxPoint x="295" y="123" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-vdb-bi" value="回滚完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="600" y="421" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="680" y="421" />
+              <mxPoint x="680" y="129" />
+            </Array>
+            <mxPoint x="455" y="129" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vdb-note" value="说明：与系统升级不同，病毒库升级无需重启进程。clamd 收到 RELOAD 命令后热重载新签名文件，扫描服务不中断。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="470" width="700" height="35" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
