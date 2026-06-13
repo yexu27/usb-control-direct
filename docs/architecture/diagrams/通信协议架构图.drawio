@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="D09 通信协议架构图" id="d09-communication-protocol-architecture">
-    <mxGraphModel dx="2006" dy="1069" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1950" math="0" shadow="0">
+    <mxGraphModel dx="1652" dy="880" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1950" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -82,7 +82,7 @@
             <mxPoint x="345" y="210" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="ov_e2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#2F73D2;fontSize=10;fontStyle=1;" value="命令分发">
+        <mxCell id="ov_e2" edge="1" parent="1" source="ov_s10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#2F73D2;fontSize=10;fontStyle=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" value="命令分发">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="450" y="270" as="sourcePoint" />
             <mxPoint x="450" y="329" as="targetPoint" />

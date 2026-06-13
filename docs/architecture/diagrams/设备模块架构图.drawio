@@ -1,6 +1,6 @@
 <mxfile host="Electron">
   <diagram name="D01-C 设备模块架构图" id="d01-module-architecture">
-    <mxGraphModel dx="2808" dy="1554" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1560" math="0" shadow="0">
+    <mxGraphModel dx="2006" dy="1069" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1560" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -143,7 +143,7 @@
           <mxGeometry height="28" width="135" x="530" y="841" as="geometry" />
         </mxCell>
         <mxCell id="device_group" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=13;fontStyle=1;align=center;verticalAlign=top;spacingTop=10;" value="装置端 USB 运行链路" vertex="1">
-          <mxGeometry height="156" width="650" x="760" y="753" as="geometry" />
+          <mxGeometry height="167" width="650" x="760" y="753" as="geometry" />
         </mxCell>
         <mxCell id="device_chip_0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6C8EBF;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;识别映射&lt;/font&gt;" vertex="1">
           <mxGeometry height="28" width="170" x="785" y="803" as="geometry" />
@@ -372,8 +372,8 @@
             <Array as="points">
               <mxPoint x="1160" y="710" />
               <mxPoint x="1950" y="710" />
-              <mxPoint x="1950" y="1135" />
-              <mxPoint x="1060" y="1135" />
+              <mxPoint x="1950" y="1140" />
+              <mxPoint x="1060" y="1140" />
             </Array>
             <mxPoint x="1160" y="685" as="sourcePoint" />
             <mxPoint x="1060" y="1160" as="targetPoint" />

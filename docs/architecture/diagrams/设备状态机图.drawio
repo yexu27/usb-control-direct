@@ -85,10 +85,11 @@
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="420" y="245" />
-              <mxPoint x="420" y="456" />
+              <mxPoint x="420" y="470" />
+              <mxPoint x="290" y="470" />
             </Array>
             <mxPoint x="480" y="245" as="sourcePoint" />
-            <mxPoint x="290" y="456" as="targetPoint" />
+            <mxPoint x="290" y="470" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         <mxCell id="e-scan-fail" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" value="扫描失败">
