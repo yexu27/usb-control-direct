@@ -65,7 +65,8 @@ message CmdUploadLicense {
 message RspUploadLicense {
     bool success = 1;
     string expire_time = 2;         // 成功时：授权到期时间
-    string error_message = 3;       // 失败时：失败原因
+    string error_code = 3;          // 失败时的错误码（见统一错误码表）
+    string error_message = 4;       // 失败时的提示文本（中文）
 }
 
 // CMD_LOGOUT（0x0009）—— 登出，响应使用 RspCommon
@@ -210,7 +211,8 @@ message CmdExportPolicy {
 message RspExportPolicy {
     bool success = 1;
     bytes policy_data = 2;          // 加密后的 .bin 文件字节流
-    string error_message = 3;
+    string error_code = 3;          // 失败时的错误码（见统一错误码表）
+    string error_message = 4;       // 失败时的提示文本（中文）
 }
 
 // CMD_IMPORT_POLICY（0x0302）—— 导入策略，响应使用 RspCommon
@@ -301,6 +303,8 @@ message RspQueryLogs {
     int32 total = 5;                // 符合条件的总记录数
     int32 page = 6;
     int32 page_size = 7;
+    string error_code = 8;          // 失败时的错误码（见统一错误码表）
+    string error_message = 9;       // 失败时的提示文本（中文）
 }
 
 // CMD_EXPORT_LOGS（0x0402）—— 导出日志
@@ -320,7 +324,8 @@ message RspExportLogs {
     bool success = 1;
     bytes zip_data = 2;             // .zip 文件字节流
     string suggested_filename = 3;  // 装置端生成的文件名，管理端直接使用
-    string error_message = 4;
+    string error_code = 4;          // 失败时的错误码（见统一错误码表）
+    string error_message = 5;       // 失败时的提示文本（中文）
 }
 
 // CMD_DELETE_LOGS（0x0404）—— 清理日志，响应使用 RspCommon
