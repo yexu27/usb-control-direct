@@ -436,7 +436,11 @@ message RspCommon {
     string error_message = 3;       // 失败时的提示文本（中文，直接展示给用户）
 }
 
-// CMD_HEARTBEAT（0xFF01）/ RSP_HEARTBEAT（0xFF02）
-// 心跳保活，管理端每 30 秒发送一次，装置端收到后立即回复。
-// 超过 3 次无响应视为连接断开。
-// 请求载荷和响应载荷均为空。
+// CMD_HEARTBEAT（0xFF01）—— 心跳请求，管理端每 30 秒发送一次
+// 超过 3 次无响应视为连接断开
+message CmdHeartbeat {
+}
+
+// RSP_HEARTBEAT（0xFF02）—— 心跳响应，装置端收到后立即回复
+message RspHeartbeat {
+}
