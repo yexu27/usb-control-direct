@@ -478,91 +478,91 @@
         <mxCell id="sec_text" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F9FC;strokeColor=#D7DEE8;fontSize=11;align=left;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;· 传输协议：TCP + TLS&lt;br&gt;· 管理端校验装置证书 SHA256 指纹&lt;br&gt;· 指纹不一致：拒绝连接并提示版本不兼容&lt;br&gt;· 载荷序列化：Protocol Buffers&lt;br&gt;· 单帧载荷最大：128MB&lt;br&gt;· session_token 仅管理端进程内保存&lt;br&gt;· 所有登录后接口由装置端校验授权、token 和 role&lt;/font&gt;" vertex="1">
           <mxGeometry height="140" width="490" x="1740" y="797" as="geometry" />
         </mxCell>
-        <mxCell id="er_h1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" value="错误码" vertex="1">
+        <mxCell id="er_h1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" value="结果码" vertex="1">
           <mxGeometry height="28" width="190" x="1740" y="1052" as="geometry" />
         </mxCell>
         <mxCell id="er_h2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" value="说明" vertex="1">
           <mxGeometry height="28" width="280" x="1930" y="1052" as="geometry" />
         </mxCell>
-        <mxCell id="er_0_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="UNAUTHENTICATED" vertex="1">
+        <mxCell id="er_0_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0001 UNAUTHENTICATED" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1080" as="geometry" />
         </mxCell>
         <mxCell id="er_0_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="token 无效或过期" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1080" as="geometry" />
         </mxCell>
-        <mxCell id="er_1_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="PERMISSION_DENIED" vertex="1">
+        <mxCell id="er_1_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0003 PERMISSION_DENIED" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1102" as="geometry" />
         </mxCell>
         <mxCell id="er_1_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="当前角色无权限" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1102" as="geometry" />
         </mxCell>
-        <mxCell id="er_2_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="UNAUTHORIZED" vertex="1">
+        <mxCell id="er_2_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0002 UNAUTHORIZED" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1124" as="geometry" />
         </mxCell>
         <mxCell id="er_2_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="装置未授权" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1124" as="geometry" />
         </mxCell>
-        <mxCell id="er_3_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="ACCOUNT_LOCKED" vertex="1">
+        <mxCell id="er_3_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0004 ACCOUNT_LOCKED" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1146" as="geometry" />
         </mxCell>
         <mxCell id="er_3_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="账号已锁定" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1146" as="geometry" />
         </mxCell>
-        <mxCell id="er_4_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="VERSION_TOO_LOW" vertex="1">
+        <mxCell id="er_4_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0601 VERSION_TOO_LOW" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1168" as="geometry" />
         </mxCell>
         <mxCell id="er_4_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="升级包版本低" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1168" as="geometry" />
         </mxCell>
-        <mxCell id="er_5_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="VERSION_NUMBER_FORBIDDEN" vertex="1">
+        <mxCell id="er_5_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0605 VERSION_NUMBER_FORBIDDEN" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1190" as="geometry" />
         </mxCell>
         <mxCell id="er_5_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="病毒库版本逢 4 跳过" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1190" as="geometry" />
         </mxCell>
-        <mxCell id="er_6_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="FORMAT_ERROR" vertex="1">
+        <mxCell id="er_6_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0402 FORMAT_ERROR" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1212" as="geometry" />
         </mxCell>
         <mxCell id="er_6_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="文件格式错误" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1212" as="geometry" />
         </mxCell>
-        <mxCell id="er_7_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="INTERNAL_ERROR" vertex="1">
+        <mxCell id="er_7_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0007 INTERNAL_ERROR" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1234" as="geometry" />
         </mxCell>
         <mxCell id="er_7_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="装置内部错误" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1234" as="geometry" />
         </mxCell>
-        <mxCell id="er_8_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="DEVICE_BUSY" vertex="1">
+        <mxCell id="er_8_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0006 DEVICE_BUSY" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1256" as="geometry" />
         </mxCell>
         <mxCell id="er_8_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="装置正在执行其他操作" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1256" as="geometry" />
         </mxCell>
-        <mxCell id="er_9_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="VALIDATION_FAILED" vertex="1">
+        <mxCell id="er_9_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0005 VALIDATION_FAILED" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1278" as="geometry" />
         </mxCell>
         <mxCell id="er_9_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="请求参数校验失败" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1278" as="geometry" />
         </mxCell>
-        <mxCell id="er_10_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="ALREADY_EXISTS" vertex="1">
+        <mxCell id="er_10_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0202 ALREADY_EXISTS" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1300" as="geometry" />
         </mxCell>
         <mxCell id="er_10_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="资源已存在" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1300" as="geometry" />
         </mxCell>
-        <mxCell id="er_11_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="NOT_FOUND" vertex="1">
+        <mxCell id="er_11_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0203 NOT_FOUND" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1322" as="geometry" />
         </mxCell>
         <mxCell id="er_11_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="目标资源不存在" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1322" as="geometry" />
         </mxCell>
-        <mxCell id="er_12_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="VERSION_INCOMPATIBLE" vertex="1">
+        <mxCell id="er_12_1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="0x0406 VERSION_INCOMPATIBLE" vertex="1">
           <mxGeometry height="22" width="190" x="1740" y="1344" as="geometry" />
         </mxCell>
         <mxCell id="er_12_2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A7B7D0;strokeWidth=1;fontSize=10;fontStyle=0;align=center;verticalAlign=middle;" value="策略文件或升级包版本不兼容" vertex="1">
           <mxGeometry height="22" width="280" x="1930" y="1344" as="geometry" />
         </mxCell>
-        <mxCell id="ext_text" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F9FC;strokeColor=#D7DEE8;fontSize=11;align=left;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;· 0x0700-0x07FF 为装置端推送消息预留区间，当前版本无主动推送消息。&lt;br&gt;· 新增接口必须分配消息类型码、定义 Protobuf 载荷、补充权限校验与错误码。&lt;/font&gt;" vertex="1">
+        <mxCell id="ext_text" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F9FC;strokeColor=#D7DEE8;fontSize=11;align=left;verticalAlign=top;spacing=12;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;· 0x0700-0x07FF 为装置端推送消息预留区间，当前版本无主动推送消息。&lt;br&gt;· 新增接口必须分配消息类型码、定义 Protobuf 载荷、补充权限校验与结果码。&lt;/font&gt;" vertex="1">
           <mxGeometry height="59" width="490" x="1740" y="1463" as="geometry" />
         </mxCell>
         <mxCell id="p10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8AA0BD;strokeWidth=1.4;arcSize=3;" value="" vertex="1">

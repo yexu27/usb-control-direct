@@ -26,7 +26,7 @@ message RspLogin {
     bool authorized = 5;            // 兼容性字段，true 表示 auth_status=authorized
     string auth_expire_time = 6;
     string device_description = 7;
-    string error_code = 8;          // USER_OR_PASSWORD_ERROR / ACCOUNT_LOCKED / DEVICE_UNAUTHORIZED
+    int32 result_code = 8;           // 0x0101 / 0x0004 / 0x0102（见统一结果码表）
     string error_message = 9;
     string auth_status = 10;        // authorized / unauthorized / expired / failed
 }
@@ -65,7 +65,7 @@ message CmdUploadLicense {
 message RspUploadLicense {
     bool success = 1;
     string expire_time = 2;         // 成功时：授权到期时间
-    string error_code = 3;          // 失败时的错误码（见统一错误码表）
+    int32 result_code = 3;           // 失败时的结果码（见统一结果码表）
     string error_message = 4;       // 失败时的提示文本（中文）
 }
 
@@ -211,7 +211,7 @@ message CmdExportPolicy {
 message RspExportPolicy {
     bool success = 1;
     bytes policy_data = 2;          // 加密后的 .bin 文件字节流
-    string error_code = 3;          // 失败时的错误码（见统一错误码表）
+    int32 result_code = 3;           // 失败时的结果码（见统一结果码表）
     string error_message = 4;       // 失败时的提示文本（中文）
 }
 
@@ -303,7 +303,7 @@ message RspQueryLogs {
     int32 total = 5;                // 符合条件的总记录数
     int32 page = 6;
     int32 page_size = 7;
-    string error_code = 8;          // 失败时的错误码（见统一错误码表）
+    int32 result_code = 8;           // 失败时的结果码（见统一结果码表）
     string error_message = 9;       // 失败时的提示文本（中文）
 }
 
@@ -324,7 +324,7 @@ message RspExportLogs {
     bool success = 1;
     bytes zip_data = 2;             // .zip 文件字节流
     string suggested_filename = 3;  // 装置端生成的文件名，管理端直接使用
-    string error_code = 4;          // 失败时的错误码（见统一错误码表）
+    int32 result_code = 4;           // 失败时的结果码（见统一结果码表）
     string error_message = 5;       // 失败时的提示文本（中文）
 }
 
@@ -437,7 +437,7 @@ message CmdChangePassword {
 // RSP_COMMON（0xFF00）—— 通用响应，所有无特定响应载荷的命令使用
 message RspCommon {
     bool success = 1;
-    string error_code = 2;          // 失败时的错误码（见统一错误码表）
+    int32 result_code = 2;           // 失败时的结果码（见统一结果码表）
     string error_message = 3;       // 失败时的提示文本（中文，直接展示给用户）
 }
 
