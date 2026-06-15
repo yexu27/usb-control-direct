@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=25;fontStyle=1;fontColor=#0D2C54;" value="USB 管控系统直连版 · 产品架构总览图" vertex="1">
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=25;fontStyle=1;fontColor=#0D2C54;" value="USB 安全管理系统 · 产品架构总览图" vertex="1">
           <mxGeometry height="42" width="1400" x="500" y="22" as="geometry" />
         </mxCell>
         <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=13;fontStyle=2;fontColor=#5A6B85;" value="按产品边界组织：使用接入域 / 管理端能力域 / 需求功能域 / 装置端程序实现域 / 装置侧数据与系统支撑" vertex="1">
