@@ -24,7 +24,7 @@ message RspLogin {
     string username = 3;
     string role = 4;                // admin / operator / auditor
     bool authorized = 5;            // 兼容性字段，true 表示 auth_status=authorized
-    string auth_expire_time = 6;
+    int64 auth_expire_time = 6;     // Unix 秒；0 表示未授权 / 无到期时间
     string device_description = 7;
     int32 result_code = 8;           // 0x0101 / 0x0004 / 0x0102（见统一结果码表）
     string error_message = 9;
@@ -39,7 +39,7 @@ message CmdAuthStatusQuery {
 // RSP_AUTH_STATUS（0x0004）—— 授权状态响应
 message RspAuthStatus {
     bool authorized = 1;            // 兼容性字段，true 表示 auth_status=authorized
-    string expire_time = 2;         // 授权到期时间（ISO8601，未授权时为空）
+    int64 expire_time = 2;          // 授权到期时间 Unix 秒；0 表示未授权
     string device_description = 3;
     string auth_status = 4;         // authorized / unauthorized / expired / failed
 }
@@ -64,7 +64,7 @@ message CmdUploadLicense {
 // RSP_UPLOAD_LICENSE（0x0008）—— 授权文件上传响应
 message RspUploadLicense {
     bool success = 1;
-    string expire_time = 2;         // 成功时：授权到期时间
+    int64 expire_time = 2;          // 成功时：授权到期时间 Unix 秒
     int32 result_code = 3;           // 失败时的结果码（见统一结果码表）
     string error_message = 4;       // 失败时的提示文本（中文）
 }
@@ -88,7 +88,7 @@ message WhitelistDevice {
     string permission = 6;          // readonly / readwrite
     string description = 7;
     string add_method = 8;          // device / management
-    string created_at = 9;
+    int64 created_at = 9;           // Unix 秒
     string device_type = 10;        // storage，页面不展示
 }
 
@@ -162,7 +162,7 @@ message FileTypeBlacklistItem {
     string extension = 1;
     string description = 2;
     bool is_default = 3;
-    string created_at = 4;
+    int64 created_at = 4;           // Unix 秒
 }
 
 // CMD_GET_FILE_POLICY（0x0200）—— 获取文件访问控制策略
@@ -229,8 +229,8 @@ message CmdImportPolicy {
 message CmdQueryLogs {
     string session_token = 1;
     string log_type = 2;            // usb_audit / malware / operation
-    string start_time = 3;          // ISO8601 UTC，包含
-    string end_time = 4;            // ISO8601 UTC，包含
+    int64 start_time = 3;           // Unix 秒，包含；0 表示不限
+    int64 end_time = 4;             // Unix 秒，包含；0 表示不限
     string keyword = 5;             // 关键字搜索，可为空
     string event_type = 6;          // USB 审计事件类型筛选，可为空
     int32 page = 7;                 // 页码（从 1 开始）
@@ -242,7 +242,7 @@ message CmdQueryLogs {
 // USB 审计日志条目
 message UsbAuditLogEntry {
     int64 id = 1;
-    string event_time = 2;
+    int64 event_time = 2;           // Unix 秒
     string device_sn = 3;
     string device_name = 4;
     string device_type = 5;
@@ -260,7 +260,7 @@ message UsbAuditLogEntry {
 // 恶意代码检测日志条目
 message MalwareLogEntry {
     int64 id = 1;
-    string scan_time = 2;
+    int64 scan_time = 2;            // Unix 秒
     string device_sn = 3;
     string device_name = 4;
     string file_path = 5;
@@ -275,7 +275,7 @@ message MalwareLogEntry {
 // 操作日志条目
 message OperationLogEntry {
     int64 id = 1;
-    string op_time = 2;
+    int64 op_time = 2;              // Unix 秒
     string username = 3;
     string role = 4;
     string log_category = 5;        // PRD 页面分类，对应 T10.log_type
@@ -311,8 +311,8 @@ message RspQueryLogs {
 message CmdExportLogs {
     string session_token = 1;
     string log_type = 2;
-    string start_time = 3;
-    string end_time = 4;
+    int64 start_time = 3;           // Unix 秒，包含；0 表示不限
+    int64 end_time = 4;             // Unix 秒，包含；0 表示不限
     string keyword = 5;
     string event_type = 6;
     string log_category = 7;
@@ -332,8 +332,8 @@ message RspExportLogs {
 message CmdDeleteLogs {
     string session_token = 1;
     string log_type = 2;
-    string start_time = 3;
-    string end_time = 4;
+    int64 start_time = 3;           // Unix 秒，包含
+    int64 end_time = 4;             // Unix 秒，包含
 }
 
 // ============================================================
@@ -350,9 +350,9 @@ message RspSystemInfo {
     string system_version = 1;
     string virus_db_version = 2;
     bool authorized = 3;            // 兼容性字段，true 表示 auth_status=authorized
-    string auth_expire_time = 4;
+    int64 auth_expire_time = 4;     // Unix 秒；0 表示未授权
     string device_description = 5;
-    string virus_db_updated_at = 6;
+    int64 virus_db_updated_at = 6;  // Unix 秒；0 表示未知
     string auth_status = 7;         // authorized / unauthorized / expired / failed
 }
 
@@ -386,7 +386,7 @@ message UserItem {
     string role = 2;                // admin / operator / auditor
     string status = 3;              // active / locked / deleted
     bool is_builtin = 4;
-    string created_at = 5;          // 内置用户可返回"内置"
+    int64 created_at = 5;           // Unix 秒；0 表示内置用户或无创建时间（由 UI 层映射展示「内置」）
 }
 
 // CMD_LIST_USERS（0x0600）—— 获取用户列表
