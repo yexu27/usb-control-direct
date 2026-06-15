@@ -79,7 +79,7 @@
         <mxCell id="api_bar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF3FF;strokeColor=#2F73D2;strokeWidth=1.5;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;arcSize=6;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;私有协议服务 / 装置接入网关&lt;br&gt;TCP/TLS + Protobuf，登录、授权、策略、日志、升级统一入口；装置端执行 token / role / license 校验&lt;/font&gt;" vertex="1">
           <mxGeometry height="50" width="1130" x="220" y="290" as="geometry" />
         </mxCell>
-        <mxCell id="usb_bar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF7ED;strokeColor=#2D8A4F;strokeWidth=1.5;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;arcSize=6;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;USB 内容管控通道&lt;br&gt;USB Host → kernel mount → Rust NBD 虚拟 FAT32 → USB Gadget → 受控主机&lt;/font&gt;" vertex="1">
+        <mxCell id="usb_bar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF7ED;strokeColor=#2D8A4F;strokeWidth=1.5;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;arcSize=6;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;USB 内容管控通道&lt;br&gt;USB Host → Linux 挂载层 → Rust NBD 虚拟 exFAT → USB Gadget → 受控主机&lt;/font&gt;" vertex="1">
           <mxGeometry height="50" width="480" x="1400" y="290" as="geometry" />
         </mxCell>
         <mxCell id="svc_F01" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;登录与授权&lt;br&gt;账号鉴权&lt;br&gt;未授权导入授权&lt;br&gt;重新登录验证&lt;/font&gt;" vertex="1">
@@ -109,7 +109,7 @@
         <mxCell id="svc_F09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEBE7;strokeColor=#B85450;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;恶意代码检测&lt;br&gt;ClamAV 全盘扫描&lt;br&gt;命中文件加前缀&lt;br&gt;扫描失败拒绝映射&lt;/font&gt;" vertex="1">
           <mxGeometry height="96" width="240" x="505" y="555" as="geometry" />
         </mxCell>
-        <mxCell id="svc_S04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD 文件控制&lt;br&gt;虚拟 FAT32&lt;br&gt;扇区级策略判定&lt;br&gt;READ 返回 I/O error&lt;/font&gt;" vertex="1">
+        <mxCell id="svc_S04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD 文件控制&lt;br&gt;虚拟 exFAT&lt;br&gt;扇区级策略判定&lt;br&gt;READ 返回 I/O error&lt;/font&gt;" vertex="1">
           <mxGeometry height="96" width="240" x="775" y="555" as="geometry" />
         </mxCell>
         <mxCell id="svc_S07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EEF8;strokeColor=#6C8EBF;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;日志审计服务&lt;br&gt;事件归类&lt;br&gt;装置侧写入&lt;br&gt;同类日志覆盖&lt;/font&gt;" vertex="1">
@@ -175,7 +175,7 @@
         <mxCell id="kernel_chip_0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB Host&lt;/font&gt;" vertex="1">
           <mxGeometry height="28" width="105" x="1485" y="803" as="geometry" />
         </mxCell>
-        <mxCell id="kernel_chip_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;kernel mount&lt;/font&gt;" vertex="1">
+        <mxCell id="kernel_chip_1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;Linux 挂载层&lt;/font&gt;" vertex="1">
           <mxGeometry height="28" width="105" x="1610" y="803" as="geometry" />
         </mxCell>
         <mxCell id="kernel_chip_2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD client&lt;/font&gt;" vertex="1">

@@ -34,7 +34,7 @@
         <mxCell id="techstack" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8a6a18;strokeColor=#8a6a18;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" value="技术栈选型" vertex="1">
           <mxGeometry height="28" width="180" x="20" y="760" as="geometry" />
         </mxCell>
-        <mxCell id="tech_list" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=10;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;装置端：Rust&lt;br&gt;系统：Ubuntu 22.04&lt;br&gt;内核：Linux 4.19&lt;br&gt;数据库：SQLite&lt;br&gt;病毒扫描：ClamAV&lt;br&gt;虚拟介质：NBD + FAT32&lt;br&gt;管理端：Electron 32 + Vue 3.4&lt;br&gt;协议：TCP/TLS + Protobuf&lt;/font&gt;" vertex="1">
+        <mxCell id="tech_list" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=10;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;装置端：Rust&lt;br&gt;系统：Ubuntu 22.04&lt;br&gt;内核：Linux 4.19&lt;br&gt;数据库：SQLite&lt;br&gt;病毒扫描：ClamAV&lt;br&gt;虚拟介质：NBD + exFAT&lt;br&gt;管理端：Electron 32 + Vue 3.4&lt;br&gt;协议：TCP/TLS + Protobuf&lt;/font&gt;" vertex="1">
           <mxGeometry height="260" width="155" x="30" y="800" as="geometry" />
         </mxCell>
         <mxCell id="deploy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8a6a18;strokeColor=#8a6a18;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" value="部署形态" vertex="1">
@@ -172,7 +172,7 @@
         <mxCell id="L4_m3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;&quot;&gt;&lt;span style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;防伪装识别&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;描述符 / 接口 / 端点&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size: 14px; font-weight: 400;&quot;&gt;多接口设备逐接口判断&lt;/span&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="125" width="205" x="705" y="742" as="geometry" />
         </mxCell>
-        <mxCell id="L4_m4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD FAT32 服务&lt;br&gt;动态目录树 / 扇区生成&lt;br&gt;I/O error 阻断&lt;/font&gt;&lt;/span&gt;" vertex="1">
+        <mxCell id="L4_m4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD exFAT 服务&lt;br&gt;动态目录树 / 扇区生成&lt;br&gt;I/O error 阻断&lt;/font&gt;&lt;/span&gt;" vertex="1">
           <mxGeometry height="125" width="205" x="925" y="742" as="geometry" />
         </mxCell>
         <mxCell id="L4_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;访问控制引擎&lt;br&gt;优先级判定&lt;br&gt;可执行 / 自动读取 / 黑名单&lt;/font&gt;" vertex="1">
@@ -205,7 +205,7 @@
         <mxCell id="L3_m2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;USB Gadget 子系统&lt;br&gt;libcomposite / configfs&lt;br&gt;f_mass_storage / g_hid&lt;/font&gt;" vertex="1">
           <mxGeometry height="95" width="260" x="555" y="944" as="geometry" />
         </mxCell>
-        <mxCell id="L3_m3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;kernel mount&lt;br&gt;FAT32 / exFAT 原生驱动&lt;br&gt;挂载 /mnt/usb_raw&lt;/font&gt;" vertex="1">
+        <mxCell id="L3_m3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;Linux 挂载层&lt;br&gt;FAT32 / exFAT / NTFS / ext 挂载能力&lt;br&gt;挂载 /mnt/usb_raw&lt;/font&gt;" vertex="1">
           <mxGeometry height="95" width="260" x="835" y="944" as="geometry" />
         </mxCell>
         <mxCell id="L3_m4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;NBD 内核客户端&lt;br&gt;/dev/nbdX&lt;br&gt;绑定 f_mass_storage LUN&lt;/font&gt;" vertex="1">
@@ -286,7 +286,7 @@
         <mxCell id="notes_title" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0d2c54;strokeColor=#0d2c54;fontColor=#ffffff;fontSize=13;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=16;" value="关键说明" vertex="1">
           <mxGeometry height="30" width="2168" x="220" y="1510" as="geometry" />
         </mxCell>
-        <mxCell id="note_1" parent="1" style="text;whiteSpace=wrap;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;1. 主业务链路：真实 U 盘由装置端 kernel mount 到 /mnt/usb_raw，Rust NBD 服务生成受控 FAT32 块设备，再通过 USB Gadget 暴露给受控主机；命中阻断规则时对 READ 返回 I/O error。&lt;/font&gt;" vertex="1">
+        <mxCell id="note_1" parent="1" style="text;whiteSpace=wrap;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;1. 主业务链路：真实 U 盘由装置端 Linux 挂载层挂载到 /mnt/usb_raw，Rust NBD 服务生成受控 exFAT 块设备，再通过 USB Gadget 暴露给受控主机；命中阻断规则时对 READ 返回 I/O error。&lt;/font&gt;" vertex="1">
           <mxGeometry height="70" width="650" x="245" y="1560" as="geometry" />
         </mxCell>
         <mxCell id="note_2" parent="1" style="text;whiteSpace=wrap;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;fontColor=#333;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;2. 管理链路：Windows 管理端只通过 TCP/TLS 私有协议访问装置端服务；账号、授权、策略、日志、病毒库均在装置侧保存和校验，管理端不持久化业务数据、账号数据、日志或最近 IP。&lt;/font&gt;" vertex="1">
