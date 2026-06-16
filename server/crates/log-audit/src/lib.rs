@@ -1,3 +1,9 @@
-//! S07 日志审计服务（骨架）
+//! S07 日志审计服务。
 //!
-//! 本 crate 当前仅作为 workspace 占位，正式实现见后续阶段。
+//! 提供三类日志写入接口（USB 审计/恶意代码/操作日志）和 80% 滚动覆盖逻辑。
+
+pub mod audit;
+pub mod error;
+
+pub use audit::{AuditService, LogCategory};
+pub use error::AuditError;
