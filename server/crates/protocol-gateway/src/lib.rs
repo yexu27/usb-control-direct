@@ -3,5 +3,6 @@
 //! 基于 tokio + tokio-rustls 实现 TLS 监听、单连接管理、帧流编解码和 router 骨架。
 
 pub mod error;
+pub mod codec;
 
 pub use error::GatewayError;
