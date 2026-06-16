@@ -1,0 +1,10 @@
+[package]
+name = "hid-access"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S02 键鼠准入控制引擎（骨架）"
+
+[dependencies]
+common = { workspace = true }

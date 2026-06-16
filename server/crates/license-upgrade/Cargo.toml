@@ -1,0 +1,10 @@
+[package]
+name = "license-upgrade"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S09 授权与系统维护服务（骨架）"
+
+[dependencies]
+common = { workspace = true }

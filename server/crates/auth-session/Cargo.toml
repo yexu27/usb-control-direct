@@ -1,0 +1,10 @@
+[package]
+name = "auth-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S08 用户与会话服务（骨架）"
+
+[dependencies]
+common = { workspace = true }

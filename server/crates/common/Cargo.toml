@@ -1,0 +1,15 @@
+[package]
+name = "common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "装置端公共类型、结果码、协议帧头、proto 生成与枚举映射"
+
+[dependencies]
+prost = { workspace = true }
+crc32fast = { workspace = true }
+thiserror = { workspace = true }
+
+[build-dependencies]
+prost-build = { workspace = true }

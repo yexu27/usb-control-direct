@@ -1,0 +1,10 @@
+[package]
+name = "storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S11 装置侧数据存储适配（骨架）"
+
+[dependencies]
+common = { workspace = true }

@@ -1,0 +1,10 @@
+[package]
+name = "protocol-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S10 私有协议 API 网关（骨架）"
+
+[dependencies]
+common = { workspace = true }

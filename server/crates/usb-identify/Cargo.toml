@@ -1,0 +1,10 @@
+[package]
+name = "usb-identify"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S01 USB 设备识别与映射引擎（骨架）"
+
+[dependencies]
+common = { workspace = true }

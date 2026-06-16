@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/common",
+    "crates/storage",
+    "crates/protocol-gateway",
+    "crates/log-audit",
+    "crates/auth-session",
+    "crates/usb-identify",
+    "crates/hid-access",
+    "crates/malware-scan",
+    "crates/file-access",
+    "crates/whitelist",
+    "crates/policy-import-export",
+    "crates/license-upgrade",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.96"
+license = "Proprietary"
+
+[workspace.dependencies]
+# 公共类型 & 协议
+prost = "0.13"
+prost-build = "0.13"
+crc32fast = "1.4"
+thiserror = "1.0"
+
+# 内部 crate
+common = { path = "crates/common" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

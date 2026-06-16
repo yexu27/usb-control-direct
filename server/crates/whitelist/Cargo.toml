@@ -1,0 +1,10 @@
+[package]
+name = "whitelist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "S05 白名单策略服务（骨架）"
+
+[dependencies]
+common = { workspace = true }
