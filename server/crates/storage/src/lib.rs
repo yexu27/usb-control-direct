@@ -12,6 +12,10 @@ pub(crate) mod usb_whitelist;
 pub(crate) mod file_type_blacklist;
 pub(crate) mod file_access_policy;
 pub(crate) mod exec_type;
+pub(crate) mod usb_audit_log;
+pub(crate) mod malware_log;
+pub(crate) mod system_config;
+pub(crate) mod users;
 
 pub use error::StorageError;
 
