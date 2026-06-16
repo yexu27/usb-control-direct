@@ -16,6 +16,9 @@ pub(crate) mod usb_audit_log;
 pub(crate) mod malware_log;
 pub(crate) mod system_config;
 pub(crate) mod users;
+pub(crate) mod role_permission;
+pub(crate) mod operation_log;
+pub(crate) mod log_retention_event;
 
 pub use error::StorageError;
 
