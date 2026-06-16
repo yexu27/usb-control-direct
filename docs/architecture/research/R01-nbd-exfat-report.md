@@ -25,7 +25,7 @@
 | `CONFIG_BLK_DEV_NBD` | `=y`（内核内置，非模块） |
 | `/dev/nbd*` 设备数 | 22 个（nbd0-nbd15 + 分区设备） |
 | nbd0 当前状态 | size=30629377 sectors, hw_sector_size=512（已有 backing 绑定） |
-| `nbd-client` 用户态工具 | **未安装**（PoC/正式开发需安装或通过 ioctl 直接操作） |
+| `nbd-client` 用户态工具 | 未安装（Rust 进程通过 socketpair + ioctl 直接操作内核 NBD 驱动，不依赖此工具） |
 
 **结论**：NBD 内核驱动已内置，设备节点可用。Rust NBD server 可通过 `socketpair` + `ioctl(NBD_SET_SOCK/NBD_SET_SIZE/NBD_DO_IT)` 直接操作内核 NBD 设备，无需依赖 `nbd-client`。
 
