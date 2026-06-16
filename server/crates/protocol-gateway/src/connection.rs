@@ -6,12 +6,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use prost::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 
+use auth_session::AuthService;
+use common::code::ResultCode;
+use log_audit::AuditService;
+
 use crate::codec;
+use crate::context::RequestContext;
 use crate::error::GatewayError;
+use crate::middleware;
 use crate::router::Router;
 
 /// CRC 连续失败断连阈值。
@@ -28,6 +35,9 @@ const CMD_HEARTBEAT: u32 = 0xFF01;
 
 /// 心跳响应消息类型。
 const CMD_HEARTBEAT_RSP: u32 = 0xFF02;
+
+/// 通用响应消息类型。
+const RSP_COMMON: u32 = 0xFF00;
 
 /// 单连接守卫。Drop 时释放连接槽位。
 pub struct ConnectionGuard {
@@ -73,16 +83,32 @@ impl ConnectionManager {
     }
 }
 
+/// 构造错误响应帧。
+fn make_error_response(seq_id: u32, code: ResultCode) -> Vec<u8> {
+    let rsp = common::proto::RspCommon {
+        success: false,
+        result_code: code.as_u16() as i32,
+        error_message: format!("{}", code),
+    };
+    codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
 /// 处理单个 TLS 连接的帧循环。
 ///
 /// 参数:
 ///   - `stream`: TLS 连接流。
 ///   - `router`: 消息路由器。
 ///   - `_guard`: 连接守卫（持有期间占用连接槽位）。
+///   - `auth_service`: 鉴权服务（共享）。
+///   - `audit_service`: 审计服务（共享）。
+///   - `source_ip`: 管理端来源 IP。
 pub async fn handle_connection(
     mut stream: TlsStream<TcpStream>,
     router: &Router,
     _guard: ConnectionGuard,
+    auth_service: Arc<AuthService>,
+    audit_service: Arc<AuditService>,
+    source_ip: String,
 ) -> Result<(), GatewayError> {
     let mut buf = Vec::with_capacity(4096);
     let mut tmp = [0u8; 4096];
@@ -114,13 +140,50 @@ pub async fn handle_connection(
                     }
                     crc_fail_count = 0;
 
+                    // 心跳处理（不刷新 session 活跃时间）
                     if header.msg_type == CMD_HEARTBEAT {
                         let rsp = codec::encode_frame(CMD_HEARTBEAT_RSP, header.seq_id, &[])?;
                         stream.write_all(&rsp).await?;
                         continue;
                     }
 
-                    let response = router.dispatch(header.msg_type, header.seq_id, &payload);
+                    // Token 中间件
+                    let token_result = middleware::check_token(
+                        header.msg_type,
+                        &payload,
+                        &auth_service,
+                    );
+
+                    let session = match token_result {
+                        middleware::TokenResult::Whitelist => None,
+                        middleware::TokenResult::Authenticated(info) => Some(info),
+                        middleware::TokenResult::Failed(code) => {
+                            let rsp = make_error_response(header.seq_id, code);
+                            stream.write_all(&rsp).await?;
+                            continue;
+                        }
+                    };
+
+                    // 权限中间件
+                    if let Some(ref info) = session {
+                        let allowed = router.allowed_roles(header.msg_type);
+                        if let Err(code) = middleware::check_permission(info, allowed) {
+                            let rsp = make_error_response(header.seq_id, code);
+                            stream.write_all(&rsp).await?;
+                            continue;
+                        }
+                    }
+
+                    // 构建 RequestContext 并分发
+                    let ctx = RequestContext {
+                        seq_id: header.seq_id,
+                        session,
+                        source_ip: source_ip.clone(),
+                        auth_service: Arc::clone(&auth_service),
+                        audit_service: Arc::clone(&audit_service),
+                    };
+
+                    let response = router.dispatch(&ctx, header.msg_type, &payload);
                     stream.write_all(&response).await?;
                 }
             }
