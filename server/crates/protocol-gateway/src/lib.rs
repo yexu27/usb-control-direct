@@ -5,5 +5,7 @@
 pub mod error;
 pub mod codec;
 pub mod tls;
+pub mod router;
+pub mod connection;
 
 pub use error::GatewayError;
