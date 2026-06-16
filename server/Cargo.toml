@@ -28,8 +28,30 @@ prost-build = "0.13"
 crc32fast = "1.4"
 thiserror = "1.0"
 
+# 数据库
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# TLS
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rcgen = "0.13"
+
+# 测试辅助
+tempfile = "3"
+
+# 系统调用
+libc = "0.2"
+
 # 内部 crate
 common = { path = "crates/common" }
+storage = { path = "crates/storage" }
 
 [profile.release]
 opt-level = 3
