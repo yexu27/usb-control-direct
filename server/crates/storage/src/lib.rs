@@ -5,5 +5,6 @@
 
 pub mod error;
 pub(crate) mod pool;
+pub(crate) mod schema;
 
 pub use error::StorageError;
