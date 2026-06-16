@@ -4,5 +4,6 @@
 
 pub mod error;
 pub mod codec;
+pub mod tls;
 
 pub use error::GatewayError;
