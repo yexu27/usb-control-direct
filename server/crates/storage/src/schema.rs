@@ -305,18 +305,18 @@ fn insert_default_users(conn: &Connection, now: i64) -> Result<(), StorageError>
     let users: &[(&str, &str, i32)] = &[
         (
             "admin",
-            "$2b$12$LJ3m4ys3Lg5GvqFSPkVjCOHPxHU7GKIL9v0cSjLxMfg/TFpxnWAi6",
-            0, // admin
+            "$2b$12$ZDhWMHU7IE.y3Bwj8iRmrekwJT52DQxDx33mVNz3hbLCZ9g5/NLwO",
+            0, // admin，明文密码 admin@123
         ),
         (
             "operator",
-            "$2b$12$8RHg6rKN5M5yGTFHvaFiqu4jLBaEZQ.6Ri0pO6YxBRBn3GXdLkIam",
-            1, // operator
+            "$2b$12$nC77GZiBjNtullz9Zu4YUuDQ0XYMXKxcLWLkrYDDUYQKxBnaVj7X2",
+            1, // operator，明文密码 operator@123
         ),
         (
             "audit",
-            "$2b$12$5Q8qYzP2VFhDpKPJxbfmXOnO3omELgFbl/4kGExTMCVBq7V.ZXBRa",
-            2, // audit
+            "$2b$12$07S1.9Mzmw26mMpp4zcx.O3gdFN/lMSmOpKo3xG01e2c4R52KW/HK",
+            2, // audit，明文密码 audit@123
         ),
     ];
 

@@ -15,6 +15,7 @@ const MAX_FAIL_COUNT: i32 = 5;
 const LOCK_DURATION_SECS: i64 = 300;
 
 /// 登录结果。
+#[derive(Debug)]
 pub struct LoginResult {
     /// session token。
     pub token: String,
