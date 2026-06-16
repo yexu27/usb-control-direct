@@ -182,6 +182,89 @@ fn change_password_confirm_mismatch() {
     );
 }
 
+// ===== 锁定过期后重试 =====
+
+#[test]
+fn lock_expired_then_wrong_password_does_not_relock_immediately() {
+    let (service, _path) = setup();
+
+    // 连续 5 次错误密码，触发锁定
+    for _ in 0..5 {
+        let _ = service.login("admin", "wrong", "127.0.0.1");
+    }
+    let err = service.login("admin", "admin@123", "127.0.0.1").unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::AccountLocked
+    );
+
+    // 手动将 lock_until 设为过去（模拟锁定超时）
+    let user = service
+        .storage()
+        .user_query_by_username("admin")
+        .unwrap()
+        .unwrap();
+    service
+        .storage()
+        .user_update_login_fail(user.id, 5, Some(1))
+        .unwrap();
+
+    // 锁定过期后，输入 1 次错误密码不应立即重新锁定
+    let err = service.login("admin", "wrong", "127.0.0.1").unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::UserOrPasswordError
+    );
+
+    // 此时 fail_count 应为 1（不是 6），再输 3 次错仍不锁定
+    for _ in 0..3 {
+        let err = service.login("admin", "wrong", "127.0.0.1").unwrap_err();
+        assert_eq!(
+            err.to_result_code(),
+            common::code::ResultCode::UserOrPasswordError
+        );
+    }
+
+    // 第 5 次错误触发锁定（本次仍返回 UserOrPasswordError）
+    let err = service.login("admin", "wrong", "127.0.0.1").unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::UserOrPasswordError
+    );
+
+    // 第 6 次尝试才返回 AccountLocked
+    let err = service.login("admin", "admin@123", "127.0.0.1").unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::AccountLocked
+    );
+}
+
+#[test]
+fn lock_expired_then_correct_password_succeeds() {
+    let (service, _path) = setup();
+
+    // 锁定账号
+    for _ in 0..5 {
+        let _ = service.login("admin", "wrong", "127.0.0.1");
+    }
+
+    // 手动将 lock_until 设为过去
+    let user = service
+        .storage()
+        .user_query_by_username("admin")
+        .unwrap()
+        .unwrap();
+    service
+        .storage()
+        .user_update_login_fail(user.id, 5, Some(1))
+        .unwrap();
+
+    // 锁定过期后正确密码应成功登录
+    let result = service.login("admin", "admin@123", "127.0.0.1");
+    assert!(result.is_ok());
+}
+
 // ===== 密码工具 =====
 
 #[test]

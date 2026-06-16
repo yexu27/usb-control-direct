@@ -74,7 +74,7 @@ impl AuthService {
         }
 
         // 检查锁定
-        if let Some(lock_until) = user.lock_until {
+        let fail_count_base = if let Some(lock_until) = user.lock_until {
             let now = now_unix();
             if now < lock_until {
                 return Err(AuthError::AccountLocked);
@@ -82,12 +82,15 @@ impl AuthService {
             // 锁定超时自动解除，清零计数
             self.storage
                 .user_update_login_fail(user.id, 0, None)?;
-        }
+            0
+        } else {
+            user.login_fail_count
+        };
 
         // 验证密码
         let matched = password::verify_password(password, &user.password_hash)?;
         if !matched {
-            let new_count = user.login_fail_count + 1;
+            let new_count = fail_count_base + 1;
             let lock_until = if new_count >= MAX_FAIL_COUNT {
                 Some(now_unix() + LOCK_DURATION_SECS)
             } else {
@@ -99,7 +102,7 @@ impl AuthService {
         }
 
         // 登录成功：清零失败计数
-        if user.login_fail_count > 0 || user.lock_until.is_some() {
+        if fail_count_base > 0 {
             self.storage
                 .user_update_login_fail(user.id, 0, None)?;
         }
