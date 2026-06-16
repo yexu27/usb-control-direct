@@ -22,8 +22,8 @@ pub enum StorageError {
     AlreadyExists,
 
     /// 目标记录不存在。
-    #[error("记录不存在")]
-    NotFound,
+    #[error("记录不存在: {0}")]
+    NotFound(String),
 
     /// JSON 序列化或反序列化失败。
     #[error("JSON 错误: {0}")]
@@ -40,7 +40,7 @@ impl StorageError {
             StorageError::Sqlite(_) => ResultCode::InternalError,
             StorageError::Validation(_) => ResultCode::ValidationFailed,
             StorageError::AlreadyExists => ResultCode::AlreadyExists,
-            StorageError::NotFound => ResultCode::NotFound,
+            StorageError::NotFound(_) => ResultCode::NotFound,
             StorageError::Json(_) => ResultCode::InternalError,
         }
     }
