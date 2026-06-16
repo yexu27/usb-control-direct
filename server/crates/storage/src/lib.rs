@@ -40,7 +40,7 @@ impl Storage {
     ///   - `path`: 数据库文件路径。
     pub fn open(path: &Path) -> Result<Self, StorageError> {
         let pool = Pool::open(path, 4)?;
-        pool.with_write(|conn| {
+        pool.with_transaction(|conn| {
             schema::migrate(conn)?;
             Ok(())
         })?;

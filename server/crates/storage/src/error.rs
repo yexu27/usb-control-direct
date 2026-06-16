@@ -11,7 +11,7 @@ use thiserror::Error;
 pub enum StorageError {
     /// SQLite 驱动层错误。
     #[error("sqlite 错误: {0}")]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(rusqlite::Error),
 
     /// 输入参数校验失败，携带失败原因描述。
     #[error("参数校验失败: {0}")]
@@ -28,6 +28,19 @@ pub enum StorageError {
     /// JSON 序列化或反序列化失败。
     #[error("JSON 错误: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+impl From<rusqlite::Error> for StorageError {
+    fn from(err: rusqlite::Error) -> Self {
+        if let rusqlite::Error::SqliteFailure(ref e, _) = err {
+            if e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+                || e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY
+            {
+                return StorageError::AlreadyExists;
+            }
+        }
+        StorageError::Sqlite(err)
+    }
 }
 
 impl StorageError {

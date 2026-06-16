@@ -76,6 +76,7 @@ impl Pool {
     ///
     /// 返回:
     /// - 闭包的返回值。
+    #[allow(dead_code)]
     pub fn with_write<T, F>(&self, f: F) -> Result<T, StorageError>
     where
         F: FnOnce(&Connection) -> Result<T, StorageError>,
@@ -131,7 +132,8 @@ impl Pool {
 
     /// 通过写连接执行事务。
     ///
-    /// 自动 BEGIN / COMMIT，闭包返回 `Err` 时自动 ROLLBACK。
+    /// 使用 `rusqlite::Transaction` 管理事务生命周期：
+    /// 闭包返回 `Ok` 时自动 COMMIT，返回 `Err` 或 panic 时通过 Drop 自动 ROLLBACK。
     ///
     /// 参数:
     /// - `f`: 接受 `&Connection` 引用的闭包，返回 `Result<T, StorageError>`。
@@ -142,16 +144,16 @@ impl Pool {
     where
         F: FnOnce(&Connection) -> Result<T, StorageError>,
     {
-        let conn = self.lock_write()?;
-        conn.execute_batch("BEGIN")?;
-        match f(&conn) {
+        let mut conn = self.lock_write()?;
+        let tx = conn.transaction()?;
+        let result = f(&tx);
+        match result {
             Ok(value) => {
-                conn.execute_batch("COMMIT")?;
+                tx.commit()?;
                 Ok(value)
             }
             Err(err) => {
-                // 尽力回滚，忽略回滚本身的错误，将原始错误向上传递
-                let _ = conn.execute_batch("ROLLBACK");
+                // tx 在此处 Drop，自动 ROLLBACK
                 Err(err)
             }
         }

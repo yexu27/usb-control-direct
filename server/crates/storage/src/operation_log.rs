@@ -56,18 +56,12 @@ impl Storage {
     /// 删除最旧的一条操作日志，返回被删除记录的时间。
     pub fn operation_log_delete_oldest(&self) -> Result<Option<i64>, StorageError> {
         self.pool().with_transaction(|tx| {
-            let oldest: Result<i64, _> = tx.query_row(
-                "SELECT op_time FROM operation_log ORDER BY op_time ASC LIMIT 1",
+            let result: Result<i64, _> = tx.query_row(
+                "DELETE FROM operation_log WHERE id = (SELECT id FROM operation_log ORDER BY op_time ASC LIMIT 1) RETURNING op_time",
                 [], |row| row.get(0),
             );
-            match oldest {
-                Ok(time) => {
-                    tx.execute(
-                        "DELETE FROM operation_log WHERE id = (SELECT id FROM operation_log ORDER BY op_time ASC LIMIT 1)",
-                        [],
-                    )?;
-                    Ok(Some(time))
-                }
+            match result {
+                Ok(time) => Ok(Some(time)),
                 Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
                 Err(e) => Err(StorageError::Sqlite(e)),
             }

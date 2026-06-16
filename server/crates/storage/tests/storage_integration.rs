@@ -1,7 +1,7 @@
 //! Storage 集成测试：覆盖 T01-T11 全部 CRUD。
 
 use storage::model::*;
-use storage::Storage;
+use storage::{Storage, StorageError};
 use tempfile::NamedTempFile;
 
 fn setup() -> (Storage, NamedTempFile) {
@@ -44,6 +44,7 @@ fn t01_whitelist_unique_constraint() {
     s.whitelist_insert(&item).unwrap();
     let result = s.whitelist_insert(&item);
     assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), StorageError::AlreadyExists));
 }
 
 #[test]
@@ -160,6 +161,14 @@ fn t06_malware_insert_and_query() {
     };
     let id = s.malware_insert(&item).unwrap();
     assert!(id > 0);
+
+    let logs = s.malware_query_by_time(now - 1, now + 1).unwrap();
+    assert_eq!(logs.len(), 1);
+    assert_eq!(logs[0].virus_name.as_deref(), Some("Eicar"));
+    assert_eq!(logs[0].scan_result, 1);
+
+    let empty = s.malware_query_by_time(now + 100, now + 200).unwrap();
+    assert!(empty.is_empty());
 }
 
 // ========== T07 ==========
