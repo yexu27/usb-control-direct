@@ -4,6 +4,8 @@
 
 pub mod error;
 pub mod password;
+pub mod service;
 pub mod session;
 
+pub use service::AuthService;
 pub use session::{SessionInfo, SessionManager};
