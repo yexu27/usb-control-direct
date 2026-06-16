@@ -9,5 +9,6 @@ pub mod context;
 pub mod middleware;
 pub mod router;
 pub mod connection;
+pub mod handlers;
 
 pub use error::GatewayError;
