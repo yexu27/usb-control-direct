@@ -49,7 +49,7 @@
 | 文件系统 | 内核 /proc/filesystems | 用户态工具 | 可挂载 |
 |---|---|---|---|
 | FAT32 / vfat | ✅ `vfat` | — | ✅ 已验证 loop mount |
-| exFAT | ❌ 不在 /proc/filesystems | mkfs.exfat (exfatprogs 1.1.3) | ❌ 无内核 exfat 模块（4.19 无内置，需 5.7+ 或 Samsung OOT 驱动） |
+| exFAT | ✅ `exfat`（OOT 内核模块 insmod exfat.ko） | mkfs.exfat (exfatprogs 1.1.3) | ✅ 已验证 loop mount 读写正常 |
 | NTFS | ✅ `ntfs`（只读） | ntfs-3g（读写 FUSE） | ✅ |
 | ext2 | ✅ | — | ✅ |
 | ext3 | ✅ | — | ✅ |
@@ -57,14 +57,11 @@
 
 **exFAT 入侧支持说明**：
 
-装置端内核 4.19 不支持挂载 exFAT 文件系统。当真实 U 盘为 exFAT 格式时，需要额外安装 `exfat-fuse`（FUSE 用户态驱动）或 Samsung 的内核外 exFAT 模块。**这是一个需要在正式开发前解决的阻塞项**。
+通过 `insmod exfat.ko` 加载 OOT 内核模块后，exFAT 已出现在 `/proc/filesystems`，可正常挂载和读写。验证步骤：创建 64MB exFAT 镜像 → loop mount → 写入/读取文件 → 成功。
 
-可选方案：
-1. 安装 `exfat-fuse` 包（FUSE 用户态挂载，性能略低于内核驱动）
-2. 编译 Samsung exfat 内核模块适配 4.19 内核
-3. PRD 层面将 exFAT 入侧排除出本版本支持范围（仅作为输出视图格式）
+模块信息：`exfat 106496 字节`，加载后 `lsmod` 可见。装置端启动时需确保 `exfat.ko` 自动加载（通过 `/etc/modules` 或 systemd modules-load）。
 
-**exFAT 出侧无影响**：装置端不需要挂载自己生成的虚拟 exFAT，只需通过 NBD 生成扇区数据交给 mass_storage，受控主机（Windows）负责挂载。
+**exFAT 入侧阻塞项已解除。**
 
 ### 1.5 环回挂载
 
@@ -80,7 +77,7 @@
 | 文件系统 | 装置端处理 | 当前内核支持状态 |
 |---|---|---|
 | FAT32 / vfat | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ 可用 |
-| exFAT | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ⚠️ 需安装 exfat-fuse 或 OOT 内核模块 |
+| exFAT | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ OOT 内核模块 exfat.ko 已验证可用 |
 | NTFS | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入；读写能力依赖 ntfs-3g | ✅ 可用（ntfs-3g 已安装） |
 | ext2 / ext3 / ext4 | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ 可用 |
 | 其他文件系统 | 不纳入本版本目标支持范围；挂载失败时拒绝映射并记录 USB 审计日志 | — |
@@ -136,7 +133,7 @@
 
 | 风险项 | 说明 | 建议处理时机 |
 |---|---|---|
-| exFAT 入侧挂载 | 内核 4.19 无 exFAT 挂载能力，需安装 exfat-fuse 或编译 OOT 模块 | P01 研发启动前 |
+| exFAT 入侧挂载 | ~~已解除~~ OOT 内核模块 exfat.ko 已验证可用，启动时需自动加载 | 部署脚本确保 insmod |
 | Rust exFAT 扇区生成器复杂度 | 目录项、簇分配、bitmap 管理、upcase table、boot checksum 等 exFAT 规范细节较多，需从头实现 | P03 file-access 模块开发阶段 |
 | >4GiB 文件端到端验证 | 需在真机上创建 >4GiB 源文件，经 NBD exFAT 映射后在 Windows 端验证大小和读取正确性 | P03 开发 + 硬件集成测试 |
 | NBD READ 返回 I/O error 的受控主机行为 | Windows 对 mass_storage 设备 I/O error 的弹窗文案、重试策略和缓存行为需实测 | P03 硬件集成测试 |
