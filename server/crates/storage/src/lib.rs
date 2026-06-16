@@ -4,5 +4,6 @@
 //! 底层 SQL 与连接池细节不对外泄露。
 
 pub mod error;
+pub(crate) mod pool;
 
 pub use error::StorageError;
