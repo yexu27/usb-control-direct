@@ -8,6 +8,9 @@ description = "S10 私有协议 API 网关"
 
 [dependencies]
 common = { workspace = true }
+storage = { workspace = true }
+auth-session = { path = "../auth-session" }
+log-audit = { path = "../log-audit" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }

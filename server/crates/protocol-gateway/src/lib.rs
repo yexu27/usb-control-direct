@@ -5,6 +5,8 @@
 pub mod error;
 pub mod codec;
 pub mod tls;
+pub mod context;
+pub mod middleware;
 pub mod router;
 pub mod connection;
 

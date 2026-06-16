@@ -1,7 +1,7 @@
-//! 消息路由器骨架。
+//! 消息路由器。
 //!
-//! 提供 `Router::register(cmd, handler)` 注册接口和 `dispatch` 分发。
-//! 未注册的 cmd 返回 VALIDATION_FAILED + "unknown command"。
+//! 提供 `Router::register(cmd, handler)` 和 `register_with_roles(cmd, handler, roles)` 注册接口，
+//! 以及 `dispatch` 分发。未注册的 cmd 返回 VALIDATION_FAILED + "unknown command"。
 
 use std::collections::HashMap;
 
@@ -9,22 +9,30 @@ use common::code::ResultCode;
 use prost::Message;
 
 use crate::codec;
+use crate::context::RequestContext;
 
 /// 消息处理函数类型。
 ///
 /// 参数:
-///   - `seq_id`: 请求序列号。
+///   - `ctx`: 请求上下文（含 seq_id、session、source_ip、共享服务）。
 ///   - `payload`: 请求 payload（protobuf 序列化字节）。
 ///
 /// 返回编码好的响应帧字节。
-pub type HandlerFn = Box<dyn Fn(u32, &[u8]) -> Vec<u8> + Send + Sync>;
+pub type HandlerFn = Box<dyn Fn(&RequestContext, &[u8]) -> Vec<u8> + Send + Sync>;
 
 /// 通用响应消息类型。
 const RSP_COMMON: u32 = 0xFF00;
 
+/// 路由条目。
+struct RouteEntry {
+    handler: HandlerFn,
+    /// 允许的角色列表。为空表示无角色限制（白名单 cmd）。
+    allowed_roles: Vec<i32>,
+}
+
 /// 消息路由器。
 pub struct Router {
-    handlers: HashMap<u32, HandlerFn>,
+    handlers: HashMap<u32, RouteEntry>,
 }
 
 impl Default for Router {
@@ -41,19 +49,54 @@ impl Router {
         }
     }
 
-    /// 注册消息处理函数。
+    /// 注册消息处理函数（无角色限制）。
     pub fn register(&mut self, msg_type: u32, handler: HandlerFn) {
-        self.handlers.insert(msg_type, handler);
+        self.handlers.insert(
+            msg_type,
+            RouteEntry {
+                handler,
+                allowed_roles: Vec::new(),
+            },
+        );
+    }
+
+    /// 注册消息处理函数（带角色限制）。
+    pub fn register_with_roles(
+        &mut self,
+        msg_type: u32,
+        handler: HandlerFn,
+        allowed_roles: Vec<i32>,
+    ) {
+        self.handlers.insert(
+            msg_type,
+            RouteEntry {
+                handler,
+                allowed_roles,
+            },
+        );
+    }
+
+    /// 查询 cmd 是否已注册。
+    pub fn is_registered(&self, msg_type: u32) -> bool {
+        self.handlers.contains_key(&msg_type)
+    }
+
+    /// 获取 cmd 所需的角色列表（空表示无限制）。
+    pub fn allowed_roles(&self, msg_type: u32) -> &[i32] {
+        self.handlers
+            .get(&msg_type)
+            .map(|e| e.allowed_roles.as_slice())
+            .unwrap_or(&[])
     }
 
     /// 分发消息。
     ///
-    /// 返回编码好的响应帧字节（包含帧头）。
-    pub fn dispatch(&self, msg_type: u32, seq_id: u32, payload: &[u8]) -> Vec<u8> {
-        if let Some(handler) = self.handlers.get(&msg_type) {
-            handler(seq_id, payload)
+    /// 调用方（connection.rs）负责在调用前完成 token 和权限校验。
+    pub fn dispatch(&self, ctx: &RequestContext, msg_type: u32, payload: &[u8]) -> Vec<u8> {
+        if let Some(entry) = self.handlers.get(&msg_type) {
+            (entry.handler)(ctx, payload)
         } else {
-            self.unknown_command_response(seq_id)
+            self.unknown_command_response(ctx.seq_id)
         }
     }
 
@@ -72,11 +115,36 @@ impl Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
+    use auth_session::{AuthService, SessionManager};
+    use log_audit::AuditService;
+    use storage::Storage;
+    use tempfile::NamedTempFile;
+
+    /// 构建测试用 RequestContext。
+    fn test_context(seq_id: u32) -> (RequestContext, tempfile::TempPath) {
+        let tmp = NamedTempFile::new().unwrap();
+        let path = tmp.into_temp_path();
+        let storage_auth = Storage::open(&path).unwrap();
+        let storage_audit = Storage::open(&path).unwrap();
+        let auth = Arc::new(AuthService::new(storage_auth, SessionManager::new()));
+        let audit = Arc::new(AuditService::new(storage_audit, &path));
+        let ctx = RequestContext {
+            seq_id,
+            session: None,
+            source_ip: "127.0.0.1".into(),
+            auth_service: auth,
+            audit_service: audit,
+        };
+        (ctx, path)
+    }
 
     #[test]
     fn dispatch_unknown_command_returns_validation_failed() {
         let router = Router::new();
-        let response = router.dispatch(0x9999, 1, &[]);
+        let (ctx, _path) = test_context(1);
+        let response = router.dispatch(&ctx, 0x9999, &[]);
 
         let (header, payload, _) = codec::try_decode_frame(&response).unwrap().unwrap();
         assert_eq!(header.msg_type, RSP_COMMON);
@@ -91,14 +159,37 @@ mod tests {
     #[test]
     fn dispatch_registered_handler() {
         let mut router = Router::new();
-        router.register(0x0001, Box::new(|seq_id, _payload| {
-            codec::encode_frame(0x0002, seq_id, b"ok").unwrap()
-        }));
+        router.register(
+            0x0001,
+            Box::new(|ctx: &RequestContext, _payload| {
+                codec::encode_frame(0x0002, ctx.seq_id, b"ok").unwrap()
+            }),
+        );
 
-        let response = router.dispatch(0x0001, 42, &[]);
+        let (ctx, _path) = test_context(42);
+        let response = router.dispatch(&ctx, 0x0001, &[]);
         let (header, payload, _) = codec::try_decode_frame(&response).unwrap().unwrap();
         assert_eq!(header.msg_type, 0x0002);
         assert_eq!(header.seq_id, 42);
         assert_eq!(payload, b"ok");
+    }
+
+    #[test]
+    fn register_with_roles_stores_roles() {
+        let mut router = Router::new();
+        router.register_with_roles(
+            0x0010,
+            Box::new(|_ctx, _payload| Vec::new()),
+            vec![0, 1],
+        );
+        assert!(router.is_registered(0x0010));
+        assert_eq!(router.allowed_roles(0x0010), &[0, 1]);
+    }
+
+    #[test]
+    fn unregistered_cmd_has_empty_roles() {
+        let router = Router::new();
+        assert!(!router.is_registered(0x9999));
+        assert!(router.allowed_roles(0x9999).is_empty());
     }
 }
