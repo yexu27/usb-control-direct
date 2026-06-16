@@ -4,6 +4,7 @@
 //! 底层 SQL 与连接池细节不对外泄露。
 
 pub mod error;
+pub mod model;
 pub(crate) mod pool;
 pub(crate) mod schema;
 
