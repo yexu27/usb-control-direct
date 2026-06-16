@@ -1,3 +1,6 @@
-//! S08 用户与会话服务（骨架）
+//! S08 用户认证与会话管理。
 //!
-//! 本 crate 当前仅作为 workspace 占位，正式实现见后续阶段。
+//! 提供密码校验、账号锁定、session token 生命周期和改密码功能。
+
+pub mod error;
+pub mod password;
