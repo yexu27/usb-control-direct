@@ -1,3 +1,7 @@
-//! S10 私有协议 API 网关（骨架）
+//! S10 私有协议 API 网关。
 //!
-//! 本 crate 当前仅作为 workspace 占位，正式实现见后续阶段。
+//! 基于 tokio + tokio-rustls 实现 TLS 监听、单连接管理、帧流编解码和 router 骨架。
+
+pub mod error;
+
+pub use error::GatewayError;
