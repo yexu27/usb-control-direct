@@ -7,4 +7,14 @@ license.workspace = true
 description = "S08 用户与会话服务（骨架）"
 
 [dependencies]
-common = { workspace = true }
+common = { path = "../common" }
+storage = { path = "../storage" }
+bcrypt = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+log-audit = { path = "../log-audit" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }

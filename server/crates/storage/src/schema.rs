@@ -314,9 +314,9 @@ fn insert_default_users(conn: &Connection, now: i64) -> Result<(), StorageError>
             1, // operator
         ),
         (
-            "auditor",
+            "audit",
             "$2b$12$5Q8qYzP2VFhDpKPJxbfmXOnO3omELgFbl/4kGExTMCVBq7V.ZXBRa",
-            2, // auditor
+            2, // audit
         ),
     ];
 

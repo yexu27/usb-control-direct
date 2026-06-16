@@ -31,6 +31,11 @@ thiserror = "1.0"
 # 数据库
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# 鉴权
+bcrypt = "0.16"
+rand = "0.8"
+base64 = "0.22"
+
 # 序列化
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
