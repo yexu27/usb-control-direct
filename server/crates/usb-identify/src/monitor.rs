@@ -29,6 +29,12 @@ pub struct DeviceManager {
     sessions: HashMap<String, DeviceSession>,
 }
 
+impl Default for DeviceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeviceManager {
     /// 创建设备管理器。
     pub fn new() -> Self {

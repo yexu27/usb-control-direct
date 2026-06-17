@@ -181,6 +181,8 @@ pub async fn handle_connection(
                         source_ip: source_ip.clone(),
                         auth_service: Arc::clone(&auth_service),
                         audit_service: Arc::clone(&audit_service),
+                        whitelist_manager: None,
+                        device_manager: None,
                     };
 
                     let response = router.dispatch(&ctx, header.msg_type, &payload);

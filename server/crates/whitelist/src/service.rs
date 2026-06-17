@@ -227,7 +227,7 @@ impl WhitelistManager {
     pub fn update(
         &self,
         sn: &str,
-        permission: i32,
+        permission: Option<i32>,
         description: Option<&str>,
     ) -> Result<(), WhitelistError> {
         if sn.is_empty() {
@@ -239,15 +239,17 @@ impl WhitelistManager {
             .whitelist_query_by_sn(sn)?
             .ok_or_else(|| WhitelistError::NotFound(sn.to_string()))?;
 
+        let final_permission = permission.unwrap_or(item.permission);
+
         self.storage
-            .whitelist_update(item.id, permission, description)?;
+            .whitelist_update(item.id, final_permission, description)?;
 
         match self.cache.write() {
             Ok(mut cache) => {
                 if let Some(entry) = cache.get_mut(sn) {
-                    entry.permission = permission;
+                    entry.permission = final_permission;
                 }
-                debug!("白名单缓存更新: sn={sn}, permission={permission}");
+                debug!("白名单缓存更新: sn={sn}, permission={final_permission}");
             }
             Err(e) => {
                 warn!("白名单缓存写锁异常，缓存未同步: {e}");
@@ -363,7 +365,7 @@ mod tests {
     fn update_permission_success() {
         let (_tmp, manager) = make_manager();
         manager.add(make_request("SN004")).unwrap();
-        manager.update("SN004", 2, Some("新描述")).unwrap();
+        manager.update("SN004", Some(2), Some("新描述")).unwrap();
 
         let result = manager.is_whitelisted("SN004").unwrap();
         assert_eq!(result.permission, 2);
@@ -372,7 +374,7 @@ mod tests {
     #[test]
     fn update_nonexistent_entry_returns_not_found() {
         let (_tmp, manager) = make_manager();
-        let err = manager.update("NONEXISTENT", 2, None).unwrap_err();
+        let err = manager.update("NONEXISTENT", Some(2), None).unwrap_err();
         assert!(matches!(err, WhitelistError::NotFound(_)));
     }
 

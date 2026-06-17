@@ -1,6 +1,5 @@
 use common::types::KeyboardState;
 use hid_access::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardTransitionResult};
-use hid_access::HidAccessError;
 
 #[test]
 fn grab_success_transitions_to_waiting() {

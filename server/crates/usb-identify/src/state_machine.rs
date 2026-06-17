@@ -48,6 +48,12 @@ pub struct UsbStateMachine {
     state: UsbDeviceState,
 }
 
+impl Default for UsbStateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UsbStateMachine {
     /// 创建状态机，初始状态为 Detected。
     pub fn new() -> Self {
