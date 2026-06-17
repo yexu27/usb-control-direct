@@ -115,6 +115,40 @@ pub fn scan_result_int_to_str(value: i32) -> Result<&'static str, CommonError> {
     }
 }
 
+// =====================================================================
+// AddMethod 映射
+// =====================================================================
+
+/// 添加方式协议字符串转数据库整数。
+///
+/// 参数:
+///   - `value`: `device` / `management`。
+///
+/// 返回:
+///   - 0 / 1；输入未识别时返回 `CommonError::UnknownEnum`。
+pub fn add_method_str_to_int(value: &str) -> Result<i32, CommonError> {
+    match value {
+        "device" => Ok(0),
+        "management" => Ok(1),
+        other => Err(CommonError::UnknownEnum(format!("add_method={}", other))),
+    }
+}
+
+/// 添加方式数据库整数转协议字符串。
+///
+/// 参数:
+///   - `value`: 数据库中存储的整数值（0/1）。
+///
+/// 返回:
+///   - `device` / `management`；输入越界时返回错误。
+pub fn add_method_int_to_str(value: i32) -> Result<&'static str, CommonError> {
+    match value {
+        0 => Ok("device"),
+        1 => Ok("management"),
+        other => Err(CommonError::UnknownEnum(format!("add_method_int={}", other))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +185,19 @@ mod tests {
             assert_eq!(scan_result_str_to_int(s).unwrap(), i);
             assert_eq!(scan_result_int_to_str(i).unwrap(), s);
         }
+    }
+
+    #[test]
+    fn add_method_round_trip() {
+        for (s, i) in [("device", 0), ("management", 1)] {
+            assert_eq!(add_method_str_to_int(s).unwrap(), i);
+            assert_eq!(add_method_int_to_str(i).unwrap(), s);
+        }
+    }
+
+    #[test]
+    fn add_method_unknown_returns_error() {
+        assert!(add_method_str_to_int("unknown").is_err());
+        assert!(add_method_int_to_str(9).is_err());
     }
 }
