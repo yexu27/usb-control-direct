@@ -4,7 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "S05 白名单策略服务（骨架）"
+description = "S05 白名单策略服务"
 
 [dependencies]
 common = { workspace = true }
+storage = { workspace = true }
+log-audit = { path = "../log-audit" }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,3 +1,7 @@
-//! S05 白名单策略服务（骨架）
-//!
-//! 本 crate 当前仅作为 workspace 占位，正式实现见后续阶段。
+//! S05 白名单策略服务。
+
+pub mod error;
+pub mod service;
+
+pub use error::WhitelistError;
+pub use service::WhitelistManager;
