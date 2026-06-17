@@ -105,6 +105,7 @@ struct VolumeBuilder<'a> {
     /// 文件数据映射。
     file_mappings: Vec<FileMapping>,
     /// 文件扇区映射（名称 → 扇区列表）。
+    #[allow(dead_code)]
     file_sector_map: HashMap<String, Vec<u64>>,
 }
 
@@ -114,6 +115,7 @@ enum ClusterAllocation {
     /// 元数据（bitmap / upcase / 目录）。
     Metadata { start: u32, count: u32, data: Vec<u8> },
     /// 文件数据。
+    #[allow(dead_code)]
     FileData { start: u32, count: u32, name: String },
 }
 
@@ -157,7 +159,7 @@ impl<'a> VolumeBuilder<'a> {
 
         // Cluster 4+: Upcase Table
         let (upcase_data, upcase_checksum) = generate_upcase_table();
-        let upcase_clusters = (upcase_data.len() as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+        let upcase_clusters = (upcase_data.len() as u32).div_ceil(CLUSTER_SIZE);
         let upcase_cluster = self.allocate_clusters(upcase_clusters);
 
         // 根目录项：Volume Label + Bitmap + Upcase
@@ -224,7 +226,7 @@ impl<'a> VolumeBuilder<'a> {
                             let (file_cluster, file_clusters) = if child.is_virus || child.file_size == 0 {
                                 (0, 0)
                             } else {
-                                let clusters = (child.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+                                let clusters = (child.file_size as u32).div_ceil(CLUSTER_SIZE);
                                 let start = self.allocate_clusters(clusters);
                                 (start, clusters)
                             };
@@ -269,7 +271,7 @@ impl<'a> VolumeBuilder<'a> {
                 let (file_cluster, file_clusters) = if entry.is_virus || entry.file_size == 0 {
                     (0, 0)
                 } else {
-                    let clusters = (entry.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+                    let clusters = (entry.file_size as u32).div_ceil(CLUSTER_SIZE);
                     let start = self.allocate_clusters(clusters);
                     (start, clusters)
                 };
@@ -352,7 +354,7 @@ impl<'a> VolumeBuilder<'a> {
         }
 
         for mapping in &self.file_mappings {
-            let clusters = (mapping.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+            let clusters = (mapping.file_size as u32).div_ceil(CLUSTER_SIZE);
             if clusters == 1 {
                 fat_builder.set_single(mapping.start_cluster);
             } else {
@@ -425,7 +427,7 @@ impl<'a> VolumeBuilder<'a> {
         for mapping in &self.file_mappings {
             let cluster_start_sector = layout.cluster_to_sector(mapping.start_cluster);
             let total_data_sectors =
-                (mapping.file_size + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64;
+                mapping.file_size.div_ceil(SECTOR_SIZE as u64);
             let mut sectors = Vec::new();
 
             for i in 0..total_data_sectors {

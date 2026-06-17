@@ -62,11 +62,11 @@ fn extract_executable_path(value: &str) -> String {
     let value = value.trim();
 
     // 处理引号包裹的路径
-    if value.starts_with('"') {
-        if let Some(end) = value[1..].find('"') {
-            return value[1..end + 1].to_string();
+    if let Some(stripped) = value.strip_prefix('"') {
+        if let Some(end) = stripped.find('"') {
+            return stripped[..end].to_string();
         }
-        return value[1..].to_string();
+        return stripped.to_string();
     }
 
     // 无引号时，取第一个空格前的部分作为路径

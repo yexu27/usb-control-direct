@@ -288,7 +288,7 @@ fn handle_read(user_fd: RawFd, req: &NbdRequest, volume: &VirtualVolume) {
                 }
             }
             SectorContent::Zero => {
-                data_buf.extend(std::iter::repeat(0u8).take(SECTOR_SIZE as usize));
+                data_buf.extend(vec![0u8; SECTOR_SIZE as usize]);
             }
         }
     }

@@ -86,7 +86,7 @@ pub fn build_file_entry_set(
     is_virus: bool,
 ) -> Vec<u8> {
     let utf16_name: Vec<u16> = name.encode_utf16().collect();
-    let name_entry_count = (utf16_name.len() + CHARS_PER_NAME_ENTRY - 1) / CHARS_PER_NAME_ENTRY;
+    let name_entry_count = utf16_name.len().div_ceil(CHARS_PER_NAME_ENTRY);
     let secondary_count = 1 + name_entry_count; // Stream + FileName entries
 
     let actual_data_length = if is_virus { 0 } else { data_length };

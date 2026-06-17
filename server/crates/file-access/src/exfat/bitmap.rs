@@ -12,7 +12,7 @@
 ///   - bitmap 数据（按簇大小对齐）。
 pub fn generate_bitmap(cluster_count: u32, allocated_clusters: u32) -> Vec<u8> {
     let bitmap_bits = cluster_count as usize;
-    let bitmap_bytes = (bitmap_bits + 7) / 8;
+    let bitmap_bytes = bitmap_bits.div_ceil(8);
     let mut bitmap = vec![0u8; bitmap_bytes];
 
     // 标记已分配的簇

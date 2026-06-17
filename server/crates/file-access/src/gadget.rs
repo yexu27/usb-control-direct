@@ -27,6 +27,12 @@ pub struct GadgetManager {
     enabled: bool,
 }
 
+impl Default for GadgetManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GadgetManager {
     /// 创建 Gadget 管理器。
     pub fn new() -> Self {

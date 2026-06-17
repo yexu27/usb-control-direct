@@ -73,7 +73,7 @@ impl DiskLayout {
         let fat_offset_sectors = BOOT_REGION_SECTORS * 2;
         let fat_entries = data_cluster_count as u64 + FIRST_CLUSTER as u64;
         let fat_bytes = fat_entries * FAT_ENTRY_SIZE as u64;
-        let fat_length_sectors = (fat_bytes + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64;
+        let fat_length_sectors = fat_bytes.div_ceil(SECTOR_SIZE as u64);
         let raw_heap_offset = fat_offset_sectors + fat_length_sectors;
         let cluster_heap_offset_sectors = align_up(raw_heap_offset, SECTORS_PER_CLUSTER as u64);
         let volume_length_sectors = cluster_heap_offset_sectors
@@ -112,5 +112,5 @@ impl DiskLayout {
 }
 
 fn align_up(value: u64, alignment: u64) -> u64 {
-    (value + alignment - 1) / alignment * alignment
+    value.div_ceil(alignment) * alignment
 }

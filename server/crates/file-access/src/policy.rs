@@ -25,11 +25,13 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
     }
 
     // L2: 可执行控制
-    if snapshot.exec_control_enabled && entry.exec_type.is_some() {
-        return AccessDecision::Deny(format!(
-            "L2:可执行文件控制({:?})",
-            entry.exec_type.unwrap()
-        ));
+    if snapshot.exec_control_enabled {
+        if let Some(exec_type) = &entry.exec_type {
+            return AccessDecision::Deny(format!(
+                "L2:可执行文件控制({:?})",
+                exec_type
+            ));
+        }
     }
 
     // L3: 文件类型黑名单
