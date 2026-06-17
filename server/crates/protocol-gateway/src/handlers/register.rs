@@ -41,6 +41,12 @@ pub fn register_auth_handlers(router: &mut Router) {
     );
 }
 
+/// CMD 常量（文件访问控制策略）。
+const CMD_GET_FILE_POLICY: u32 = 0x0200;
+const CMD_UPDATE_FILE_POLICY_SWITCH: u32 = 0x0202;
+const CMD_ADD_BLACKLIST_EXTENSION: u32 = 0x0203;
+const CMD_REMOVE_BLACKLIST_EXTENSION: u32 = 0x0204;
+
 /// 注册所有 P03 白名单 handler。
 pub fn register_whitelist_handlers(router: &mut Router) {
     // 白名单列表（管理员和审计员可查看）
@@ -76,5 +82,32 @@ pub fn register_whitelist_handlers(router: &mut Router) {
         CMD_GET_CONNECTED_DEVICES,
         Box::new(super::connected_devices::handle_get_connected_devices),
         vec![0, 1],
+    );
+}
+
+/// 注册所有 P05 文件访问控制 handler。
+pub fn register_file_access_handlers(router: &mut Router) {
+    router.register_with_roles(
+        CMD_GET_FILE_POLICY,
+        Box::new(super::file_access::handle_get_file_policy),
+        vec![1],
+    );
+
+    router.register_with_roles(
+        CMD_UPDATE_FILE_POLICY_SWITCH,
+        Box::new(super::file_access::handle_update_file_policy_switch),
+        vec![1],
+    );
+
+    router.register_with_roles(
+        CMD_ADD_BLACKLIST_EXTENSION,
+        Box::new(super::file_access::handle_add_blacklist_extension),
+        vec![1],
+    );
+
+    router.register_with_roles(
+        CMD_REMOVE_BLACKLIST_EXTENSION,
+        Box::new(super::file_access::handle_remove_blacklist_extension),
+        vec![1],
     );
 }

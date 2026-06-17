@@ -7,6 +7,7 @@ use std::sync::{Arc, RwLock};
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
 use log_audit::AuditService;
+use storage::Storage;
 use usb_identify::monitor::DeviceManager;
 use whitelist::WhitelistManager;
 
@@ -26,4 +27,13 @@ pub struct RequestContext {
     pub whitelist_manager: Option<Arc<WhitelistManager>>,
     /// 设备管理器（共享）。
     pub device_manager: Option<Arc<RwLock<DeviceManager>>>,
+    /// 数据库存储（共享）。
+    pub storage: Option<Arc<Storage>>,
+}
+
+impl RequestContext {
+    /// 获取 Storage 引用。
+    pub fn storage(&self) -> Option<&Storage> {
+        self.storage.as_ref().map(|s| s.as_ref())
+    }
 }

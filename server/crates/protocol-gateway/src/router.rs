@@ -138,6 +138,7 @@ mod tests {
             audit_service: audit,
             whitelist_manager: None,
             device_manager: None,
+            storage: None,
         };
         (ctx, path)
     }

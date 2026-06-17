@@ -183,6 +183,7 @@ pub async fn handle_connection(
                         audit_service: Arc::clone(&audit_service),
                         whitelist_manager: None,
                         device_manager: None,
+                        storage: None,
                     };
 
                     let response = router.dispatch(&ctx, header.msg_type, &payload);
