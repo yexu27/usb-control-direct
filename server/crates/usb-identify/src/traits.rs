@@ -30,9 +30,16 @@ pub enum ScanError {
 /// S01 在 U 盘状态 SCANNING 时调用 scan，拔出时调用 cancel。
 pub trait Scanner: Send + Sync {
     /// 扫描指定挂载路径下的文件。
+    ///
+    /// 参数:
+    ///   - mount_path: U 盘挂载路径。
+    ///   - device_sn: 设备序列号（用于 T06 日志）。
+    ///   - device_name: 设备名称（用于 T06 日志）。
     fn scan(
         &self,
         mount_path: &Path,
+        device_sn: &str,
+        device_name: &str,
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<ScanResult, ScanError>> + Send + '_>,
     >;
