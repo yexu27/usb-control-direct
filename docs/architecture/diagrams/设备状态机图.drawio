@@ -170,7 +170,7 @@
             <mxPoint x="530" y="700" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="note-infected" parent="1" style="dashed=1;text;html=1;strokeColor=#E8D48B;fillColor=#FFFDF0;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;rounded=1;arcSize=10;spacing=4;" value="检出病毒仍允许映射：&#xa;病毒文件由 NBD 返回 I/O error 阻断访问" vertex="1">
+        <mxCell id="note-infected" parent="1" style="dashed=1;text;html=1;strokeColor=#E8D48B;fillColor=#FFFDF0;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;rounded=1;arcSize=10;spacing=4;" value="检出病毒仍允许映射：&#xa;病毒文件 size=0，读写修改删除等操作均禁止" vertex="1">
           <mxGeometry height="35" width="200" x="820" y="420" as="geometry" />
         </mxCell>
         <mxCell id="note-removed" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#888888;fontStyle=2;" value="REJECTED / BLOCKED / SCAN_FAILED / MAP_FAILED&#xa;状态下设备不映射到受控主机" vertex="1">
