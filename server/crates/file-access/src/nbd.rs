@@ -102,6 +102,8 @@ pub struct NbdServer {
     nbd_fd: Option<RawFd>,
     /// 用户空间侧 socket fd。
     user_fd: Option<RawFd>,
+    /// 内核侧 socket fd（由 NBD_DO_IT 线程使用）。
+    kernel_fd: Option<RawFd>,
     /// NBD_DO_IT 线程完成通知。
     do_it_complete: Option<oneshot::Receiver<()>>,
 }
@@ -116,6 +118,7 @@ impl NbdServer {
             nbd_device_path: nbd_device.to_path_buf(),
             nbd_fd: None,
             user_fd: None,
+            kernel_fd: None,
             do_it_complete: None,
         }
     }
@@ -143,6 +146,7 @@ impl NbdServer {
         let kernel_fd = kernel_sock.as_raw_fd();
 
         // 设置 NBD 参数
+        // 安全性: nbd_fd 和 kernel_fd 来自刚打开的有效文件/socket，ioctl 参数均为合法值。
         unsafe {
             nbd_ioctl(nbd_fd, NBD_SET_BLKSIZE, SECTOR_SIZE as u64)?;
             nbd_ioctl(nbd_fd, NBD_SET_SIZE_BLOCKS, total_sectors)?;
@@ -153,8 +157,9 @@ impl NbdServer {
         let user_fd = user_sock.as_raw_fd();
         self.nbd_fd = Some(nbd_fd);
         self.user_fd = Some(user_fd);
+        self.kernel_fd = Some(kernel_fd);
 
-        // 保持文件描述符不被 drop
+        // 保持文件描述符不被 drop（由 stop() 负责关闭）
         std::mem::forget(nbd_file);
         std::mem::forget(kernel_sock);
         std::mem::forget(user_sock);
@@ -182,13 +187,22 @@ impl NbdServer {
     /// 停止 NBD 服务。
     pub fn stop(&mut self) {
         if let Some(nbd_fd) = self.nbd_fd.take() {
+            // 安全性: nbd_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
             unsafe {
                 let _ = nbd_ioctl(nbd_fd, NBD_DISCONNECT, 0);
+                libc::close(nbd_fd);
             }
         }
         if let Some(user_fd) = self.user_fd.take() {
+            // 安全性: user_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
             unsafe {
                 libc::close(user_fd);
+            }
+        }
+        if let Some(kernel_fd) = self.kernel_fd.take() {
+            // 安全性: kernel_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
+            unsafe {
+                libc::close(kernel_fd);
             }
         }
     }
@@ -353,6 +367,7 @@ fn read_file_data(path: &Path, offset: u64, valid_bytes: u32) -> Result<Vec<u8>,
 fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
     let mut pos = 0;
     while pos < buf.len() {
+        // 安全性: fd 为有效文件描述符，buf[pos..] 为有效可写内存区域。
         let n = unsafe {
             libc::read(fd, buf[pos..].as_mut_ptr() as *mut libc::c_void, buf.len() - pos)
         };
@@ -368,6 +383,7 @@ fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
 fn write_all(fd: RawFd, data: &[u8]) -> Result<(), std::io::Error> {
     let mut pos = 0;
     while pos < data.len() {
+        // 安全性: fd 为有效文件描述符，data[pos..] 为有效只读内存区域。
         let n = unsafe {
             libc::write(fd, data[pos..].as_ptr() as *const libc::c_void, data.len() - pos)
         };
@@ -380,6 +396,8 @@ fn write_all(fd: RawFd, data: &[u8]) -> Result<(), std::io::Error> {
 }
 
 /// NBD ioctl 封装。
+///
+/// 安全性: 调用方必须确保 fd 为有效的 NBD 设备文件描述符。
 unsafe fn nbd_ioctl(fd: RawFd, request: u64, arg: u64) -> Result<(), std::io::Error> {
     let ret = libc::ioctl(fd, request, arg);
     if ret < 0 {

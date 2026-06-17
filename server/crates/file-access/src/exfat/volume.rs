@@ -129,6 +129,12 @@ struct FileMapping {
     blocked: bool,
 }
 
+/// 计算文件所需簇数（安全处理大文件）。
+fn file_clusters(file_size: u64) -> u32 {
+    let clusters = file_size.div_ceil(CLUSTER_SIZE as u64);
+    clusters.min(u32::MAX as u64) as u32
+}
+
 impl<'a> VolumeBuilder<'a> {
     fn new(snapshot: &'a PolicySnapshot) -> Self {
         VolumeBuilder {
@@ -226,7 +232,7 @@ impl<'a> VolumeBuilder<'a> {
                             let (file_cluster, file_clusters) = if child.is_virus || child.file_size == 0 {
                                 (0, 0)
                             } else {
-                                let clusters = (child.file_size as u32).div_ceil(CLUSTER_SIZE);
+                                let clusters = file_clusters(child.file_size);
                                 let start = self.allocate_clusters(clusters);
                                 (start, clusters)
                             };
@@ -271,7 +277,7 @@ impl<'a> VolumeBuilder<'a> {
                 let (file_cluster, file_clusters) = if entry.is_virus || entry.file_size == 0 {
                     (0, 0)
                 } else {
-                    let clusters = (entry.file_size as u32).div_ceil(CLUSTER_SIZE);
+                    let clusters = file_clusters(entry.file_size);
                     let start = self.allocate_clusters(clusters);
                     (start, clusters)
                 };
@@ -354,7 +360,7 @@ impl<'a> VolumeBuilder<'a> {
         }
 
         for mapping in &self.file_mappings {
-            let clusters = (mapping.file_size as u32).div_ceil(CLUSTER_SIZE);
+            let clusters = file_clusters(mapping.file_size);
             if clusters == 1 {
                 fat_builder.set_single(mapping.start_cluster);
             } else {
