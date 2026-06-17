@@ -4,7 +4,17 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "S04 文件访问控制引擎（骨架）"
+description = "S04 文件访问控制引擎"
 
 [dependencies]
 common = { workspace = true }
+storage = { workspace = true }
+usb-identify = { path = "../usb-identify" }
+log-audit = { path = "../log-audit" }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }
