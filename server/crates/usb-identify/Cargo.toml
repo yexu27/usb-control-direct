@@ -4,7 +4,18 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "S01 USB 设备识别与映射引擎（骨架）"
+description = "S01 USB 设备识别与映射引擎"
 
 [dependencies]
 common = { workspace = true }
+storage = { workspace = true }
+whitelist = { path = "../whitelist" }
+hid-access = { path = "../hid-access" }
+log-audit = { path = "../log-audit" }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
