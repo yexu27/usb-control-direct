@@ -137,6 +137,7 @@ mod tests {
             auth_service: auth,
             audit_service: audit,
             whitelist_manager: None,
+            device_manager: None,
         };
         (ctx, path)
     }

@@ -13,6 +13,7 @@ const CMD_LIST_WHITELIST: u32 = 0x0100;
 const CMD_ADD_WHITELIST: u32 = 0x0104;
 const CMD_REMOVE_WHITELIST: u32 = 0x0105;
 const CMD_UPDATE_WHITELIST: u32 = 0x0106;
+const CMD_GET_CONNECTED_DEVICES: u32 = 0x0102;
 
 /// 注册所有 P02 handler。
 pub fn register_auth_handlers(router: &mut Router) {
@@ -68,5 +69,12 @@ pub fn register_whitelist_handlers(router: &mut Router) {
         CMD_UPDATE_WHITELIST,
         Box::new(super::whitelist::handle_update_whitelist),
         vec![0],
+    );
+
+    // 当前连接设备列表（管理员和审计员）
+    router.register_with_roles(
+        CMD_GET_CONNECTED_DEVICES,
+        Box::new(super::connected_devices::handle_get_connected_devices),
+        vec![0, 1],
     );
 }

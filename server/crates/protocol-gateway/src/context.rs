@@ -2,11 +2,12 @@
 //!
 //! 每个请求帧经过 token 中间件后，生成 RequestContext 传递给 handler。
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
 use log_audit::AuditService;
+use usb_identify::monitor::DeviceManager;
 use whitelist::WhitelistManager;
 
 /// 请求上下文。
@@ -23,4 +24,6 @@ pub struct RequestContext {
     pub audit_service: Arc<AuditService>,
     /// 白名单管理器（共享）。
     pub whitelist_manager: Option<Arc<WhitelistManager>>,
+    /// 设备管理器（共享）。
+    pub device_manager: Option<Arc<RwLock<DeviceManager>>>,
 }

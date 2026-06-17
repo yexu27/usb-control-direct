@@ -12,6 +12,7 @@ storage = { workspace = true }
 auth-session = { path = "../auth-session" }
 log-audit = { path = "../log-audit" }
 whitelist = { path = "../whitelist" }
+usb-identify = { path = "../usb-identify" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
