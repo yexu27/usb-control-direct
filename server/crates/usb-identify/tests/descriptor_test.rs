@@ -84,15 +84,15 @@ fn interface_type_strings() {
 }
 
 #[test]
-fn admission_status_addable_when_in_whitelist() {
+fn admission_status_addable_when_not_in_whitelist() {
     let info = make_info(DeviceType::Storage, 0x08, 0x06, 0x50);
-    assert_eq!(admission_status_str(&info, true, false), "addable");
+    assert_eq!(admission_status_str(&info, false, false), "addable");
 }
 
 #[test]
-fn admission_status_blocked_when_not_in_whitelist() {
+fn admission_status_blocked_when_in_whitelist() {
     let info = make_info(DeviceType::Storage, 0x08, 0x06, 0x50);
-    assert_eq!(admission_status_str(&info, false, false), "blocked");
+    assert_eq!(admission_status_str(&info, true, false), "blocked");
 }
 
 #[test]

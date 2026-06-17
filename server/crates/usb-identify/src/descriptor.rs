@@ -64,9 +64,9 @@ pub fn admission_status_str(info: &UsbDeviceInfo, is_in_whitelist: bool, is_spoo
     match info.device_type {
         DeviceType::Storage => {
             if is_in_whitelist {
-                "addable"
-            } else {
                 "blocked"
+            } else {
+                "addable"
             }
         }
         DeviceType::Unsupported | DeviceType::Unknown => "unsupported",
