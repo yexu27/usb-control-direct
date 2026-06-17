@@ -4,7 +4,14 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "S02 键鼠准入控制引擎（骨架）"
+description = "S02 键鼠准入控制引擎"
 
 [dependencies]
 common = { workspace = true }
+thiserror = { workspace = true }
+tracing = "0.1"
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
