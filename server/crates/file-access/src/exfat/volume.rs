@@ -1,1 +1,463 @@
 //! 虚拟 exFAT 卷 — 扇区级读写接口。
+//!
+//! 整合 boot / FAT / bitmap / upcase / dir_entry，提供按扇区号读取内容的接口。
+//! 元数据扇区预生成在内存中，文件数据扇区映射到真实文件路径。
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use crate::exfat::bitmap::generate_bitmap;
+use crate::exfat::boot::{generate_boot_region, generate_mbr};
+use crate::exfat::dir_entry::*;
+use crate::exfat::fat::FatBuilder;
+use crate::exfat::layout::*;
+use crate::exfat::upcase::generate_upcase_table;
+use crate::policy::evaluate_access;
+use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot, SectorContent};
+
+/// 虚拟 exFAT 卷。
+pub struct VirtualVolume {
+    /// 预生成的元数据扇区（扇区号 → 数据）。
+    metadata_sectors: HashMap<u64, Vec<u8>>,
+    /// 文件数据扇区映射（扇区号 → FileData 信息）。
+    file_data_sectors: HashMap<u64, FileDataMapping>,
+    /// 磁盘布局。
+    layout: DiskLayout,
+    /// 文件名到其数据扇区范围的映射（用于测试辅助）。
+    file_sector_map: HashMap<String, Vec<u64>>,
+}
+
+/// 文件数据映射。
+#[derive(Debug, Clone)]
+struct FileDataMapping {
+    real_path: PathBuf,
+    offset: u64,
+    valid_bytes: u32,
+    blocked: bool,
+}
+
+impl VirtualVolume {
+    /// 构建虚拟 exFAT 卷。
+    ///
+    /// 参数:
+    ///   - tree: 受控文件树。
+    ///   - snapshot: 策略快照。
+    pub fn build(tree: &[ControlledEntry], snapshot: &PolicySnapshot) -> Self {
+        let mut builder = VolumeBuilder::new(snapshot);
+        builder.allocate_metadata();
+        builder.allocate_files(tree, &[]);
+        builder.generate()
+    }
+
+    /// 读取指定扇区。
+    pub fn read_sector(&self, sector: u64) -> SectorContent {
+        if sector >= self.layout.total_sectors {
+            return SectorContent::Zero;
+        }
+
+        if let Some(data) = self.metadata_sectors.get(&sector) {
+            return SectorContent::Metadata(data.clone());
+        }
+
+        if let Some(mapping) = self.file_data_sectors.get(&sector) {
+            return SectorContent::FileData {
+                real_path: mapping.real_path.clone(),
+                offset: mapping.offset,
+                valid_bytes: mapping.valid_bytes,
+                blocked: mapping.blocked,
+            };
+        }
+
+        SectorContent::Zero
+    }
+
+    /// 总扇区数。
+    pub fn total_sectors(&self) -> u64 {
+        self.layout.total_sectors
+    }
+
+    /// 磁盘布局引用。
+    pub fn layout(&self) -> &DiskLayout {
+        &self.layout
+    }
+
+    /// 查找指定文件名的数据扇区列表（测试辅助）。
+    pub fn find_file_data_sectors(&self, name: &str) -> Vec<u64> {
+        self.file_sector_map.get(name).cloned().unwrap_or_default()
+    }
+
+    /// 判断扇区是否为目录数据扇区。
+    pub fn is_directory_sector(&self, sector: u64) -> bool {
+        self.metadata_sectors.contains_key(&sector)
+            && self.layout.sector_to_cluster(sector).is_some()
+    }
+}
+
+/// 卷构建器。
+struct VolumeBuilder<'a> {
+    snapshot: &'a PolicySnapshot,
+    /// 下一个可分配的簇号。
+    next_cluster: u32,
+    /// 簇分配记录。
+    cluster_allocations: Vec<ClusterAllocation>,
+    /// 根目录项数据。
+    root_dir_entries: Vec<u8>,
+    /// 文件数据映射。
+    file_mappings: Vec<FileMapping>,
+    /// 文件扇区映射（名称 → 扇区列表）。
+    file_sector_map: HashMap<String, Vec<u64>>,
+}
+
+/// 簇分配类型。
+#[derive(Debug)]
+enum ClusterAllocation {
+    /// 元数据（bitmap / upcase / 目录）。
+    Metadata { start: u32, count: u32, data: Vec<u8> },
+    /// 文件数据。
+    FileData { start: u32, count: u32, name: String },
+}
+
+/// 文件映射。
+#[derive(Debug)]
+struct FileMapping {
+    name: String,
+    real_path: PathBuf,
+    start_cluster: u32,
+    file_size: u64,
+    blocked: bool,
+}
+
+impl<'a> VolumeBuilder<'a> {
+    fn new(snapshot: &'a PolicySnapshot) -> Self {
+        VolumeBuilder {
+            snapshot,
+            next_cluster: FIRST_CLUSTER,
+            cluster_allocations: Vec::new(),
+            root_dir_entries: Vec::new(),
+            file_mappings: Vec::new(),
+            file_sector_map: HashMap::new(),
+        }
+    }
+
+    /// 分配一个或多个连续簇。
+    fn allocate_clusters(&mut self, count: u32) -> u32 {
+        let start = self.next_cluster;
+        self.next_cluster += count;
+        start
+    }
+
+    /// 分配元数据区域（root dir / bitmap / upcase）。
+    fn allocate_metadata(&mut self) {
+        // Cluster 2: Root Directory（初始 1 簇，后续可扩展）
+        let root_cluster = self.allocate_clusters(1);
+        assert_eq!(root_cluster, 2);
+
+        // Cluster 3: Allocation Bitmap（1 簇）
+        let bitmap_cluster = self.allocate_clusters(1);
+
+        // Cluster 4+: Upcase Table
+        let (upcase_data, upcase_checksum) = generate_upcase_table();
+        let upcase_clusters = (upcase_data.len() as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+        let upcase_cluster = self.allocate_clusters(upcase_clusters);
+
+        // 根目录项：Volume Label + Bitmap + Upcase
+        self.root_dir_entries.extend(build_volume_label_entry("USB_CTRL"));
+        self.root_dir_entries.extend(build_bitmap_entry(bitmap_cluster, 0)); // 大小后面更新
+        self.root_dir_entries.extend(build_upcase_entry(
+            upcase_cluster,
+            upcase_data.len() as u64,
+            upcase_checksum,
+        ));
+
+        // 保存 upcase 分配
+        self.cluster_allocations.push(ClusterAllocation::Metadata {
+            start: upcase_cluster,
+            count: upcase_clusters,
+            data: upcase_data,
+        });
+    }
+
+    /// 分配文件和子目录。
+    fn allocate_files(&mut self, entries: &[ControlledEntry], _parent_path: &[String]) {
+        for entry in entries {
+            let decision = evaluate_access(entry, self.snapshot);
+            let blocked = matches!(decision, AccessDecision::Deny(_));
+
+            if entry.is_dir {
+                // 目录：分配 1 簇存放子目录项
+                let dir_cluster = self.allocate_clusters(1);
+
+                // 生成目录项
+                let dir_entry_data = build_file_entry_set(
+                    &entry.virtual_name,
+                    true,
+                    dir_cluster,
+                    0,
+                    false,
+                );
+                self.root_dir_entries.extend(dir_entry_data);
+
+                // 递归构建子目录内容
+                if !entry.children.is_empty() {
+                    let mut child_dir_data = Vec::new();
+                    for child in &entry.children {
+                        let child_decision = evaluate_access(child, self.snapshot);
+                        let child_blocked = matches!(child_decision, AccessDecision::Deny(_));
+
+                        if child.is_dir {
+                            let child_cluster = self.allocate_clusters(1);
+                            let child_entry = build_file_entry_set(
+                                &child.virtual_name,
+                                true,
+                                child_cluster,
+                                0,
+                                false,
+                            );
+                            child_dir_data.extend(child_entry);
+
+                            self.cluster_allocations.push(ClusterAllocation::Metadata {
+                                start: child_cluster,
+                                count: 1,
+                                data: vec![0u8; CLUSTER_SIZE as usize],
+                            });
+                        } else {
+                            let (file_cluster, file_clusters) = if child.is_virus || child.file_size == 0 {
+                                (0, 0)
+                            } else {
+                                let clusters = (child.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+                                let start = self.allocate_clusters(clusters);
+                                (start, clusters)
+                            };
+
+                            let child_entry = build_file_entry_set(
+                                &child.virtual_name,
+                                false,
+                                file_cluster,
+                                child.file_size,
+                                child.is_virus,
+                            );
+                            child_dir_data.extend(child_entry);
+
+                            if file_clusters > 0 {
+                                self.file_mappings.push(FileMapping {
+                                    name: child.virtual_name.clone(),
+                                    real_path: child.real_path.clone(),
+                                    start_cluster: file_cluster,
+                                    file_size: child.file_size,
+                                    blocked: child_blocked,
+                                });
+                            }
+                        }
+                    }
+
+                    // 填充到簇大小
+                    child_dir_data.resize(CLUSTER_SIZE as usize, 0);
+                    self.cluster_allocations.push(ClusterAllocation::Metadata {
+                        start: dir_cluster,
+                        count: 1,
+                        data: child_dir_data,
+                    });
+                } else {
+                    self.cluster_allocations.push(ClusterAllocation::Metadata {
+                        start: dir_cluster,
+                        count: 1,
+                        data: vec![0u8; CLUSTER_SIZE as usize],
+                    });
+                }
+            } else {
+                // 文件
+                let (file_cluster, file_clusters) = if entry.is_virus || entry.file_size == 0 {
+                    (0, 0)
+                } else {
+                    let clusters = (entry.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+                    let start = self.allocate_clusters(clusters);
+                    (start, clusters)
+                };
+
+                let file_entry = build_file_entry_set(
+                    &entry.virtual_name,
+                    false,
+                    file_cluster,
+                    entry.file_size,
+                    entry.is_virus,
+                );
+                self.root_dir_entries.extend(file_entry);
+
+                if file_clusters > 0 {
+                    self.file_mappings.push(FileMapping {
+                        name: entry.virtual_name.clone(),
+                        real_path: entry.real_path.clone(),
+                        start_cluster: file_cluster,
+                        file_size: entry.file_size,
+                        blocked,
+                    });
+                }
+            }
+        }
+    }
+
+    /// 生成最终的虚拟卷。
+    fn generate(mut self) -> VirtualVolume {
+        let total_clusters = self.next_cluster - FIRST_CLUSTER;
+        let layout = DiskLayout::new(total_clusters);
+
+        let mut metadata_sectors = HashMap::new();
+        let mut file_data_sectors = HashMap::new();
+
+        // MBR
+        let mbr = generate_mbr(&layout);
+        metadata_sectors.insert(0, mbr);
+
+        // Boot Region (Main)
+        let boot_region = generate_boot_region(&layout);
+        for i in 0..12 {
+            let sector = PARTITION_OFFSET_SECTORS + i;
+            let offset = (i as usize) * SECTOR_SIZE as usize;
+            let data = boot_region[offset..offset + SECTOR_SIZE as usize].to_vec();
+            metadata_sectors.insert(sector, data);
+        }
+
+        // Boot Region (Backup)
+        for i in 0..12 {
+            let sector = PARTITION_OFFSET_SECTORS + BOOT_REGION_SECTORS + i;
+            let offset = (i as usize) * SECTOR_SIZE as usize;
+            let data = boot_region[offset..offset + SECTOR_SIZE as usize].to_vec();
+            metadata_sectors.insert(sector, data);
+        }
+
+        // FAT
+        let mut fat_builder = FatBuilder::new(total_clusters);
+        // Root directory: cluster 2, single
+        fat_builder.set_single(2);
+        // Bitmap: cluster 3, single
+        fat_builder.set_single(3);
+
+        for alloc in &self.cluster_allocations {
+            match alloc {
+                ClusterAllocation::Metadata { start, count, .. } => {
+                    if *count == 1 {
+                        fat_builder.set_single(*start);
+                    } else {
+                        fat_builder.set_chain(*start, *count);
+                    }
+                }
+                ClusterAllocation::FileData { start, count, .. } => {
+                    if *count == 1 {
+                        fat_builder.set_single(*start);
+                    } else {
+                        fat_builder.set_chain(*start, *count);
+                    }
+                }
+            }
+        }
+
+        for mapping in &self.file_mappings {
+            let clusters = (mapping.file_size as u32 + CLUSTER_SIZE - 1) / CLUSTER_SIZE;
+            if clusters == 1 {
+                fat_builder.set_single(mapping.start_cluster);
+            } else {
+                fat_builder.set_chain(mapping.start_cluster, clusters);
+            }
+        }
+
+        let fat_data = fat_builder.build(layout.fat_length_sectors);
+        let fat_start_sector = PARTITION_OFFSET_SECTORS + layout.fat_offset_sectors;
+        for i in 0..layout.fat_length_sectors {
+            let offset = (i as usize) * SECTOR_SIZE as usize;
+            let end = (offset + SECTOR_SIZE as usize).min(fat_data.len());
+            let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
+            let copy_len = end - offset;
+            sector_data[..copy_len].copy_from_slice(&fat_data[offset..end]);
+            metadata_sectors.insert(fat_start_sector + i, sector_data);
+        }
+
+        // Bitmap
+        let bitmap_data = generate_bitmap(total_clusters, self.next_cluster - FIRST_CLUSTER);
+
+        // 更新根目录中 Bitmap 条目的 DataLength
+        let bitmap_entry_offset = DIR_ENTRY_SIZE as usize;
+        if self.root_dir_entries.len() >= bitmap_entry_offset + DIR_ENTRY_SIZE as usize {
+            let len_offset = bitmap_entry_offset + 24;
+            self.root_dir_entries[len_offset..len_offset + 8]
+                .copy_from_slice(&(bitmap_data.len() as u64).to_le_bytes());
+        }
+
+        let bitmap_sector_start = layout.cluster_to_sector(3);
+        for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
+            let offset = i * SECTOR_SIZE as usize;
+            let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
+            let end = (offset + SECTOR_SIZE as usize).min(bitmap_data.len());
+            if offset < bitmap_data.len() {
+                sector_data[..end - offset].copy_from_slice(&bitmap_data[offset..end]);
+            }
+            metadata_sectors.insert(bitmap_sector_start + i as u64, sector_data);
+        }
+
+        // Root Directory
+        let mut root_data = self.root_dir_entries;
+        root_data.resize(CLUSTER_SIZE as usize, 0);
+        let root_sector_start = layout.cluster_to_sector(2);
+        for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
+            let offset = i * SECTOR_SIZE as usize;
+            let data = root_data[offset..offset + SECTOR_SIZE as usize].to_vec();
+            metadata_sectors.insert(root_sector_start + i as u64, data);
+        }
+
+        // 元数据簇（upcase / 子目录）
+        for alloc in &self.cluster_allocations {
+            if let ClusterAllocation::Metadata { start, count, data } = alloc {
+                let cluster_start_sector = layout.cluster_to_sector(*start);
+                let total_sectors_for_alloc = *count as u64 * SECTORS_PER_CLUSTER as u64;
+                for i in 0..total_sectors_for_alloc {
+                    let offset = (i as usize) * SECTOR_SIZE as usize;
+                    let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
+                    let end = (offset + SECTOR_SIZE as usize).min(data.len());
+                    if offset < data.len() {
+                        sector_data[..end - offset].copy_from_slice(&data[offset..end]);
+                    }
+                    metadata_sectors.insert(cluster_start_sector + i, sector_data);
+                }
+            }
+        }
+
+        // 文件数据映射
+        let mut file_sector_map = HashMap::new();
+        for mapping in &self.file_mappings {
+            let cluster_start_sector = layout.cluster_to_sector(mapping.start_cluster);
+            let total_data_sectors =
+                (mapping.file_size + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64;
+            let mut sectors = Vec::new();
+
+            for i in 0..total_data_sectors {
+                let sector = cluster_start_sector + i;
+                let offset = i * SECTOR_SIZE as u64;
+                let remaining = mapping.file_size - offset;
+                let valid_bytes = if remaining >= SECTOR_SIZE as u64 {
+                    SECTOR_SIZE
+                } else {
+                    remaining as u32
+                };
+
+                file_data_sectors.insert(
+                    sector,
+                    FileDataMapping {
+                        real_path: mapping.real_path.clone(),
+                        offset,
+                        valid_bytes,
+                        blocked: mapping.blocked,
+                    },
+                );
+                sectors.push(sector);
+            }
+
+            file_sector_map.insert(mapping.name.clone(), sectors);
+        }
+
+        VirtualVolume {
+            metadata_sectors,
+            file_data_sectors,
+            layout,
+            file_sector_map,
+        }
+    }
+}
