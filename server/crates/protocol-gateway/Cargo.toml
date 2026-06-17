@@ -11,6 +11,7 @@ common = { workspace = true }
 storage = { workspace = true }
 auth-session = { path = "../auth-session" }
 log-audit = { path = "../log-audit" }
+whitelist = { path = "../whitelist" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }

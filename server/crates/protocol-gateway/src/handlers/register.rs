@@ -2,11 +2,17 @@
 
 use crate::router::Router;
 
-/// CMD 常量。
+/// CMD 常量（鉴权）。
 const CMD_LOGIN: u32 = 0x0001;
 const CMD_AUTH_STATUS_QUERY: u32 = 0x0003;
 const CMD_LOGOUT: u32 = 0x0009;
 const CMD_CHANGE_PASSWORD: u32 = 0x0605;
+
+/// CMD 常量（白名单）。
+const CMD_LIST_WHITELIST: u32 = 0x0100;
+const CMD_ADD_WHITELIST: u32 = 0x0104;
+const CMD_REMOVE_WHITELIST: u32 = 0x0105;
+const CMD_UPDATE_WHITELIST: u32 = 0x0106;
 
 /// 注册所有 P02 handler。
 pub fn register_auth_handlers(router: &mut Router) {
@@ -31,5 +37,36 @@ pub fn register_auth_handlers(router: &mut Router) {
         CMD_CHANGE_PASSWORD,
         Box::new(super::change_password::handle_change_password),
         vec![0, 1, 2],
+    );
+}
+
+/// 注册所有 P03 白名单 handler。
+pub fn register_whitelist_handlers(router: &mut Router) {
+    // 白名单列表（管理员和审计员可查看）
+    router.register_with_roles(
+        CMD_LIST_WHITELIST,
+        Box::new(super::whitelist::handle_list_whitelist),
+        vec![0, 1],
+    );
+
+    // 添加白名单（管理员和审计员可操作）
+    router.register_with_roles(
+        CMD_ADD_WHITELIST,
+        Box::new(super::whitelist::handle_add_whitelist),
+        vec![0, 1],
+    );
+
+    // 删除白名单（仅管理员）
+    router.register_with_roles(
+        CMD_REMOVE_WHITELIST,
+        Box::new(super::whitelist::handle_remove_whitelist),
+        vec![0],
+    );
+
+    // 更新白名单（仅管理员）
+    router.register_with_roles(
+        CMD_UPDATE_WHITELIST,
+        Box::new(super::whitelist::handle_update_whitelist),
+        vec![0],
     );
 }

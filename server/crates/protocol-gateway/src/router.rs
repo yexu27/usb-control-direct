@@ -136,6 +136,7 @@ mod tests {
             source_ip: "127.0.0.1".into(),
             auth_service: auth,
             audit_service: audit,
+            whitelist_manager: None,
         };
         (ctx, path)
     }

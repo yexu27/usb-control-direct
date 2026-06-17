@@ -7,6 +7,7 @@ use std::sync::Arc;
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
 use log_audit::AuditService;
+use whitelist::WhitelistManager;
 
 /// 请求上下文。
 pub struct RequestContext {
@@ -20,4 +21,6 @@ pub struct RequestContext {
     pub auth_service: Arc<AuthService>,
     /// 审计服务（共享）。
     pub audit_service: Arc<AuditService>,
+    /// 白名单管理器（共享）。
+    pub whitelist_manager: Option<Arc<WhitelistManager>>,
 }
