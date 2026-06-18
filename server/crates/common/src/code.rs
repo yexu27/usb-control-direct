@@ -114,8 +114,6 @@ pub enum ResultCode {
     VirusdbApplyFailed = 0x0608,
     /// 设备描述格式不合法。
     DeviceDescFormatError = 0x0609,
-    /// 装置有 USB 设备连接时禁止修改设备描述。
-    DeviceHasUsbConnected = 0x060A,
 
     // ===== 用户管理 0x0701-0x07FF =====
     /// 用户名已存在。
@@ -200,7 +198,6 @@ mod tests {
         assert_eq!(ResultCode::ClamdReloadFailed.as_u16(), 0x0607);
         assert_eq!(ResultCode::VirusdbApplyFailed.as_u16(), 0x0608);
         assert_eq!(ResultCode::DeviceDescFormatError.as_u16(), 0x0609);
-        assert_eq!(ResultCode::DeviceHasUsbConnected.as_u16(), 0x060A);
         assert_eq!(ResultCode::UsernameExists.as_u16(), 0x0701);
         assert_eq!(ResultCode::UsernameDeletedReuse.as_u16(), 0x0702);
         assert_eq!(ResultCode::UserNotFound.as_u16(), 0x0703);
@@ -214,6 +211,5 @@ mod tests {
     #[test]
     fn result_code_display_uppercase_hex() {
         assert_eq!(format!("{}", ResultCode::Success), "0x0000");
-        assert_eq!(format!("{}", ResultCode::DeviceHasUsbConnected), "0x060A");
     }
 }

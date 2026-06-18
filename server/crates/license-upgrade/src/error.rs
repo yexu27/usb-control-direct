@@ -60,9 +60,6 @@ pub enum LicenseUpgradeError {
     #[error("设备描述格式不合法")]
     DeviceDescFormatError,
 
-    /// 装置有 USB 设备连接时禁止修改设备描述。
-    #[error("装置有 USB 设备连接时禁止修改设备描述")]
-    DeviceHasUsbConnected,
 
     /// 存储层错误。
     #[error("存储错误: {0}")]
@@ -97,7 +94,6 @@ impl LicenseUpgradeError {
             LicenseUpgradeError::ClamdReloadFailed => ResultCode::ClamdReloadFailed,
             LicenseUpgradeError::VirusdbApplyFailed(_) => ResultCode::VirusdbApplyFailed,
             LicenseUpgradeError::DeviceDescFormatError => ResultCode::DeviceDescFormatError,
-            LicenseUpgradeError::DeviceHasUsbConnected => ResultCode::DeviceHasUsbConnected,
             LicenseUpgradeError::Storage(_) | LicenseUpgradeError::Io(_) => {
                 ResultCode::InternalError
             }
