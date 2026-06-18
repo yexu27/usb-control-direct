@@ -6,7 +6,9 @@ use std::sync::{Arc, RwLock};
 
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
+use license_upgrade::{LicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
 use log_audit::AuditService;
+use policy_import_export::PolicyService;
 use storage::Storage;
 use usb_identify::monitor::DeviceManager;
 use whitelist::WhitelistManager;
@@ -29,6 +31,14 @@ pub struct RequestContext {
     pub device_manager: Option<Arc<RwLock<DeviceManager>>>,
     /// 数据库存储（共享）。
     pub storage: Option<Arc<Storage>>,
+    /// 策略导入导出服务。
+    pub policy_service: Option<Arc<PolicyService>>,
+    /// 授权校验器。
+    pub license_validator: Option<Arc<dyn LicenseValidator>>,
+    /// 系统升级管理器。
+    pub system_upgrade_mgr: Option<Arc<SystemUpgradeManager>>,
+    /// 病毒库升级管理器。
+    pub virusdb_upgrade_mgr: Option<Arc<VirusdbUpgradeManager>>,
 }
 
 impl RequestContext {

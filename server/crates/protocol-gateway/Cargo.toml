@@ -13,6 +13,8 @@ auth-session = { path = "../auth-session" }
 log-audit = { path = "../log-audit" }
 whitelist = { path = "../whitelist" }
 usb-identify = { path = "../usb-identify" }
+policy-import-export = { path = "../policy-import-export" }
+license-upgrade = { path = "../license-upgrade" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }

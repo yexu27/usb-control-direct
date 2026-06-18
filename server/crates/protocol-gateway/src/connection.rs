@@ -184,6 +184,10 @@ pub async fn handle_connection(
                         whitelist_manager: None,
                         device_manager: None,
                         storage: None,
+                        policy_service: None,
+                        license_validator: None,
+                        system_upgrade_mgr: None,
+                        virusdb_upgrade_mgr: None,
                     };
 
                     let response = router.dispatch(&ctx, header.msg_type, &payload);

@@ -139,6 +139,10 @@ mod tests {
             whitelist_manager: None,
             device_manager: None,
             storage: None,
+            policy_service: None,
+            license_validator: None,
+            system_upgrade_mgr: None,
+            virusdb_upgrade_mgr: None,
         };
         (ctx, path)
     }

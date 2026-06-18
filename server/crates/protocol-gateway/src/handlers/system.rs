@@ -1,0 +1,368 @@
+//! 系统管理 handler（0x0500/0x0502/0x0503/0x0504）。
+
+use prost::Message;
+
+use auth_session::session::SessionInfo;
+use common::code::ResultCode;
+use common::proto::{
+    CmdGetSystemInfo, CmdUpdateDeviceDesc, CmdUploadSystemUpgrade, CmdUploadVirusdbUpgrade,
+    RspCommon, RspSystemInfo,
+};
+use storage::model::OperationLogInsert;
+
+use crate::codec;
+use crate::context::RequestContext;
+
+/// RspSystemInfo 消息类型。
+const RSP_SYSTEM_INFO: u32 = 0x0501;
+
+/// RspCommon 消息类型。
+const RSP_COMMON: u32 = 0xFF00;
+
+/// CMD_GET_SYSTEM_INFO (0x0500) handler。
+pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    let _cmd = match CmdGetSystemInfo::decode(payload) {
+        Ok(c) => c,
+        Err(_) => {
+            return sysinfo_error(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
+        }
+    };
+
+    let storage = match ctx.storage() {
+        Some(s) => s,
+        None => {
+            return sysinfo_error(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化");
+        }
+    };
+
+    let system_version = config_value(storage, "system_version");
+    let virus_db_version = config_value(storage, "virus_db_version");
+    let auth_status_str = config_value(storage, "auth_status");
+    let authorized = auth_status_str == "authorized";
+    let auth_expire_time = config_value(storage, "auth_expire_time")
+        .parse::<i64>()
+        .unwrap_or(0);
+    let device_description = config_value(storage, "device_description");
+    let virus_db_updated_at = config_value(storage, "virus_db_updated_at")
+        .parse::<i64>()
+        .unwrap_or(0);
+
+    let rsp = RspSystemInfo {
+        system_version,
+        virus_db_version,
+        authorized,
+        auth_expire_time,
+        device_description,
+        virus_db_updated_at,
+        auth_status: auth_status_str,
+    };
+    codec::encode_frame(RSP_SYSTEM_INFO, ctx.seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+/// CMD_UPLOAD_SYSTEM_UPGRADE (0x0502) handler。
+pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    let cmd = match CmdUploadSystemUpgrade::decode(payload) {
+        Ok(c) => c,
+        Err(_) => {
+            return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
+        }
+    };
+
+    let session = match ctx.session.as_ref() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
+        }
+    };
+
+    let mgr = match ctx.system_upgrade_mgr.as_ref() {
+        Some(m) => m,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::InternalError, "升级管理器未初始化");
+        }
+    };
+
+    let storage = match ctx.storage() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化");
+        }
+    };
+
+    let current_version = config_value(storage, "system_version");
+
+    match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
+        Ok(validation) => {
+            if let Err(e) = mgr.apply_upgrade(validation) {
+                let code = e.to_result_code();
+                log_operation(
+                    ctx,
+                    session,
+                    "system_upgrade",
+                    &cmd.target_version,
+                    1,
+                    Some(&e.to_string()),
+                );
+                return error_response(ctx.seq_id, code, &e.to_string());
+            }
+
+            // 更新系统版本号
+            let _ = storage.config_set("system_version", &cmd.target_version);
+
+            log_operation(
+                ctx,
+                session,
+                "system_upgrade",
+                &cmd.target_version,
+                0,
+                None,
+            );
+
+            // 重启服务（异步，不阻塞响应）
+            let _ = mgr.restart_service();
+
+            success_response(ctx.seq_id)
+        }
+        Err(e) => {
+            let code = e.to_result_code();
+            log_operation(
+                ctx,
+                session,
+                "system_upgrade",
+                &cmd.target_version,
+                1,
+                Some(&e.to_string()),
+            );
+            error_response(ctx.seq_id, code, &e.to_string())
+        }
+    }
+}
+
+/// CMD_UPLOAD_VIRUSDB_UPGRADE (0x0503) handler。
+pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    let cmd = match CmdUploadVirusdbUpgrade::decode(payload) {
+        Ok(c) => c,
+        Err(_) => {
+            return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
+        }
+    };
+
+    let session = match ctx.session.as_ref() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
+        }
+    };
+
+    let mgr = match ctx.virusdb_upgrade_mgr.as_ref() {
+        Some(m) => m,
+        None => {
+            return error_response(
+                ctx.seq_id,
+                ResultCode::InternalError,
+                "病毒库升级管理器未初始化",
+            );
+        }
+    };
+
+    let storage = match ctx.storage() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化");
+        }
+    };
+
+    let current_version = config_value(storage, "virus_db_version");
+
+    if let Err(e) = mgr.validate_upgrade(&cmd.target_version, &current_version) {
+        let code = e.to_result_code();
+        log_operation(
+            ctx,
+            session,
+            "virusdb_upgrade",
+            &cmd.target_version,
+            1,
+            Some(&e.to_string()),
+        );
+        return error_response(ctx.seq_id, code, &e.to_string());
+    }
+
+    if let Err(e) = mgr.apply_upgrade(&cmd.upgrade_data) {
+        let code = e.to_result_code();
+        log_operation(
+            ctx,
+            session,
+            "virusdb_upgrade",
+            &cmd.target_version,
+            1,
+            Some(&e.to_string()),
+        );
+        return error_response(ctx.seq_id, code, &e.to_string());
+    }
+
+    // 更新病毒库版本和更新时间
+    let _ = storage.config_set("virus_db_version", &cmd.target_version);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let _ = storage.config_set("virus_db_updated_at", &now.to_string());
+
+    log_operation(
+        ctx,
+        session,
+        "virusdb_upgrade",
+        &cmd.target_version,
+        0,
+        None,
+    );
+    success_response(ctx.seq_id)
+}
+
+/// CMD_UPDATE_DEVICE_DESC (0x0504) handler。
+pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    let cmd = match CmdUpdateDeviceDesc::decode(payload) {
+        Ok(c) => c,
+        Err(_) => {
+            return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
+        }
+    };
+
+    let session = match ctx.session.as_ref() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
+        }
+    };
+
+    if !validate_device_desc(&cmd.description) {
+        return error_response(
+            ctx.seq_id,
+            ResultCode::DeviceDescFormatError,
+            "设备描述格式错误（不超过32字符，仅允许字母、数字、下划线和中文）",
+        );
+    }
+
+    // 检查是否有 USB 连接
+    if let Some(ref dm) = ctx.device_manager {
+        if let Ok(guard) = dm.read() {
+            if !guard.connected_devices().is_empty() {
+                return error_response(
+                    ctx.seq_id,
+                    ResultCode::DeviceHasUsbConnected,
+                    "当前有 USB 设备连接，不允许修改设备描述",
+                );
+            }
+        }
+    }
+
+    let storage = match ctx.storage() {
+        Some(s) => s,
+        None => {
+            return error_response(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化");
+        }
+    };
+
+    match storage.config_set("device_description", &cmd.description) {
+        Ok(()) => {
+            log_operation(
+                ctx,
+                session,
+                "update_device_desc",
+                &cmd.description,
+                0,
+                None,
+            );
+            success_response(ctx.seq_id)
+        }
+        Err(e) => {
+            log_operation(
+                ctx,
+                session,
+                "update_device_desc",
+                &cmd.description,
+                1,
+                Some(&e.to_string()),
+            );
+            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+        }
+    }
+}
+
+/// 校验设备描述格式。
+fn validate_device_desc(desc: &str) -> bool {
+    !desc.is_empty()
+        && desc.chars().count() <= 32
+        && desc
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || (c >= '\u{4e00}' && c <= '\u{9fff}'))
+}
+
+/// 从系统配置读取值。
+fn config_value(storage: &storage::Storage, key: &str) -> String {
+    storage
+        .config_get(key)
+        .ok()
+        .flatten()
+        .and_then(|c| c.config_value)
+        .unwrap_or_default()
+}
+
+/// 记录操作日志。
+fn log_operation(
+    ctx: &RequestContext,
+    session: &SessionInfo,
+    action_type: &str,
+    target: &str,
+    result: i32,
+    fail_reason: Option<&str>,
+) {
+    let mut log = OperationLogInsert {
+        op_time: 0,
+        username: session.username.clone(),
+        role: session.role,
+        log_type: "system_management".into(),
+        action_type: Some(action_type.into()),
+        target: Some(target.into()),
+        before_value: None,
+        after_value: None,
+        related_file: None,
+        related_version: None,
+        result,
+        fail_reason: fail_reason.map(|s| s.to_string()),
+        source_ip: Some(ctx.source_ip.clone()),
+        app_version: None,
+        session_id: None,
+        request_id: None,
+        detail: None,
+    };
+    let _ = ctx.audit_service.log_operation(&mut log);
+}
+
+/// 构造系统信息错误响应（使用 RspCommon 传递错误信息）。
+fn sysinfo_error(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
+    let rsp = RspCommon {
+        success: false,
+        result_code: code.as_u16() as i32,
+        error_message: msg.to_string(),
+    };
+    codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+fn success_response(seq_id: u32) -> Vec<u8> {
+    let rsp = RspCommon {
+        success: true,
+        result_code: ResultCode::Success.as_u16() as i32,
+        error_message: String::new(),
+    };
+    codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
+    let rsp = RspCommon {
+        success: false,
+        result_code: code.as_u16() as i32,
+        error_message: msg.to_string(),
+    };
+    codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
