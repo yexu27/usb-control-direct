@@ -46,6 +46,10 @@ pub enum AuthError {
     #[error("内置用户不可删除")]
     BuiltinUserNoDelete,
 
+    /// 不允许删除当前登录用户。
+    #[error("不允许删除当前登录用户")]
+    SelfDeleteForbidden,
+
     /// 存储层错误。
     #[error("存储错误: {0}")]
     Storage(#[from] storage::error::StorageError),
@@ -73,6 +77,7 @@ impl AuthError {
             AuthError::UsernameDeletedReuse => ResultCode::UsernameDeletedReuse,
             AuthError::UserNotFound => ResultCode::UserNotFound,
             AuthError::BuiltinUserNoDelete => ResultCode::BuiltinUserNoDelete,
+            AuthError::SelfDeleteForbidden => ResultCode::SelfDeleteForbidden,
             AuthError::Storage(_) | AuthError::Bcrypt(_) | AuthError::Internal(_) => {
                 ResultCode::InternalError
             }

@@ -273,3 +273,231 @@ fn hash_password_produces_valid_hash() {
     assert!(hash.starts_with("$2b$12$"));
     assert!(password::verify_password("test@123", &hash).unwrap());
 }
+
+// ===== 用户管理 =====
+
+#[test]
+fn list_users_returns_builtin_users() {
+    let (service, _path) = setup();
+    let users = service.list_users().unwrap();
+    // schema 自动插入了 admin、operator、audit 三个内置用户
+    assert!(users.len() >= 3);
+    let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
+    assert!(names.contains(&"admin"));
+    assert!(names.contains(&"operator"));
+    assert!(names.contains(&"audit"));
+}
+
+#[test]
+fn create_user_success() {
+    let (service, _path) = setup();
+    let id = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+    assert!(id > 0);
+
+    // 新用户可以登录
+    let result = service.login("testuser", "Test@12345", "127.0.0.1").unwrap();
+    assert_eq!(result.username, "testuser");
+    assert_eq!(result.role, 1);
+}
+
+#[test]
+fn create_user_duplicate_returns_error() {
+    let (service, _path) = setup();
+    service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+    let err = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::UsernameExists
+    );
+}
+
+#[test]
+fn create_user_password_mismatch() {
+    let (service, _path) = setup();
+    let err = service
+        .create_user("testuser", 1, "Test@12345", "Different@1")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::PasswordConfirmMismatch
+    );
+}
+
+#[test]
+fn create_user_weak_password() {
+    let (service, _path) = setup();
+    let err = service
+        .create_user("testuser", 1, "weak", "weak")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::PasswordComplexityError
+    );
+}
+
+#[test]
+fn create_user_invalid_role() {
+    let (service, _path) = setup();
+    let err = service
+        .create_user("testuser", 5, "Test@12345", "Test@12345")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::InternalError
+    );
+}
+
+#[test]
+fn delete_user_success() {
+    let (service, _path) = setup();
+    let id = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+
+    // 删除用户（current_user_id 不等于 target user id）
+    service.delete_user("testuser", id + 999).unwrap();
+
+    // 删除后不能登录
+    assert!(service.login("testuser", "Test@12345", "127.0.0.1").is_err());
+}
+
+#[test]
+fn delete_user_self_returns_forbidden() {
+    let (service, _path) = setup();
+    let id = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+    let err = service.delete_user("testuser", id).unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::SelfDeleteForbidden
+    );
+}
+
+#[test]
+fn delete_builtin_user_returns_error() {
+    let (service, _path) = setup();
+    let err = service.delete_user("admin", 9999).unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::BuiltinUserNoDelete
+    );
+}
+
+#[test]
+fn delete_user_invalidates_sessions() {
+    let (service, _path) = setup();
+    service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+    let login_result = service
+        .login("testuser", "Test@12345", "127.0.0.1")
+        .unwrap();
+
+    // 查出 user id 用于 current_user_id（用不同值）
+    let user = service
+        .storage()
+        .user_query_by_username("testuser")
+        .unwrap()
+        .unwrap();
+    service.delete_user("testuser", user.id + 999).unwrap();
+
+    // token 应失效
+    assert!(service.validate_token(&login_result.token).is_err());
+}
+
+#[test]
+fn reset_password_success() {
+    let (service, _path) = setup();
+    service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+
+    service
+        .reset_password("testuser", "NewPass@99", "NewPass@99")
+        .unwrap();
+
+    // 旧密码登录失败
+    assert!(service.login("testuser", "Test@12345", "127.0.0.1").is_err());
+    // 新密码登录成功
+    assert!(service.login("testuser", "NewPass@99", "127.0.0.1").is_ok());
+}
+
+#[test]
+fn reset_password_clears_lock() {
+    let (service, _path) = setup();
+    service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+
+    // 锁定账号
+    for _ in 0..5 {
+        let _ = service.login("testuser", "wrong", "127.0.0.1");
+    }
+    let err = service
+        .login("testuser", "Test@12345", "127.0.0.1")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::AccountLocked
+    );
+
+    // 管理员重置密码
+    service
+        .reset_password("testuser", "NewPass@99", "NewPass@99")
+        .unwrap();
+
+    // 锁定解除，可以登录
+    assert!(service.login("testuser", "NewPass@99", "127.0.0.1").is_ok());
+}
+
+#[test]
+fn reset_password_confirm_mismatch() {
+    let (service, _path) = setup();
+    let err = service
+        .reset_password("admin", "NewPass@99", "Different@1")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::PasswordConfirmMismatch
+    );
+}
+
+#[test]
+fn reset_password_invalidates_sessions() {
+    let (service, _path) = setup();
+    let login_result = service.login("admin", "admin@123", "127.0.0.1").unwrap();
+
+    service
+        .reset_password("admin", "NewPass@99", "NewPass@99")
+        .unwrap();
+
+    // 旧 token 失效
+    assert!(service.validate_token(&login_result.token).is_err());
+}
+
+#[test]
+fn create_user_deleted_username_cannot_reuse() {
+    let (service, _path) = setup();
+    let id = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap();
+
+    // 删除用户
+    service.delete_user("testuser", id + 999).unwrap();
+
+    // 同名不可复用
+    let err = service
+        .create_user("testuser", 1, "Test@12345", "Test@12345")
+        .unwrap_err();
+    assert_eq!(
+        err.to_result_code(),
+        common::code::ResultCode::UsernameDeletedReuse
+    );
+}

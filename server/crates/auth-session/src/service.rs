@@ -184,6 +184,125 @@ impl AuthService {
     pub fn refresh_token(&self, token: &str) {
         self.session_mgr.refresh_token(token);
     }
+
+    /// 查询全部活跃用户列表。
+    pub fn list_users(&self) -> Result<Vec<storage::model::User>, AuthError> {
+        Ok(self.storage.user_query_active()?)
+    }
+
+    /// 新建用户。
+    ///
+    /// 校验:
+    /// 1. 用户名唯一（包括已删除的不可复用）
+    /// 2. 角色合法（0/1/2）
+    /// 3. 密码复杂度
+    /// 4. 确认密码一致
+    pub fn create_user(
+        &self,
+        username: &str,
+        role: i32,
+        password_str: &str,
+        confirm_password: &str,
+    ) -> Result<i64, AuthError> {
+        if password_str != confirm_password {
+            return Err(AuthError::PasswordConfirmMismatch);
+        }
+
+        if !password::validate_password_complexity(password_str) {
+            return Err(AuthError::PasswordComplexity);
+        }
+
+        if !(0..=2).contains(&role) {
+            return Err(AuthError::Internal("角色不合法".into()));
+        }
+
+        if let Some(existing) = self.storage.user_query_by_username(username)? {
+            if existing.status == 2 {
+                return Err(AuthError::UsernameDeletedReuse);
+            }
+            return Err(AuthError::UsernameExists);
+        }
+
+        let hash = password::hash_password(password_str)?;
+        let insert = storage::model::UserInsert {
+            username: username.to_string(),
+            password_hash: hash,
+            role,
+        };
+        let id = self.storage.user_insert(&insert)?;
+        Ok(id)
+    }
+
+    /// 删除用户（软删除）。
+    ///
+    /// 校验:
+    /// 1. 目标用户存在
+    /// 2. 非内置用户
+    /// 3. 不能删除自己（当前登录用户）
+    pub fn delete_user(
+        &self,
+        target_username: &str,
+        current_user_id: i64,
+    ) -> Result<(), AuthError> {
+        let user = self
+            .storage
+            .user_query_by_username(target_username)?
+            .ok_or(AuthError::UserNotFound)?;
+
+        if user.status == 2 {
+            return Err(AuthError::UserNotFound);
+        }
+
+        if user.is_builtin != 0 {
+            return Err(AuthError::BuiltinUserNoDelete);
+        }
+
+        if user.id == current_user_id {
+            return Err(AuthError::SelfDeleteForbidden);
+        }
+
+        self.storage.user_soft_delete(user.id)?;
+        self.session_mgr.invalidate_user_sessions(user.id);
+
+        Ok(())
+    }
+
+    /// 重置用户密码（管理员操作）。
+    ///
+    /// 校验:
+    /// 1. 密码复杂度
+    /// 2. 确认密码一致
+    /// 3. 重置成功后清零失败计数并解除锁定
+    pub fn reset_password(
+        &self,
+        target_username: &str,
+        new_password: &str,
+        confirm_password: &str,
+    ) -> Result<(), AuthError> {
+        if new_password != confirm_password {
+            return Err(AuthError::PasswordConfirmMismatch);
+        }
+
+        if !password::validate_password_complexity(new_password) {
+            return Err(AuthError::PasswordComplexity);
+        }
+
+        let user = self
+            .storage
+            .user_query_by_username(target_username)?
+            .ok_or(AuthError::UserNotFound)?;
+
+        if user.status == 2 {
+            return Err(AuthError::UserNotFound);
+        }
+
+        let new_hash = password::hash_password(new_password)?;
+        self.storage.user_update_password(user.id, &new_hash)?;
+        self.storage.user_update_login_fail(user.id, 0, None)?;
+        self.session_mgr.invalidate_user_sessions(user.id);
+
+        Ok(())
+    }
 }
 
 /// 获取当前 Unix 时间戳（秒）。
