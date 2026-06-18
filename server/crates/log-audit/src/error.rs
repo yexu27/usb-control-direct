@@ -16,4 +16,12 @@ pub enum AuditError {
     /// 空间不足且当前类别无可覆盖旧日志。
     #[error("存储空间不足，当前类别无可覆盖日志")]
     StorageFull,
+
+    /// 半年内日志不可清理。
+    #[error("半年内日志不可清理")]
+    RetentionViolation,
+
+    /// 日志导出失败。
+    #[error("日志导出失败: {0}")]
+    ExportFailed(String),
 }

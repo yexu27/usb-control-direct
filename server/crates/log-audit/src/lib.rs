@@ -4,6 +4,8 @@
 
 pub mod audit;
 pub mod error;
+pub mod export;
+pub mod query;
 
 pub use audit::{AuditService, LogCategory};
 pub use error::AuditError;
