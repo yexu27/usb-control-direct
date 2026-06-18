@@ -32,7 +32,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let log_type = match LogType::from_str(&cmd.log_type) {
+    let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
         None => {
             return query_error(ctx.seq_id, ResultCode::LogTypeInvalid, "无效的日志类型");
@@ -126,7 +126,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let log_type = match LogType::from_str(&cmd.log_type) {
+    let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
         None => {
             return export_error(ctx.seq_id, ResultCode::LogTypeInvalid, "无效的日志类型");
@@ -227,7 +227,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let log_type = match LogType::from_str(&cmd.log_type) {
+    let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
         None => {
             return error_response(ctx.seq_id, ResultCode::LogTypeInvalid, "无效的日志类型");

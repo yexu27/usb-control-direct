@@ -255,7 +255,7 @@ impl VirusdbUpgradeManager {
 /// 返回:
 /// - 任一段包含数字 4 时返回 `true`。
 pub fn contains_digit_4(version: &str) -> bool {
-    let v = version.trim_start_matches(|c: char| c == 'v' || c == 'V');
+    let v = version.trim_start_matches(['v', 'V']);
     v.split('.').any(|segment| segment.contains('4'))
 }
 

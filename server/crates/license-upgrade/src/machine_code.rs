@@ -158,7 +158,7 @@ fn read_mac_address() -> Result<String, LicenseUpgradeError> {
 /// 返回:
 /// - 成功时返回解码后的字节序列；失败时返回错误描述字符串。
 fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(format!(
             "hex 字符串长度必须为偶数，实际长度: {}",
             hex.len()

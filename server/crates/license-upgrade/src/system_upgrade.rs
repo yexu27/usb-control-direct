@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use crate::error::LicenseUpgradeError;
 
 /// 升级包校验结果（内部中间结构）。
+#[derive(Debug)]
 pub struct UpgradeValidation {
     /// 升级数据。
     pub data: Vec<u8>,
@@ -173,7 +174,7 @@ impl SystemUpgradeManager {
 /// - 新版本大于当前版本时返回 `true`。
 pub fn is_version_greater(new_version: &str, current_version: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> {
-        let v = v.trim_start_matches(|c: char| c == 'v' || c == 'V');
+        let v = v.trim_start_matches(['v', 'V']);
         v.split('.')
             .filter_map(|s| s.parse::<u64>().ok())
             .collect()

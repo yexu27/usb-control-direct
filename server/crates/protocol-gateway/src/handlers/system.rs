@@ -295,7 +295,7 @@ fn validate_device_desc(desc: &str) -> bool {
         && desc.chars().count() <= 32
         && desc
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || (c >= '\u{4e00}' && c <= '\u{9fff}'))
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || ('\u{4e00}'..='\u{9fff}').contains(&c))
 }
 
 /// 从系统配置读取值。

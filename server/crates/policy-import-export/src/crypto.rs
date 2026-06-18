@@ -116,7 +116,7 @@ pub fn generate_random_iv() -> [u8; IV_LEN] {
 /// 返回:
 /// - 成功时返回解码后的字节序列；失败时返回 [`PolicyError::FormatError`]。
 fn hex_decode(hex: &str) -> Result<Vec<u8>, PolicyError> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(PolicyError::FormatError(format!(
             "hex 字符串长度必须为偶数，实际长度: {}",
             hex.len()

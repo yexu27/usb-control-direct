@@ -23,7 +23,7 @@ impl LogType {
     ///
     /// 返回:
     /// - 匹配时返回对应枚举值，否则返回 None。
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "usb_audit" => Some(LogType::UsbAudit),
             "malware" => Some(LogType::Malware),
