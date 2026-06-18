@@ -51,6 +51,9 @@ rcgen = "0.13"
 # 测试辅助
 tempfile = "3"
 
+# 国密算法
+smcrypto = "0.3"
+
 # 系统调用
 libc = "0.2"
 

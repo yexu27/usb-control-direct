@@ -19,6 +19,7 @@ pub(crate) mod users;
 pub(crate) mod role_permission;
 pub(crate) mod operation_log;
 pub(crate) mod log_retention_event;
+pub(crate) mod policy_import;
 
 pub use error::StorageError;
 
