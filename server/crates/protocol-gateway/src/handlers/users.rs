@@ -25,7 +25,7 @@ pub fn handle_list_users(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     let _cmd = match CmdListUsers::decode(payload) {
         Ok(c) => c,
         Err(_) => {
-            return list_error(ctx.seq_id);
+            return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
         }
     };
 
@@ -36,7 +36,7 @@ pub fn handle_list_users(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             codec::encode_frame(RSP_LIST_USERS, ctx.seq_id, &rsp.encode_to_vec())
                 .unwrap_or_default()
         }
-        Err(_e) => list_error(ctx.seq_id),
+        Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
     }
 }
 
@@ -49,12 +49,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let role = match role_str_to_int(&cmd.role) {
         Ok(r) => r,
@@ -95,12 +90,7 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     match ctx
         .auth_service
@@ -134,12 +124,7 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     match ctx
         .auth_service
@@ -215,12 +200,6 @@ fn log_operation(
         detail: None,
     };
     let _ = ctx.audit_service.log_operation(&mut log);
-}
-
-/// 构造 RspListUsers 空响应（列表查询无 error 字段）。
-fn list_error(seq_id: u32) -> Vec<u8> {
-    let rsp = RspListUsers { users: Vec::new() };
-    codec::encode_frame(RSP_LIST_USERS, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
 }
 
 fn success_response(seq_id: u32) -> Vec<u8> {

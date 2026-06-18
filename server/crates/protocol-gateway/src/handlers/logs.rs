@@ -119,12 +119,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return export_error(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
@@ -220,12 +215,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,

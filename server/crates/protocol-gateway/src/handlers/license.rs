@@ -30,12 +30,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return machine_code_error(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     // 已授权状态下仅管理员可操作
     let storage = match ctx.storage() {
@@ -86,12 +81,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return license_error(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     // 已授权状态下仅管理员可操作
     let storage = match ctx.storage() {

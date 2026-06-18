@@ -46,4 +46,14 @@ impl RequestContext {
     pub fn storage(&self) -> Option<&Storage> {
         self.storage.as_ref().map(|s| s.as_ref())
     }
+
+    /// 获取已验证的会话信息。
+    ///
+    /// 中间件已保证 role-restricted handler 进入时 session 一定存在，
+    /// 此方法用于统一获取 session 而不必在每个 handler 重复检查。
+    pub fn session_required(&self) -> &SessionInfo {
+        self.session
+            .as_ref()
+            .expect("middleware guarantees session exists for role-restricted handlers")
+    }
 }

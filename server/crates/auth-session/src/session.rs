@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -136,10 +135,7 @@ fn generate_token() -> String {
 
 /// 获取当前 Unix 时间戳（秒）。
 fn now_unix() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64
+    common::time::now_unix()
 }
 
 #[cfg(test)]

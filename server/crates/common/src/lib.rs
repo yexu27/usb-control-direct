@@ -11,4 +11,5 @@ pub mod error;
 pub mod frame;
 pub mod mapping;
 pub mod proto;
+pub mod time;
 pub mod types;

@@ -311,10 +311,7 @@ impl AuthService {
 
 /// 获取当前 Unix 时间戳（秒）。
 fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64
+    common::time::now_unix()
 }
 
 /// 校验用户名格式。

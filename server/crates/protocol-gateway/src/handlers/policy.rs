@@ -25,12 +25,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return export_error(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,
@@ -68,12 +63,7 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,

@@ -68,12 +68,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let mgr = match ctx.system_upgrade_mgr.as_ref() {
         Some(m) => m,
@@ -147,12 +142,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     let mgr = match ctx.virusdb_upgrade_mgr.as_ref() {
         Some(m) => m,
@@ -202,10 +192,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
+    let now = common::time::now_unix();
     if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
         log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
@@ -231,12 +218,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
         }
     };
 
-    let session = match ctx.session.as_ref() {
-        Some(s) => s,
-        None => {
-            return error_response(ctx.seq_id, ResultCode::Unauthenticated, "未登录");
-        }
-    };
+    let session = ctx.session_required();
 
     if !validate_device_desc(&cmd.description) {
         return error_response(
