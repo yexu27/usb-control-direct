@@ -1,5 +1,7 @@
 //! 操作审计日志公共辅助函数。
 
+use tracing::warn;
+
 use auth_session::session::SessionInfo;
 use storage::model::OperationLogInsert;
 
@@ -43,5 +45,7 @@ pub fn log_operation(
         request_id: None,
         detail: None,
     };
-    let _ = ctx.audit_service.log_operation(&mut log);
+    if let Err(e) = ctx.audit_service.log_operation(&mut log) {
+        warn!("审计日志写入失败: {e}");
+    }
 }
