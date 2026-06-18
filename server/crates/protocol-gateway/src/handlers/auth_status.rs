@@ -13,7 +13,7 @@ const RSP_AUTH_STATUS: u32 = 0x0004;
 /// 授权状态查询 handler。
 ///
 /// 此 cmd 在中间件白名单中，handler 自行校验 session_token。
-/// 返回当前授权状态（P02 阶段固定返回 unauthorized，P03 授权模块实现后再对接）。
+/// 返回当前设备授权状态、过期时间和设备描述。
 pub fn handle_auth_status(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     let cmd = match CmdAuthStatusQuery::decode(payload) {
         Ok(c) => c,
@@ -32,19 +32,38 @@ pub fn handle_auth_status(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         ctx.auth_service.refresh_token(&cmd.session_token);
     }
 
-    let rsp = RspAuthStatus {
-        authorized: false,
-        expire_time: 0,
-        device_description: String::new(),
-        auth_status: if token_valid {
-            "unauthorized".to_string()
-        } else {
-            "failed".to_string()
-        },
+    if !token_valid {
+        return make_rsp(ctx.seq_id, false, 0, "", "failed");
+    }
+
+    // 从 storage 读取真实授权状态
+    let storage = match ctx.storage() {
+        Some(s) => s,
+        None => {
+            return make_rsp(ctx.seq_id, false, 0, "", "unauthorized");
+        }
     };
 
-    let payload = rsp.encode_to_vec();
-    codec::encode_frame(RSP_AUTH_STATUS, ctx.seq_id, &payload).unwrap_or_default()
+    let auth_status_str = config_value(storage, "auth_status");
+    let authorized = auth_status_str == "authorized";
+    let expire_time = config_value(storage, "auth_expire_time")
+        .parse::<i64>()
+        .unwrap_or(0);
+    let device_description = config_value(storage, "device_description");
+
+    let status = if authorized { "authorized" } else { "unauthorized" };
+
+    make_rsp(ctx.seq_id, authorized, expire_time, &device_description, status)
+}
+
+/// 从系统配置读取值。
+fn config_value(storage: &storage::Storage, key: &str) -> String {
+    storage
+        .config_get(key)
+        .ok()
+        .flatten()
+        .and_then(|c| c.config_value)
+        .unwrap_or_default()
 }
 
 /// 构造 RspAuthStatus 响应帧。

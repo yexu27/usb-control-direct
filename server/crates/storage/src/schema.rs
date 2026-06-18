@@ -306,17 +306,17 @@ fn insert_default_users(conn: &Connection, now: i64) -> Result<(), StorageError>
         (
             "admin",
             "$2b$12$ZDhWMHU7IE.y3Bwj8iRmrekwJT52DQxDx33mVNz3hbLCZ9g5/NLwO",
-            0, // admin，明文密码 admin@123
+            0,
         ),
         (
             "operator",
             "$2b$12$nC77GZiBjNtullz9Zu4YUuDQ0XYMXKxcLWLkrYDDUYQKxBnaVj7X2",
-            1, // operator，明文密码 operator@123
+            1,
         ),
         (
             "audit",
             "$2b$12$07S1.9Mzmw26mMpp4zcx.O3gdFN/lMSmOpKo3xG01e2c4R52KW/HK",
-            2, // audit，明文密码 audit@123
+            2,
         ),
     ];
 

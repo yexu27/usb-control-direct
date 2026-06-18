@@ -74,39 +74,39 @@ pub fn register_auth_handlers(router: &mut Router) {
 
 /// 注册所有 P03 白名单 handler。
 pub fn register_whitelist_handlers(router: &mut Router) {
-    // 白名单列表（管理员和审计员可查看）
+    // 白名单列表（仅操作员）
     router.register_with_roles(
         CMD_LIST_WHITELIST,
         Box::new(super::whitelist::handle_list_whitelist),
-        vec![0, 1],
+        vec![1],
     );
 
-    // 添加白名单（管理员和审计员可操作）
+    // 添加白名单（仅操作员）
     router.register_with_roles(
         CMD_ADD_WHITELIST,
         Box::new(super::whitelist::handle_add_whitelist),
-        vec![0, 1],
+        vec![1],
     );
 
-    // 删除白名单（仅管理员）
+    // 删除白名单（仅操作员）
     router.register_with_roles(
         CMD_REMOVE_WHITELIST,
         Box::new(super::whitelist::handle_remove_whitelist),
-        vec![0],
+        vec![1],
     );
 
-    // 更新白名单（仅管理员）
+    // 更新白名单（仅操作员）
     router.register_with_roles(
         CMD_UPDATE_WHITELIST,
         Box::new(super::whitelist::handle_update_whitelist),
-        vec![0],
+        vec![1],
     );
 
-    // 当前连接设备列表（管理员和审计员）
+    // 当前连接设备列表（仅操作员）
     router.register_with_roles(
         CMD_GET_CONNECTED_DEVICES,
         Box::new(super::connected_devices::handle_get_connected_devices),
-        vec![0, 1],
+        vec![1],
     );
 }
 
@@ -173,11 +173,11 @@ pub fn register_license_handlers(router: &mut Router) {
 
 /// 注册系统管理 handler。
 pub fn register_system_handlers(router: &mut Router) {
-    // 获取系统信息（所有角色可查看）
+    // 获取系统信息（仅管理员）
     router.register_with_roles(
         CMD_GET_SYSTEM_INFO,
         Box::new(super::system::handle_get_system_info),
-        vec![0, 1, 2],
+        vec![0],
     );
 
     // 系统升级（仅管理员）

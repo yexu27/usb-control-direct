@@ -16,9 +16,9 @@ use crate::error::LicenseUpgradeError;
 #[derive(Debug)]
 pub struct UpgradeValidation {
     /// 升级数据。
-    pub data: Vec<u8>,
+    data: Vec<u8>,
     /// 目标版本。
-    pub target_version: String,
+    target_version: String,
 }
 
 /// 系统升级管理器。
