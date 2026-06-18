@@ -1,0 +1,25 @@
+[package]
+name = "usb-control-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "USB 安全管理装置端服务入口"
+
+[[bin]]
+name = "usb-control"
+path = "src/main.rs"
+
+[dependencies]
+common = { workspace = true }
+storage = { workspace = true }
+auth-session = { path = "../auth-session" }
+log-audit = { path = "../log-audit" }
+whitelist = { path = "../whitelist" }
+usb-identify = { path = "../usb-identify" }
+policy-import-export = { path = "../policy-import-export" }
+license-upgrade = { path = "../license-upgrade" }
+protocol-gateway = { path = "../protocol-gateway" }
+tokio = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

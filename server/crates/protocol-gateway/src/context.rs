@@ -13,6 +13,22 @@ use storage::Storage;
 use usb_identify::monitor::DeviceManager;
 use whitelist::WhitelistManager;
 
+/// 应用全局共享状态。
+///
+/// 聚合全部服务实例，在 main 中初始化后传入 handle_connection，
+/// 用于构建每个请求的 RequestContext。
+pub struct AppState {
+    pub auth_service: Arc<AuthService>,
+    pub audit_service: Arc<AuditService>,
+    pub whitelist_manager: Arc<WhitelistManager>,
+    pub device_manager: Arc<RwLock<DeviceManager>>,
+    pub storage: Arc<Storage>,
+    pub policy_service: Arc<PolicyService>,
+    pub license_validator: Arc<dyn LicenseValidator>,
+    pub system_upgrade_mgr: Arc<SystemUpgradeManager>,
+    pub virusdb_upgrade_mgr: Arc<VirusdbUpgradeManager>,
+}
+
 /// 请求上下文。
 pub struct RequestContext {
     /// 请求序列号。

@@ -13,6 +13,8 @@ whitelist = { path = "../whitelist" }
 hid-access = { path = "../hid-access" }
 log-audit = { path = "../log-audit" }
 thiserror = { workspace = true }
+nix = { workspace = true }
+udev = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1"
 

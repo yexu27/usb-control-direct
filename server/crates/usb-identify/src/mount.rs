@@ -57,12 +57,30 @@ impl MountOperations for RealMountOps {
             UsbIdentifyError::MountFailed(format!("创建挂载点 {} 失败: {}", mount_point, e))
         })?;
 
-        info!(dev = dev_path, mount_point = mount_point, fs_type = fs_type, "挂载设备");
+        nix::mount::mount(
+            Some(dev_path),
+            mount_point,
+            Some(fs_type),
+            nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID,
+            None::<&str>,
+        )
+        .map_err(|e| {
+            UsbIdentifyError::MountFailed(format!(
+                "挂载 {} -> {} (fs={}) 失败: {}",
+                dev_path, mount_point, fs_type, e
+            ))
+        })?;
+
+        info!(dev = dev_path, mount_point = mount_point, fs_type = fs_type, "挂载设备成功");
         Ok(())
     }
 
     fn umount(&self, mount_point: &str) -> Result<(), UsbIdentifyError> {
-        info!(mount_point = mount_point, "卸载设备（懒卸载）");
+        nix::mount::umount2(mount_point, nix::mount::MntFlags::MNT_DETACH).map_err(|e| {
+            UsbIdentifyError::UmountFailed(format!("卸载 {} 失败: {}", mount_point, e))
+        })?;
+
+        info!(mount_point = mount_point, "卸载设备成功（懒卸载）");
         Ok(())
     }
 

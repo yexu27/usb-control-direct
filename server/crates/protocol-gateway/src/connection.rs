@@ -11,12 +11,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 
-use auth_session::AuthService;
 use common::code::ResultCode;
-use log_audit::AuditService;
 
 use crate::codec;
-use crate::context::RequestContext;
+use crate::context::{AppState, RequestContext};
 use crate::error::GatewayError;
 use crate::middleware;
 use crate::router::Router;
@@ -99,15 +97,13 @@ fn make_error_response(seq_id: u32, code: ResultCode) -> Vec<u8> {
 ///   - `stream`: TLS 连接流。
 ///   - `router`: 消息路由器。
 ///   - `_guard`: 连接守卫（持有期间占用连接槽位）。
-///   - `auth_service`: 鉴权服务（共享）。
-///   - `audit_service`: 审计服务（共享）。
+///   - `state`: 应用全局共享状态（包含全部服务实例）。
 ///   - `source_ip`: 管理端来源 IP。
 pub async fn handle_connection(
     mut stream: TlsStream<TcpStream>,
     router: &Router,
     _guard: ConnectionGuard,
-    auth_service: Arc<AuthService>,
-    audit_service: Arc<AuditService>,
+    state: &AppState,
     source_ip: String,
 ) -> Result<(), GatewayError> {
     let mut buf = Vec::with_capacity(4096);
@@ -151,7 +147,7 @@ pub async fn handle_connection(
                     let token_result = middleware::check_token(
                         header.msg_type,
                         &payload,
-                        &auth_service,
+                        &state.auth_service,
                     );
 
                     let session = match token_result {
@@ -179,15 +175,15 @@ pub async fn handle_connection(
                         seq_id: header.seq_id,
                         session,
                         source_ip: source_ip.clone(),
-                        auth_service: Arc::clone(&auth_service),
-                        audit_service: Arc::clone(&audit_service),
-                        whitelist_manager: None,
-                        device_manager: None,
-                        storage: None,
-                        policy_service: None,
-                        license_validator: None,
-                        system_upgrade_mgr: None,
-                        virusdb_upgrade_mgr: None,
+                        auth_service: Arc::clone(&state.auth_service),
+                        audit_service: Arc::clone(&state.audit_service),
+                        whitelist_manager: Some(Arc::clone(&state.whitelist_manager)),
+                        device_manager: Some(Arc::clone(&state.device_manager)),
+                        storage: Some(Arc::clone(&state.storage)),
+                        policy_service: Some(Arc::clone(&state.policy_service)),
+                        license_validator: Some(Arc::clone(&state.license_validator)),
+                        system_upgrade_mgr: Some(Arc::clone(&state.system_upgrade_mgr)),
+                        virusdb_upgrade_mgr: Some(Arc::clone(&state.virusdb_upgrade_mgr)),
                     };
 
                     let response = router.dispatch(&ctx, header.msg_type, &payload);

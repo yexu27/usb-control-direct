@@ -14,6 +14,7 @@ pub mod descriptor;
 pub mod state_machine;
 pub mod mount;
 pub mod monitor;
+pub mod udev_monitor;
 
 pub use error::UsbIdentifyError;
 pub use traits::{DeviceMapper, MapContext, MappedSession, Scanner, ScanResult};
