@@ -54,8 +54,14 @@ impl GadgetManager {
     /// 参数:
     ///   - nbd_device: NBD 设备路径（如 /dev/nbd0）。
     ///   - readonly: 是否为只读映射。
-    pub fn enable(&mut self, nbd_device: &Path, readonly: bool) -> Result<(), std::io::Error> {
-        self.setup_gadget()?;
+    ///   - device_description: 设备描述，写入 configfs strings/0x409/product。
+    pub fn enable(
+        &mut self,
+        nbd_device: &Path,
+        readonly: bool,
+        device_description: &str,
+    ) -> Result<(), std::io::Error> {
+        self.setup_gadget(device_description)?;
         self.configure_mass_storage(nbd_device, readonly)?;
         self.bind_udc()?;
         self.enabled = true;
@@ -79,7 +85,7 @@ impl GadgetManager {
     }
 
     /// 设置 gadget 基础结构。
-    fn setup_gadget(&self) -> Result<(), std::io::Error> {
+    fn setup_gadget(&self, device_description: &str) -> Result<(), std::io::Error> {
         let gadget = &self.gadget_path;
 
         if !gadget.exists() {
@@ -97,7 +103,7 @@ impl GadgetManager {
         }
         write_file(&strings.join("serialnumber"), "USB_CTRL_001")?;
         write_file(&strings.join("manufacturer"), "USB Security")?;
-        write_file(&strings.join("product"), "Controlled USB Storage")?;
+        write_file(&strings.join("product"), device_description)?;
 
         let config = gadget.join("configs/c.1");
         if !config.exists() {
