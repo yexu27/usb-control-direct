@@ -54,6 +54,21 @@ tempfile = "3"
 # 国密算法
 smcrypto = "0.3"
 
+# 哈希
+sha2 = "0.10"
+
+# 二维码
+qrcode = "0.14"
+
+# 图片编码
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# 压缩解压
+zip = { version = "2.0", default-features = false, features = ["deflate"] }
+
+# 时间
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
 # 系统调用
 libc = "0.2"
 
