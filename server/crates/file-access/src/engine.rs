@@ -151,9 +151,16 @@ impl DeviceMapper for FileAccessEngine {
             });
 
             // 7. 启用 OTG Gadget
+            let device_description = self
+                .storage
+                .config_get("device_description")
+                .ok()
+                .flatten()
+                .and_then(|c| c.config_value)
+                .unwrap_or_else(|| "(AD USB protection dev)USB Device".to_string());
             let mut gadget = GadgetManager::new();
             gadget
-                .enable(&nbd_device_path, readonly)
+                .enable(&nbd_device_path, readonly, &device_description)
                 .map_err(|e| MapError::GadgetFailed(e.to_string()))?;
 
             // 8. 保存映射状态
