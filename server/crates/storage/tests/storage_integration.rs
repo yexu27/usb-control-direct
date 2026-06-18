@@ -271,3 +271,248 @@ fn t11_retention_event_insert() {
     let id = s.retention_event_insert(&item).unwrap();
     assert!(id > 0);
 }
+
+// ========== T05 分页查询 / 批量删除 ==========
+
+fn make_usb_audit(event_time: i64, event_type: &str, device_name: &str) -> UsbAuditLogInsert {
+    UsbAuditLogInsert {
+        event_time,
+        device_type: Some("storage".into()),
+        interface_type: None,
+        interface_class: None,
+        interface_subclass: None,
+        interface_protocol: None,
+        device_name: Some(device_name.into()),
+        device_sn: Some("SN-TEST".into()),
+        vid: None,
+        pid: None,
+        event_type: event_type.into(),
+        permission: None,
+        capacity_bytes: None,
+        file_path: None,
+        matched_policy: None,
+        result: "allowed".into(),
+        fail_reason: None,
+        detail: None,
+    }
+}
+
+#[test]
+fn t05_usb_audit_paged_query() {
+    let (s, _tmp) = setup();
+    let base = 1_700_000_000_i64;
+    s.usb_audit_insert(&make_usb_audit(base, "device_insert", "KingstonUSB")).unwrap();
+    s.usb_audit_insert(&make_usb_audit(base + 1, "device_insert", "SandiskUSB")).unwrap();
+    s.usb_audit_insert(&make_usb_audit(base + 2, "file_read", "KingstonUSB")).unwrap();
+
+    // 关键字过滤 Kingston，应匹配 2 条
+    let params = LogQueryParams {
+        keyword: Some("Kingston".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.usb_audit_query_paged(&params).unwrap();
+    assert_eq!(total, 2);
+    assert_eq!(rows.len(), 2);
+
+    // event_type 过滤，应匹配 1 条
+    let params = LogQueryParams {
+        event_type: Some("file_read".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.usb_audit_query_paged(&params).unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(rows[0].event_type, "file_read");
+}
+
+#[test]
+fn t05_usb_audit_paged_query_pagination() {
+    let (s, _tmp) = setup();
+    let base = 1_700_000_100_i64;
+    for i in 0..5_i64 {
+        s.usb_audit_insert(&make_usb_audit(base + i, "device_insert", "Device")).unwrap();
+    }
+
+    let params = LogQueryParams {
+        page: 1,
+        page_size: 2,
+        ..Default::default()
+    };
+    let (rows, total) = s.usb_audit_query_paged(&params).unwrap();
+    assert_eq!(total, 5);
+    assert_eq!(rows.len(), 2);
+
+    // 第 3 页应只有 1 条
+    let params = LogQueryParams {
+        page: 3,
+        page_size: 2,
+        ..Default::default()
+    };
+    let (rows, total) = s.usb_audit_query_paged(&params).unwrap();
+    assert_eq!(total, 5);
+    assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn t05_usb_audit_delete_by_time() {
+    let (s, _tmp) = setup();
+    let base = 1_700_000_200_i64;
+    s.usb_audit_insert(&make_usb_audit(base, "device_insert", "D1")).unwrap();
+    s.usb_audit_insert(&make_usb_audit(base + 10, "device_insert", "D2")).unwrap();
+    s.usb_audit_insert(&make_usb_audit(base + 20, "device_insert", "D3")).unwrap();
+
+    // 删除前两条
+    let deleted = s.usb_audit_delete_by_time(base, base + 10).unwrap();
+    assert_eq!(deleted, 2);
+
+    let count = s.usb_audit_count().unwrap();
+    assert_eq!(count, 1);
+}
+
+// ========== T06 分页查询 / 批量删除 ==========
+
+fn make_malware(scan_time: i64, virus_name: &str, device_name: &str) -> MalwareLogInsert {
+    MalwareLogInsert {
+        scan_time,
+        device_sn: Some("SN-MAL".into()),
+        device_name: Some(device_name.into()),
+        file_path: Some("/tmp/test.exe".into()),
+        scan_result: 1,
+        virus_name: Some(virus_name.into()),
+        virus_db_version: Some("daily".into()),
+        process_result: Some(1),
+        fail_reason: None,
+        detail: None,
+    }
+}
+
+#[test]
+fn t06_malware_paged_query() {
+    let (s, _tmp) = setup();
+    let base = 1_700_001_000_i64;
+    s.malware_insert(&make_malware(base, "Eicar", "USB-A")).unwrap();
+    s.malware_insert(&make_malware(base + 1, "Trojan.X", "USB-B")).unwrap();
+    s.malware_insert(&make_malware(base + 2, "Eicar", "USB-C")).unwrap();
+
+    // 关键字过滤 Eicar，应匹配 2 条
+    let params = LogQueryParams {
+        keyword: Some("Eicar".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.malware_query_paged(&params).unwrap();
+    assert_eq!(total, 2);
+    assert_eq!(rows.len(), 2);
+
+    // 时间范围过滤
+    let params = LogQueryParams {
+        start_time: Some(base + 1),
+        end_time: Some(base + 2),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.malware_query_paged(&params).unwrap();
+    assert_eq!(total, 2);
+    assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn t06_malware_delete_by_time() {
+    let (s, _tmp) = setup();
+    let base = 1_700_001_100_i64;
+    s.malware_insert(&make_malware(base, "V1", "D1")).unwrap();
+    s.malware_insert(&make_malware(base + 10, "V2", "D2")).unwrap();
+    s.malware_insert(&make_malware(base + 20, "V3", "D3")).unwrap();
+
+    let deleted = s.malware_delete_by_time(base, base + 10).unwrap();
+    assert_eq!(deleted, 2);
+
+    let count = s.malware_count().unwrap();
+    assert_eq!(count, 1);
+}
+
+// ========== T10 分页查询 / 批量删除 ==========
+
+fn make_op_log(op_time: i64, log_type: &str, action_type: &str, username: &str) -> OperationLogInsert {
+    OperationLogInsert {
+        op_time,
+        username: username.into(),
+        role: 0,
+        log_type: log_type.into(),
+        action_type: Some(action_type.into()),
+        target: Some("target_obj".into()),
+        before_value: None,
+        after_value: None,
+        related_file: None,
+        related_version: None,
+        result: 0,
+        fail_reason: None,
+        source_ip: Some("127.0.0.1".into()),
+        app_version: None,
+        session_id: None,
+        request_id: None,
+        detail: None,
+    }
+}
+
+#[test]
+fn t10_operation_log_paged_query() {
+    let (s, _tmp) = setup();
+    let base = 1_700_002_000_i64;
+    s.operation_log_insert(&make_op_log(base, "login_auth", "login", "admin")).unwrap();
+    s.operation_log_insert(&make_op_log(base + 1, "policy_manage", "create", "admin")).unwrap();
+    s.operation_log_insert(&make_op_log(base + 2, "login_auth", "logout", "operator")).unwrap();
+
+    // log_category 过滤 login_auth
+    let params = LogQueryParams {
+        log_category: Some("login_auth".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.operation_log_query_paged(&params).unwrap();
+    assert_eq!(total, 2);
+    assert_eq!(rows.len(), 2);
+
+    // action_type 过滤
+    let params = LogQueryParams {
+        action_type: Some("create".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.operation_log_query_paged(&params).unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(rows[0].log_type, "policy_manage");
+
+    // 关键字过滤用户名
+    let params = LogQueryParams {
+        keyword: Some("operator".into()),
+        page: 1,
+        page_size: 10,
+        ..Default::default()
+    };
+    let (rows, total) = s.operation_log_query_paged(&params).unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(rows[0].username, "operator");
+}
+
+#[test]
+fn t10_operation_log_delete_by_time() {
+    let (s, _tmp) = setup();
+    let base = 1_700_002_100_i64;
+    s.operation_log_insert(&make_op_log(base, "login_auth", "login", "admin")).unwrap();
+    s.operation_log_insert(&make_op_log(base + 10, "login_auth", "logout", "admin")).unwrap();
+    s.operation_log_insert(&make_op_log(base + 20, "policy_manage", "create", "admin")).unwrap();
+
+    let deleted = s.operation_log_delete_by_time(base, base + 10).unwrap();
+    assert_eq!(deleted, 2);
+
+    let count = s.operation_log_count().unwrap();
+    assert_eq!(count, 1);
+}

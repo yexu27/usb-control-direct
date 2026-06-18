@@ -250,3 +250,16 @@ pub struct LogRetentionEventInsert {
     pub result: i32,
     pub fail_reason: Option<String>,
 }
+
+/// 日志分页查询参数。
+#[derive(Debug, Clone, Default)]
+pub struct LogQueryParams {
+    pub start_time: Option<i64>,
+    pub end_time: Option<i64>,
+    pub keyword: Option<String>,
+    pub event_type: Option<String>,
+    pub log_category: Option<String>,
+    pub action_type: Option<String>,
+    pub page: i32,
+    pub page_size: i32,
+}
