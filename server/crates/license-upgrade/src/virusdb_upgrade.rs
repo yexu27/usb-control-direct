@@ -118,8 +118,8 @@ impl VirusdbUpgradeManager {
 
             let name = file.name().to_string();
 
-            // 安全检查：跳过包含路径遍历的条目
-            if name.contains("..") {
+            // 安全检查：跳过包含路径遍历或绝对路径的条目
+            if name.contains("..") || name.starts_with('/') {
                 continue;
             }
 
@@ -129,10 +129,10 @@ impl VirusdbUpgradeManager {
             })?;
 
             // 只取文件名，不保留目录结构
-            let file_name = Path::new(&name)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(name);
+            let file_name = match Path::new(&name).file_name() {
+                Some(n) => n.to_string_lossy().to_string(),
+                None => continue,
+            };
 
             files.push((file_name, content));
         }
@@ -166,6 +166,10 @@ impl VirusdbUpgradeManager {
             })?;
 
             let path = entry.path();
+            let file_name_str = entry.file_name().to_string_lossy().to_string();
+            if file_name_str.starts_with('.') {
+                continue;
+            }
             if path.is_file() {
                 let file_name = entry.file_name();
                 let dest = backup_dir.join(&file_name);

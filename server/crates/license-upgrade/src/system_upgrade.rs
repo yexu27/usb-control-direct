@@ -60,6 +60,15 @@ impl SystemUpgradeManager {
             return Err(LicenseUpgradeError::UpgradeFormatError);
         }
 
+        // 路径遍历检查：target_version 会用于文件路径构造
+        if target_version.contains("..")
+            || target_version.contains('/')
+            || target_version.contains('\\')
+            || target_version.is_empty()
+        {
+            return Err(LicenseUpgradeError::UpgradeFormatError);
+        }
+
         if !is_version_greater(target_version, current_version) {
             return Err(LicenseUpgradeError::VersionTooLow);
         }
@@ -115,10 +124,7 @@ impl SystemUpgradeManager {
         }
 
         // 设置可执行权限
-        if let Err(e) = fs::set_permissions(&target_path, fs::Permissions::from_mode(0o755)) {
-            // 非致命错误，记录但不回滚
-            eprintln!("设置文件权限失败: {e}");
-        }
+        let _ = fs::set_permissions(&target_path, fs::Permissions::from_mode(0o755));
 
         // 清理备份
         let _ = fs::remove_file(&backup_path);
