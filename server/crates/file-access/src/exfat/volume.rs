@@ -192,27 +192,15 @@ impl<'a> VolumeBuilder<'a> {
             let blocked = matches!(decision, AccessDecision::Deny(_));
 
             if entry.is_dir {
-                // 目录：分配 1 簇存放子目录项
-                let dir_cluster = self.allocate_clusters(1);
-
-                // 生成目录项
-                let dir_entry_data = build_file_entry_set(
-                    &entry.virtual_name,
-                    true,
-                    dir_cluster,
-                    0,
-                    false,
-                );
-                self.root_dir_entries.extend(dir_entry_data);
-
-                // 递归构建子目录内容
+                // 目录：按实际子目录项大小动态分配簇数
+                let mut child_dir_data = Vec::new();
                 if !entry.children.is_empty() {
-                    let mut child_dir_data = Vec::new();
                     for child in &entry.children {
                         let child_decision = evaluate_access(child, self.snapshot);
                         let child_blocked = matches!(child_decision, AccessDecision::Deny(_));
 
                         if child.is_dir {
+                            // 子目录的簇号会在递归中分配
                             let child_cluster = self.allocate_clusters(1);
                             let child_entry = build_file_entry_set(
                                 &child.virtual_name,
@@ -257,21 +245,33 @@ impl<'a> VolumeBuilder<'a> {
                             }
                         }
                     }
-
-                    // 填充到簇大小
-                    child_dir_data.resize(CLUSTER_SIZE as usize, 0);
-                    self.cluster_allocations.push(ClusterAllocation::Metadata {
-                        start: dir_cluster,
-                        count: 1,
-                        data: child_dir_data,
-                    });
-                } else {
-                    self.cluster_allocations.push(ClusterAllocation::Metadata {
-                        start: dir_cluster,
-                        count: 1,
-                        data: vec![0u8; CLUSTER_SIZE as usize],
-                    });
                 }
+
+                // 按实际子目录项大小动态分配簇
+                let dir_clusters_needed = if child_dir_data.is_empty() {
+                    1
+                } else {
+                    (child_dir_data.len() as u32).div_ceil(CLUSTER_SIZE)
+                };
+                let dir_cluster = self.allocate_clusters(dir_clusters_needed);
+
+                // 生成目录项（放入父目录，即 root_dir_entries）
+                let dir_entry_data = build_file_entry_set(
+                    &entry.virtual_name,
+                    true,
+                    dir_cluster,
+                    0,
+                    false,
+                );
+                self.root_dir_entries.extend(dir_entry_data);
+
+                // 填充到簇对齐大小
+                child_dir_data.resize((dir_clusters_needed as usize) * CLUSTER_SIZE as usize, 0);
+                self.cluster_allocations.push(ClusterAllocation::Metadata {
+                    start: dir_cluster,
+                    count: dir_clusters_needed,
+                    data: child_dir_data,
+                });
             } else {
                 // 文件
                 let (file_cluster, file_clusters) = if entry.is_virus || entry.file_size == 0 {
@@ -306,6 +306,18 @@ impl<'a> VolumeBuilder<'a> {
 
     /// 生成最终的虚拟卷。
     fn generate(mut self) -> VirtualVolume {
+        // 根目录可能需要多个簇 — 在最终生成阶段分配额外簇
+        let root_data_len = self.root_dir_entries.len().max(CLUSTER_SIZE as usize);
+        let root_clusters_needed = (root_data_len as u32).div_ceil(CLUSTER_SIZE);
+        let root_extra_clusters = root_clusters_needed - 1; // cluster 2 已在 allocate_metadata 分配
+
+        // 为根目录分配额外簇（不需要连续，FAT 链处理）
+        let root_extra_start = if root_extra_clusters > 0 {
+            Some(self.allocate_clusters(root_extra_clusters))
+        } else {
+            None
+        };
+
         let total_clusters = self.next_cluster - FIRST_CLUSTER;
         let layout = DiskLayout::new(total_clusters);
 
@@ -335,8 +347,13 @@ impl<'a> VolumeBuilder<'a> {
 
         // FAT
         let mut fat_builder = FatBuilder::new(total_clusters);
-        // Root directory: cluster 2, single
-        fat_builder.set_single(2);
+        // Root directory: cluster 2, possibly chained
+        if root_clusters_needed == 1 {
+            fat_builder.set_single(2);
+        } else {
+            // cluster 2 -> root_extra_start -> root_extra_start+1 -> ... -> EOF
+            fat_builder.set_chain_from_parts(2, root_extra_start.unwrap(), root_extra_clusters);
+        }
         // Bitmap: cluster 3, single
         fat_builder.set_single(3);
 
@@ -401,14 +418,30 @@ impl<'a> VolumeBuilder<'a> {
             metadata_sectors.insert(bitmap_sector_start + i as u64, sector_data);
         }
 
-        // Root Directory
+        // Root Directory — 按实际大小写入多簇
         let mut root_data = self.root_dir_entries;
-        root_data.resize(CLUSTER_SIZE as usize, 0);
+        root_data.resize((root_clusters_needed as usize) * CLUSTER_SIZE as usize, 0);
+
+        // 写入 cluster 2（第一个簇）
         let root_sector_start = layout.cluster_to_sector(2);
         for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
             let offset = i * SECTOR_SIZE as usize;
             let data = root_data[offset..offset + SECTOR_SIZE as usize].to_vec();
             metadata_sectors.insert(root_sector_start + i as u64, data);
+        }
+
+        // 写入额外簇
+        if let Some(extra_start) = root_extra_start {
+            for c in 0..root_extra_clusters {
+                let cluster = extra_start + c;
+                let cluster_sector_start = layout.cluster_to_sector(cluster);
+                let cluster_data_offset = ((c + 1) as usize) * CLUSTER_SIZE as usize;
+                for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
+                    let offset = cluster_data_offset + i * SECTOR_SIZE as usize;
+                    let data = root_data[offset..offset + SECTOR_SIZE as usize].to_vec();
+                    metadata_sectors.insert(cluster_sector_start + i as u64, data);
+                }
+            }
         }
 
         // 元数据簇（upcase / 子目录）

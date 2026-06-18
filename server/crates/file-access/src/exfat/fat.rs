@@ -39,6 +39,21 @@ impl FatBuilder {
         }
     }
 
+    /// 分配分段簇链：first_cluster → extra_start → extra_start+1 → ... → EOF。
+    ///
+    /// 用于根目录等场景：第一个簇号固定，额外簇在后续分配。
+    pub fn set_chain_from_parts(&mut self, first_cluster: u32, extra_start: u32, extra_count: u32) {
+        self.entries[first_cluster as usize] = extra_start;
+        for i in 0..extra_count {
+            let cluster = extra_start + i;
+            if i + 1 < extra_count {
+                self.entries[cluster as usize] = cluster + 1;
+            } else {
+                self.entries[cluster as usize] = FAT_END_OF_CHAIN;
+            }
+        }
+    }
+
     /// 生成 FAT 表数据（扇区对齐）。
     pub fn build(&self, fat_length_sectors: u64) -> Vec<u8> {
         let size = fat_length_sectors as usize * SECTOR_SIZE as usize;

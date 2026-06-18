@@ -124,3 +124,54 @@ pub fn read_sysfs_attr(device_path: &Path, attr: &str) -> Option<String> {
 pub fn parse_hex_u8(s: &str) -> Option<u8> {
     u8::from_str_radix(s.trim_start_matches("0x"), 16).ok()
 }
+
+/// 单个 USB 接口信息。
+#[derive(Debug, Clone)]
+pub struct InterfaceInfo {
+    pub interface_class: u8,
+    pub interface_subclass: u8,
+    pub interface_protocol: u8,
+}
+
+/// 检测设备是否为 BadUSB（多接口伪装）。
+///
+/// 一个设备同时暴露 Storage（0x08）和 HID（0x03）接口时标记为可疑。
+pub fn detect_badusb(interfaces: &[InterfaceInfo]) -> bool {
+    let has_storage = interfaces
+        .iter()
+        .any(|iface| iface.interface_class == CLASS_MASS_STORAGE);
+    let has_hid = interfaces
+        .iter()
+        .any(|iface| iface.interface_class == CLASS_HID);
+    has_storage && has_hid
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_badusb_storage_plus_hid() {
+        let interfaces = vec![
+            InterfaceInfo { interface_class: 0x08, interface_subclass: 0x06, interface_protocol: 0x50 },
+            InterfaceInfo { interface_class: 0x03, interface_subclass: 0x01, interface_protocol: 0x01 },
+        ];
+        assert!(detect_badusb(&interfaces));
+    }
+
+    #[test]
+    fn detect_badusb_storage_only() {
+        let interfaces = vec![
+            InterfaceInfo { interface_class: 0x08, interface_subclass: 0x06, interface_protocol: 0x50 },
+        ];
+        assert!(!detect_badusb(&interfaces));
+    }
+
+    #[test]
+    fn detect_badusb_hid_only() {
+        let interfaces = vec![
+            InterfaceInfo { interface_class: 0x03, interface_subclass: 0x01, interface_protocol: 0x01 },
+        ];
+        assert!(!detect_badusb(&interfaces));
+    }
+}

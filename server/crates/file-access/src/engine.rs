@@ -18,7 +18,7 @@ use crate::file_tree::build_file_tree;
 use crate::gadget::GadgetManager;
 use crate::nbd::{run_request_loop, NbdServer};
 use crate::policy::{evaluate_access, load_policy_snapshot};
-use crate::types::AccessDecision;
+use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
 use crate::write_back::WriteBackManager;
 
 /// S04 文件访问控制引擎。
@@ -86,6 +86,19 @@ impl FileAccessEngine {
             error!("写入文件阻断审计日志失败: {}", e);
         }
     }
+
+    /// 递归遍历文件树，记录所有被策略阻断的文件审计日志。
+    fn log_block_events_recursive(&self, entries: &[ControlledEntry], snapshot: &PolicySnapshot) {
+        for entry in entries {
+            let decision = evaluate_access(entry, snapshot);
+            if let AccessDecision::Deny(ref reason) = decision {
+                self.log_block_event(&entry.virtual_name, reason);
+            }
+            if entry.is_dir && !entry.children.is_empty() {
+                self.log_block_events_recursive(&entry.children, snapshot);
+            }
+        }
+    }
 }
 
 impl DeviceMapper for FileAccessEngine {
@@ -112,13 +125,8 @@ impl DeviceMapper for FileAccessEngine {
             let tree = build_file_tree(mount_path, &ctx.scan_result.infected_files);
             info!("文件树构建完成: {} 个根节点", tree.len());
 
-            // 3. 记录阻断事件审计日志
-            for entry in &tree {
-                let decision = evaluate_access(entry, &snapshot);
-                if let AccessDecision::Deny(ref reason) = decision {
-                    self.log_block_event(&entry.virtual_name, reason);
-                }
-            }
+            // 3. 递归记录阻断事件审计日志
+            self.log_block_events_recursive(&tree, &snapshot);
 
             // 4. 生成虚拟 exFAT 卷
             let volume = VirtualVolume::build(&tree, &snapshot);
