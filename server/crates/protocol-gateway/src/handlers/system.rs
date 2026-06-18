@@ -253,21 +253,8 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
         return error_response(
             ctx.seq_id,
             ResultCode::DeviceDescFormatError,
-            "设备描述格式错误（不超过32字符，仅允许字母、数字、下划线和中文）",
+            "设备描述格式错误",
         );
-    }
-
-    // 检查是否有 USB 连接
-    if let Some(ref dm) = ctx.device_manager {
-        if let Ok(guard) = dm.read() {
-            if !guard.connected_devices().is_empty() {
-                return error_response(
-                    ctx.seq_id,
-                    ResultCode::DeviceHasUsbConnected,
-                    "当前有 USB 设备连接，不允许修改设备描述",
-                );
-            }
-        }
     }
 
     let storage = match ctx.storage() {
@@ -311,7 +298,7 @@ fn validate_device_desc(desc: &str) -> bool {
         && desc.chars().count() <= 32
         && desc
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || ('\u{4e00}'..='\u{9fff}').contains(&c))
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// 从系统配置读取值。
