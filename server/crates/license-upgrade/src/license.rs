@@ -39,7 +39,8 @@ pub trait LicenseValidator: Send + Sync {
 /// - 第 1 行：机器码（与当前装置机器码匹配）。
 /// - 第 2 行：Unix 时间戳（过期时间）。
 ///
-/// 仅用于开发和测试阶段。
+/// 仅用于开发和测试阶段，不得在生产代码中使用。
+#[doc(hidden)]
 pub struct MockLicenseValidator;
 
 impl LicenseValidator for MockLicenseValidator {

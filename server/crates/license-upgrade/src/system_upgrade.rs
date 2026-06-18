@@ -164,7 +164,7 @@ impl SystemUpgradeManager {
 /// 比较两个语义版本号是否 new > current。
 ///
 /// 版本号格式：`[vV]major.minor.patch`，前缀 V/v 可省略。
-/// 按 major、minor、patch 逐段比较。
+/// 按 major、minor、patch 逐段比较。非数字段视为格式错误，返回 `false`。
 ///
 /// 参数:
 /// - `new_version`: 新版本号。
@@ -173,15 +173,21 @@ impl SystemUpgradeManager {
 /// 返回:
 /// - 新版本大于当前版本时返回 `true`。
 pub fn is_version_greater(new_version: &str, current_version: &str) -> bool {
-    let parse = |v: &str| -> Vec<u64> {
+    let parse = |v: &str| -> Option<Vec<u64>> {
         let v = v.trim_start_matches(['v', 'V']);
         v.split('.')
-            .filter_map(|s| s.parse::<u64>().ok())
+            .map(|s| s.parse::<u64>().ok())
             .collect()
     };
 
-    let new_parts = parse(new_version);
-    let cur_parts = parse(current_version);
+    let new_parts = match parse(new_version) {
+        Some(p) => p,
+        None => return false,
+    };
+    let cur_parts = match parse(current_version) {
+        Some(p) => p,
+        None => return false,
+    };
 
     for i in 0..new_parts.len().max(cur_parts.len()) {
         let n = new_parts.get(i).copied().unwrap_or(0);
@@ -242,6 +248,12 @@ mod tests {
     fn version_greater_different_segment_count() {
         assert!(is_version_greater("1.0.1", "1.0"));
         assert!(!is_version_greater("1.0", "1.0.1"));
+    }
+
+    #[test]
+    fn version_non_numeric_segments_rejected() {
+        assert!(!is_version_greater("1.abc.3", "1.0.0"));
+        assert!(!is_version_greater("2.0.0", "1.x.0"));
     }
 
     #[test]

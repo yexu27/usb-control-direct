@@ -50,6 +50,14 @@ pub enum AuthError {
     #[error("不允许删除当前登录用户")]
     SelfDeleteForbidden,
 
+    /// 用户名格式无效。
+    #[error("用户名格式无效")]
+    InvalidUsername,
+
+    /// 角色值无效。
+    #[error("角色值无效")]
+    InvalidRole,
+
     /// 存储层错误。
     #[error("存储错误: {0}")]
     Storage(#[from] storage::error::StorageError),
@@ -78,6 +86,7 @@ impl AuthError {
             AuthError::UserNotFound => ResultCode::UserNotFound,
             AuthError::BuiltinUserNoDelete => ResultCode::BuiltinUserNoDelete,
             AuthError::SelfDeleteForbidden => ResultCode::SelfDeleteForbidden,
+            AuthError::InvalidUsername | AuthError::InvalidRole => ResultCode::ValidationFailed,
             AuthError::Storage(_) | AuthError::Bcrypt(_) | AuthError::Internal(_) => {
                 ResultCode::InternalError
             }

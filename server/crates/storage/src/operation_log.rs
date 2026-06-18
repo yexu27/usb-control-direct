@@ -4,7 +4,7 @@ use rusqlite::params;
 
 use crate::error::StorageError;
 use crate::model::{LogQueryParams, OperationLog, OperationLogInsert};
-use crate::Storage;
+use crate::{escape_like_keyword, MAX_PAGE_SIZE, Storage};
 
 impl Storage {
     /// 插入操作日志。
@@ -105,11 +105,11 @@ impl Storage {
             }
             if let Some(ref keyword) = params.keyword {
                 if !keyword.is_empty() {
+                    let idx = bind_values.len() + 1;
                     conditions.push(format!(
-                        "(username LIKE ?{0} OR target LIKE ?{0} OR detail LIKE ?{0})",
-                        bind_values.len() + 1
+                        "(username LIKE ?{idx} ESCAPE '\\' OR target LIKE ?{idx} ESCAPE '\\' OR detail LIKE ?{idx} ESCAPE '\\')"
                     ));
-                    bind_values.push(Box::new(format!("%{}%", keyword)));
+                    bind_values.push(Box::new(escape_like_keyword(keyword)));
                 }
             }
             if let Some(ref log_category) = params.log_category {
@@ -143,7 +143,7 @@ impl Storage {
             let page_size = if params.page_size < 1 {
                 50
             } else {
-                params.page_size.min(500)
+                params.page_size.min(MAX_PAGE_SIZE)
             };
             let offset = (page - 1) as i64 * page_size as i64;
 

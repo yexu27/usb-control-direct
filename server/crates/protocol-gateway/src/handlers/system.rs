@@ -94,7 +94,6 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
     match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
         Ok(validation) => {
             if let Err(e) = mgr.apply_upgrade(validation) {
-                let code = e.to_result_code();
                 log_operation(
                     ctx,
                     session,
@@ -103,11 +102,13 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                     1,
                     Some(&e.to_string()),
                 );
-                return error_response(ctx.seq_id, code, &e.to_string());
+                return error_response(ctx.seq_id, e.to_result_code(), "系统升级安装失败");
             }
 
-            // 更新系统版本号
-            let _ = storage.config_set("system_version", &cmd.target_version);
+            if let Err(_e) = storage.config_set("system_version", &cmd.target_version) {
+                log_operation(ctx, session, "system_upgrade", &cmd.target_version, 1, Some("版本号持久化失败"));
+                return error_response(ctx.seq_id, ResultCode::InternalError, "版本号持久化失败");
+            }
 
             log_operation(
                 ctx,
@@ -124,7 +125,6 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             success_response(ctx.seq_id)
         }
         Err(e) => {
-            let code = e.to_result_code();
             log_operation(
                 ctx,
                 session,
@@ -133,7 +133,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, code, &e.to_string())
+            error_response(ctx.seq_id, e.to_result_code(), "系统升级校验失败")
         }
     }
 }
@@ -175,7 +175,6 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     let current_version = config_value(storage, "virus_db_version");
 
     if let Err(e) = mgr.validate_upgrade(&cmd.target_version, &current_version) {
-        let code = e.to_result_code();
         log_operation(
             ctx,
             session,
@@ -184,11 +183,10 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
             1,
             Some(&e.to_string()),
         );
-        return error_response(ctx.seq_id, code, &e.to_string());
+        return error_response(ctx.seq_id, e.to_result_code(), "病毒库版本校验失败");
     }
 
     if let Err(e) = mgr.apply_upgrade(&cmd.upgrade_data) {
-        let code = e.to_result_code();
         log_operation(
             ctx,
             session,
@@ -197,16 +195,21 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
             1,
             Some(&e.to_string()),
         );
-        return error_response(ctx.seq_id, code, &e.to_string());
+        return error_response(ctx.seq_id, e.to_result_code(), "病毒库升级安装失败");
     }
 
-    // 更新病毒库版本和更新时间
-    let _ = storage.config_set("virus_db_version", &cmd.target_version);
+    if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
+        log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
+        return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
+    }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    let _ = storage.config_set("virus_db_updated_at", &now.to_string());
+    if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
+        log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
+        return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
+    }
 
     log_operation(
         ctx,
@@ -284,7 +287,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+            error_response(ctx.seq_id, ResultCode::InternalError, "设备描述保存失败")
         }
     }
 }

@@ -54,7 +54,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(e) => {
             let code = e.to_result_code();
             log_operation(ctx, session, "export", "策略配置", 1, Some(&e.to_string()));
-            export_error(ctx.seq_id, code, &e.to_string())
+            export_error(ctx.seq_id, code, "策略导出失败")
         }
     }
 }
@@ -94,7 +94,7 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(e) => {
             let code = e.to_result_code();
             log_operation(ctx, session, "import", "策略配置", 1, Some(&e.to_string()));
-            error_response(ctx.seq_id, code, &e.to_string())
+            error_response(ctx.seq_id, code, "策略导入失败")
         }
     }
 }

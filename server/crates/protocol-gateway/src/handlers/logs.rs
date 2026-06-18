@@ -66,7 +66,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, &e.to_string()),
+            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
         },
         LogType::Malware => match storage.malware_query_paged(&params) {
             Ok((items, total)) => {
@@ -85,7 +85,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, &e.to_string()),
+            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
         },
         LogType::Operation => match storage.operation_log_query_paged(&params) {
             Ok((items, total)) => {
@@ -105,7 +105,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, &e.to_string()),
+            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
         },
     }
 }
@@ -157,26 +157,26 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         log_category: optional_str(&cmd.log_category),
         action_type: optional_str(&cmd.action_type),
         page: 1,
-        page_size: 100_000,
+        page_size: 10_000,
     };
 
     let csv_content = match log_type {
         LogType::UsbAudit => match storage.usb_audit_query_paged(&params) {
             Ok((items, _)) => generate_usb_audit_csv(&items),
-            Err(e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, &e.to_string());
+            Err(_e) => {
+                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
             }
         },
         LogType::Malware => match storage.malware_query_paged(&params) {
             Ok((items, _)) => generate_malware_csv(&items),
-            Err(e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, &e.to_string());
+            Err(_e) => {
+                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
             }
         },
         LogType::Operation => match storage.operation_log_query_paged(&params) {
             Ok((items, _)) => generate_operation_csv(&items),
-            Err(e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, &e.to_string());
+            Err(_e) => {
+                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
             }
         },
     };
@@ -206,7 +206,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            export_error(ctx.seq_id, ResultCode::LogExportFailed, &e.to_string())
+            export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志导出失败")
         }
     }
 }
@@ -235,6 +235,13 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     };
 
     // 校验时间范围合法性
+    if cmd.start_time <= 0 || cmd.end_time <= 0 {
+        return error_response(
+            ctx.seq_id,
+            ResultCode::ValidationFailed,
+            "起始时间和结束时间必须为正整数",
+        );
+    }
     if cmd.start_time > cmd.end_time {
         return error_response(
             ctx.seq_id,
@@ -288,7 +295,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+            error_response(ctx.seq_id, ResultCode::InternalError, "日志清理失败")
         }
     }
 }

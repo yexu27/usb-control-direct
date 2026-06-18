@@ -204,6 +204,10 @@ impl AuthService {
         password_str: &str,
         confirm_password: &str,
     ) -> Result<i64, AuthError> {
+        if !validate_username(username) {
+            return Err(AuthError::InvalidUsername);
+        }
+
         if password_str != confirm_password {
             return Err(AuthError::PasswordConfirmMismatch);
         }
@@ -213,7 +217,7 @@ impl AuthService {
         }
 
         if !(0..=2).contains(&role) {
-            return Err(AuthError::Internal("角色不合法".into()));
+            return Err(AuthError::InvalidRole);
         }
 
         if let Some(existing) = self.storage.user_query_by_username(username)? {
@@ -311,4 +315,15 @@ fn now_unix() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64
+}
+
+/// 校验用户名格式。
+///
+/// 规则：1-32 字符，仅允许字母、数字和下划线。
+fn validate_username(username: &str) -> bool {
+    !username.is_empty()
+        && username.len() <= 32
+        && username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
 }

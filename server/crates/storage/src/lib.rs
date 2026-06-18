@@ -54,6 +54,21 @@ impl Storage {
     }
 }
 
+/// 分页查询每页最大条数。
+pub(crate) const MAX_PAGE_SIZE: i32 = 1000;
+
+/// 转义 LIKE 模式通配符。
+///
+/// 将 `%`、`_` 和 `\` 转义后包裹在 `%...%` 中，
+/// 配合 `ESCAPE '\'` 子句使用，防止用户输入被解释为通配符。
+pub(crate) fn escape_like_keyword(keyword: &str) -> String {
+    let escaped = keyword
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
+}
+
 /// 获取当前 Unix 时间戳（秒）。
 pub(crate) fn now_unix() -> i64 {
     std::time::SystemTime::now()

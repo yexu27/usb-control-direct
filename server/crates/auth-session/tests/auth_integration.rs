@@ -349,7 +349,7 @@ fn create_user_invalid_role() {
         .unwrap_err();
     assert_eq!(
         err.to_result_code(),
-        common::code::ResultCode::InternalError
+        common::code::ResultCode::ValidationFailed
     );
 }
 

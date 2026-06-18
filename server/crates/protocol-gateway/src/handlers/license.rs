@@ -72,7 +72,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
                 1,
                 Some(&e.to_string()),
             );
-            machine_code_error(ctx.seq_id, code, &e.to_string())
+            machine_code_error(ctx.seq_id, code, "机器码生成失败")
         }
     }
 }
@@ -122,16 +122,21 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     // 获取当前机器码用于校验
     let machine_code = match license_upgrade::generate_machine_code() {
         Ok(r) => r.machine_code,
-        Err(e) => {
-            return license_error(ctx.seq_id, ResultCode::InternalError, &e.to_string());
+        Err(_e) => {
+            return license_error(ctx.seq_id, ResultCode::InternalError, "机器码获取失败");
         }
     };
 
     match validator.validate(&cmd.license_data, &machine_code) {
         Ok(info) => {
-            // 更新授权状态到数据库
-            let _ = storage.config_set("auth_status", "authorized");
-            let _ = storage.config_set("auth_expire_time", &info.expire_time.to_string());
+            if let Err(_e) = storage.config_set("auth_status", "authorized") {
+                log_operation(ctx, session, "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
+                return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
+            }
+            if let Err(_e) = storage.config_set("auth_expire_time", &info.expire_time.to_string()) {
+                log_operation(ctx, session, "upload_license", "授权文件", 1, Some("授权过期时间持久化失败"));
+                return license_error(ctx.seq_id, ResultCode::InternalError, "授权过期时间持久化失败");
+            }
 
             log_operation(ctx, session, "upload_license", "授权文件", 0, None);
             let rsp = RspUploadLicense {
@@ -153,7 +158,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            license_error(ctx.seq_id, code, &e.to_string())
+            license_error(ctx.seq_id, code, "授权校验失败")
         }
     }
 }

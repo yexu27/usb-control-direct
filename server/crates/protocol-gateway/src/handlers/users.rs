@@ -81,7 +81,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, code, &e.to_string())
+            error_response(ctx.seq_id, code, "用户创建失败")
         }
     }
 }
@@ -120,7 +120,7 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, code, &e.to_string())
+            error_response(ctx.seq_id, code, "用户删除失败")
         }
     }
 }
@@ -159,7 +159,7 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 1,
                 Some(&e.to_string()),
             );
-            error_response(ctx.seq_id, code, &e.to_string())
+            error_response(ctx.seq_id, code, "密码重置失败")
         }
     }
 }
