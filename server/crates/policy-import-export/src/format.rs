@@ -145,10 +145,25 @@ pub fn deserialize_policy(data: &[u8]) -> Result<PolicyContent, PolicyError> {
 /// - `signature`: SM2 签名。
 ///
 /// 返回:
-/// - 组装后的 .bin 文件字节序列。
-pub fn assemble_bin(iv: &[u8; 16], ciphertext: &[u8], digest: &[u8], signature: &[u8]) -> Vec<u8> {
-    let ciphertext_len = ciphertext.len() as u32;
-    let signature_len = signature.len() as u32;
+/// - 成功时返回组装后的 .bin 文件字节序列；失败时返回 [`PolicyError::FormatError`]。
+pub fn assemble_bin(
+    iv: &[u8; 16],
+    ciphertext: &[u8],
+    digest: &[u8],
+    signature: &[u8],
+) -> Result<Vec<u8>, PolicyError> {
+    let ciphertext_len = u32::try_from(ciphertext.len()).map_err(|_| {
+        PolicyError::FormatError(format!(
+            "密文长度超出 u32 范围: {} 字节",
+            ciphertext.len()
+        ))
+    })?;
+    let signature_len = u32::try_from(signature.len()).map_err(|_| {
+        PolicyError::FormatError(format!(
+            "签名长度超出 u32 范围: {} 字节",
+            signature.len()
+        ))
+    })?;
 
     let total_len = HEADER_LEN + 4 + ciphertext.len() + SM3_DIGEST_LEN + 4 + signature.len();
     let mut buf = Vec::with_capacity(total_len);
@@ -170,7 +185,7 @@ pub fn assemble_bin(iv: &[u8; 16], ciphertext: &[u8], digest: &[u8], signature: 
     buf.extend_from_slice(&signature_len.to_le_bytes());
     buf.extend_from_slice(signature);
 
-    buf
+    Ok(buf)
 }
 
 /// 解析后的 .bin 文件结构。
@@ -219,6 +234,12 @@ pub fn parse_bin(data: &[u8]) -> Result<ParsedBin, PolicyError> {
 
     // 解析算法标识
     let alg_id = u16::from_le_bytes([data[6], data[7]]);
+    if alg_id != ALG_ID {
+        return Err(PolicyError::FormatError(format!(
+            "算法标识不匹配: 期望 0x{:04X}, 实际 0x{:04X}",
+            ALG_ID, alg_id
+        )));
+    }
 
     // 解析 IV
     let mut iv = [0u8; 16];
@@ -327,7 +348,7 @@ mod tests {
         let digest = [2u8; 32].to_vec();
         let signature = b"signature bytes".to_vec();
 
-        let bin = assemble_bin(&iv, &ciphertext, &digest, &signature);
+        let bin = assemble_bin(&iv, &ciphertext, &digest, &signature).expect("组装失败");
         let parsed = parse_bin(&bin).expect("解析失败");
 
         assert_eq!(parsed.version, CURRENT_VERSION);

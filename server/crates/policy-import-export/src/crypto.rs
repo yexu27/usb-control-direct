@@ -62,8 +62,8 @@ pub fn sm4_cbc_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8]) -> Result<Vec<u
 /// - `data`: 待计算摘要的数据。
 ///
 /// 返回:
-/// - 32 字节摘要值。
-pub fn sm3_hash(data: &[u8]) -> Vec<u8> {
+/// - 成功时返回 32 字节摘要值；失败时返回 [`PolicyError::FormatError`]。
+pub fn sm3_hash(data: &[u8]) -> Result<Vec<u8>, PolicyError> {
     let hex_str = sm3::sm3_hash(data);
     hex_decode(&hex_str)
 }
@@ -112,11 +112,23 @@ pub fn generate_random_iv() -> [u8; IV_LEN] {
 /// 将 hex 字符串解码为字节数组。
 ///
 /// 输入必须为偶数长度的合法十六进制字符串（来自 sm3_hash 输出）。
-fn hex_decode(hex: &str) -> Vec<u8> {
-    assert!(hex.len() % 2 == 0, "hex 字符串长度必须为偶数");
+///
+/// 返回:
+/// - 成功时返回解码后的字节序列；失败时返回 [`PolicyError::FormatError`]。
+fn hex_decode(hex: &str) -> Result<Vec<u8>, PolicyError> {
+    if hex.len() % 2 != 0 {
+        return Err(PolicyError::FormatError(format!(
+            "hex 字符串长度必须为偶数，实际长度: {}",
+            hex.len()
+        )));
+    }
     (0..hex.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("非法十六进制字符"))
+        .map(|i| {
+            u8::from_str_radix(&hex[i..i + 2], 16).map_err(|_| {
+                PolicyError::FormatError(format!("非法十六进制字符: {:?}", &hex[i..i + 2]))
+            })
+        })
         .collect()
 }
 
@@ -141,15 +153,15 @@ mod tests {
     #[test]
     fn sm3_hash_produces_32_bytes() {
         let data = b"test data for sm3 hash";
-        let digest = sm3_hash(data);
+        let digest = sm3_hash(data).expect("sm3_hash 失败");
         assert_eq!(digest.len(), 32);
     }
 
     #[test]
     fn sm3_hash_deterministic() {
         let data = b"deterministic test";
-        let digest1 = sm3_hash(data);
-        let digest2 = sm3_hash(data);
+        let digest1 = sm3_hash(data).expect("sm3_hash 第一次失败");
+        let digest2 = sm3_hash(data).expect("sm3_hash 第二次失败");
         assert_eq!(digest1, digest2);
     }
 

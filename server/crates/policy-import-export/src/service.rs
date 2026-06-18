@@ -89,13 +89,13 @@ impl PolicyService {
         let ciphertext = crypto::sm4_cbc_encrypt(&keys.sm4_key, &iv, &plaintext);
 
         // SM3 摘要（对密文计算）
-        let digest = crypto::sm3_hash(&ciphertext);
+        let digest = crypto::sm3_hash(&ciphertext)?;
 
         // SM2 签名（对摘要签名）
         let signature = crypto::sm2_sign(&keys.sm2_private_key, &digest)?;
 
         // 组装 .bin
-        let bin = format::assemble_bin(&iv, &ciphertext, &digest, &signature);
+        let bin = format::assemble_bin(&iv, &ciphertext, &digest, &signature)?;
 
         Ok(bin)
     }
@@ -133,7 +133,7 @@ impl PolicyService {
         }
 
         // SM3 摘要校验（对密文计算摘要并比较）
-        let computed_digest = crypto::sm3_hash(&parsed.ciphertext);
+        let computed_digest = crypto::sm3_hash(&parsed.ciphertext)?;
         if computed_digest != parsed.digest {
             return Err(PolicyError::DigestError);
         }

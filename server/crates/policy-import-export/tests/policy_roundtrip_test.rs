@@ -39,12 +39,14 @@ impl PolicyKeyProvider for MockKeyProvider {
 }
 
 /// 创建临时数据库并初始化 schema。
-fn setup_storage() -> Arc<Storage> {
+///
+/// 返回 `(Arc<Storage>, TempDir)`。调用方必须持有 `TempDir`，
+/// 不得提前 drop，否则临时目录会被删除导致数据库访问失败。
+fn setup_storage() -> (Arc<Storage>, tempfile::TempDir) {
     let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
     let db_path = tmp_dir.path().join("test.db");
-    // 将 TempDir 泄漏以保持文件存活直到进程退出
-    let _ = Box::leak(Box::new(tmp_dir));
-    Arc::new(Storage::open(&db_path).expect("打开数据库失败"))
+    let storage = Arc::new(Storage::open(&db_path).expect("打开数据库失败"));
+    (storage, tmp_dir)
 }
 
 /// 向数据库插入测试白名单数据。
@@ -90,7 +92,7 @@ fn insert_test_blacklist(storage: &Storage) {
 
 #[test]
 fn export_import_roundtrip_preserves_data() {
-    let storage = setup_storage();
+    let (storage, _tmp) = setup_storage();
     let key_provider = Arc::new(MockKeyProvider::new());
 
     // 插入测试数据
@@ -113,7 +115,7 @@ fn export_import_roundtrip_preserves_data() {
     assert_eq!(parsed.version, format::CURRENT_VERSION);
 
     // 创建新数据库用于导入
-    let import_storage = setup_storage();
+    let (import_storage, _import_tmp) = setup_storage();
     let import_service = PolicyService::new(import_storage.clone(), key_provider);
 
     // 导入
@@ -153,7 +155,7 @@ fn export_import_roundtrip_preserves_data() {
 
 #[test]
 fn import_rejects_tampered_ciphertext() {
-    let storage = setup_storage();
+    let (storage, _tmp) = setup_storage();
     let key_provider = Arc::new(MockKeyProvider::new());
 
     insert_test_whitelist(&storage);
@@ -173,7 +175,7 @@ fn import_rejects_tampered_ciphertext() {
     }
 
     // 导入应失败（摘要校验失败或签名校验失败）
-    let import_storage = setup_storage();
+    let (import_storage, _import_tmp) = setup_storage();
     let import_service = PolicyService::new(import_storage, key_provider);
     let result = import_service.import_policy(&tampered);
     assert!(result.is_err(), "篡改后导入应失败");
@@ -181,7 +183,7 @@ fn import_rejects_tampered_ciphertext() {
 
 #[test]
 fn import_rejects_tampered_signature() {
-    let storage = setup_storage();
+    let (storage, _tmp) = setup_storage();
     let key_provider = Arc::new(MockKeyProvider::new());
 
     insert_test_whitelist(&storage);
@@ -204,9 +206,10 @@ fn import_rejects_tampered_signature() {
         &parsed.ciphertext,
         &parsed.digest,
         &bad_signature,
-    );
+    )
+    .expect("重新组装失败");
 
-    let import_storage = setup_storage();
+    let (import_storage, _import_tmp) = setup_storage();
     let import_service = PolicyService::new(import_storage, key_provider);
     let result = import_service.import_policy(&tampered);
     assert!(result.is_err(), "篡改签名后导入应失败");
@@ -215,7 +218,7 @@ fn import_rejects_tampered_signature() {
 #[test]
 fn import_rejects_bad_magic() {
     let key_provider = Arc::new(MockKeyProvider::new());
-    let import_storage = setup_storage();
+    let (import_storage, _import_tmp) = setup_storage();
     let import_service = PolicyService::new(import_storage, key_provider);
 
     let bad_data = b"XXXX0000000000000000000000000000000000000000000000000000000000000000";
