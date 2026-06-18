@@ -41,7 +41,12 @@ fn build_boot_sector(sector: &mut [u8], layout: &DiskLayout) {
     sector[88..92].copy_from_slice(&(layout.cluster_heap_offset_sectors as u32).to_le_bytes());
     sector[92..96].copy_from_slice(&layout.cluster_count.to_le_bytes());
     sector[96..100].copy_from_slice(&FIRST_CLUSTER.to_le_bytes());
-    sector[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
+    // VolumeSerialNumber — 使用进程启动时的时间戳低 32 位
+    let serial = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as u32)
+        .unwrap_or(0x12345678);
+    sector[100..104].copy_from_slice(&serial.to_le_bytes());
     sector[104..106].copy_from_slice(&FS_REVISION.to_le_bytes());
     sector[108] = BYTES_PER_SECTOR_SHIFT;
     sector[109] = SECTORS_PER_CLUSTER_SHIFT;

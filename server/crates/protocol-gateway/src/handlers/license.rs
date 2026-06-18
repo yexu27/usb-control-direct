@@ -2,13 +2,12 @@
 
 use prost::Message;
 
-use auth_session::session::SessionInfo;
 use common::code::ResultCode;
 use common::proto::{
     CmdGetMachineCode, CmdUploadLicense, RspCommon, RspMachineCode, RspUploadLicense,
 };
-use storage::model::OperationLogInsert;
 
+use super::audit_helper::log_operation;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -30,7 +29,10 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return machine_code_error(ctx.seq_id, code, "会话状态异常"),
+    };
 
     // 已授权状态下仅管理员可操作
     let storage = match ctx.storage() {
@@ -49,7 +51,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
 
     match license_upgrade::generate_machine_code() {
         Ok(result) => {
-            log_operation(ctx, session, "get_machine_code", "机器码", 0, None);
+            log_operation(ctx, session, "system_management", "get_machine_code", "机器码", 0, None);
             let rsp = RspMachineCode {
                 machine_code: result.machine_code,
                 qrcode_png: result.qrcode_png,
@@ -62,6 +64,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "get_machine_code",
                 "机器码",
                 1,
@@ -81,7 +84,10 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return license_error(ctx.seq_id, code, "会话状态异常"),
+    };
 
     // 已授权状态下仅管理员可操作
     let storage = match ctx.storage() {
@@ -120,15 +126,15 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match validator.validate(&cmd.license_data, &machine_code) {
         Ok(info) => {
             if let Err(_e) = storage.config_set("auth_status", "authorized") {
-                log_operation(ctx, session, "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
+                log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
             }
             if let Err(_e) = storage.config_set("auth_expire_time", &info.expire_time.to_string()) {
-                log_operation(ctx, session, "upload_license", "授权文件", 1, Some("授权过期时间持久化失败"));
+                log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权过期时间持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权过期时间持久化失败");
             }
 
-            log_operation(ctx, session, "upload_license", "授权文件", 0, None);
+            log_operation(ctx, session, "system_management", "upload_license", "授权文件", 0, None);
             let rsp = RspUploadLicense {
                 success: true,
                 expire_time: info.expire_time,
@@ -143,6 +149,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "upload_license",
                 "授权文件",
                 1,
@@ -161,37 +168,6 @@ fn is_device_authorized(storage: &storage::Storage) -> bool {
         .flatten()
         .map(|c| c.config_value.as_deref() == Some("authorized"))
         .unwrap_or(false)
-}
-
-/// 记录操作日志。
-fn log_operation(
-    ctx: &RequestContext,
-    session: &SessionInfo,
-    action_type: &str,
-    target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: session.username.clone(),
-        role: session.role,
-        log_type: "system_management".into(),
-        action_type: Some(action_type.into()),
-        target: Some(target.into()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 /// 构造机器码错误响应（使用 RspCommon 传递错误信息）。

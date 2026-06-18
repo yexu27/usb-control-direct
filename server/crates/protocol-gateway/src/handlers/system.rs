@@ -2,14 +2,15 @@
 
 use prost::Message;
 
-use auth_session::session::SessionInfo;
+use tracing::warn;
+
 use common::code::ResultCode;
 use common::proto::{
     CmdGetSystemInfo, CmdUpdateDeviceDesc, CmdUploadSystemUpgrade, CmdUploadVirusdbUpgrade,
     RspCommon, RspSystemInfo,
 };
-use storage::model::OperationLogInsert;
 
+use super::audit_helper::log_operation;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -68,7 +69,10 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let mgr = match ctx.system_upgrade_mgr.as_ref() {
         Some(m) => m,
@@ -92,6 +96,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                 log_operation(
                     ctx,
                     session,
+                    "system_management",
                     "system_upgrade",
                     &cmd.target_version,
                     1,
@@ -101,13 +106,14 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             }
 
             if let Err(_e) = storage.config_set("system_version", &cmd.target_version) {
-                log_operation(ctx, session, "system_upgrade", &cmd.target_version, 1, Some("版本号持久化失败"));
+                log_operation(ctx, session, "system_management", "system_upgrade", &cmd.target_version, 1, Some("版本号持久化失败"));
                 return error_response(ctx.seq_id, ResultCode::InternalError, "版本号持久化失败");
             }
 
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "system_upgrade",
                 &cmd.target_version,
                 0,
@@ -123,6 +129,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "system_upgrade",
                 &cmd.target_version,
                 1,
@@ -142,7 +149,10 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let mgr = match ctx.virusdb_upgrade_mgr.as_ref() {
         Some(m) => m,
@@ -168,6 +178,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         log_operation(
             ctx,
             session,
+            "system_management",
             "virusdb_upgrade",
             &cmd.target_version,
             1,
@@ -180,6 +191,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         log_operation(
             ctx,
             session,
+            "system_management",
             "virusdb_upgrade",
             &cmd.target_version,
             1,
@@ -189,18 +201,21 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     }
 
     if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
-        log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
+        warn!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
+        log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
     let now = common::time::now_unix();
     if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
-        log_operation(ctx, session, "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
+        warn!("病毒库已升级但更新时间持久化失败");
+        log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
     }
 
     log_operation(
         ctx,
         session,
+        "system_management",
         "virusdb_upgrade",
         &cmd.target_version,
         0,
@@ -218,7 +233,10 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     if !validate_device_desc(&cmd.description) {
         return error_response(
@@ -253,6 +271,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "update_device_desc",
                 &cmd.description,
                 0,
@@ -264,6 +283,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
             log_operation(
                 ctx,
                 session,
+                "system_management",
                 "update_device_desc",
                 &cmd.description,
                 1,
@@ -291,37 +311,6 @@ fn config_value(storage: &storage::Storage, key: &str) -> String {
         .flatten()
         .and_then(|c| c.config_value)
         .unwrap_or_default()
-}
-
-/// 记录操作日志。
-fn log_operation(
-    ctx: &RequestContext,
-    session: &SessionInfo,
-    action_type: &str,
-    target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: session.username.clone(),
-        role: session.role,
-        log_type: "system_management".into(),
-        action_type: Some(action_type.into()),
-        target: Some(target.into()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 /// 构造系统信息错误响应（使用 RspCommon 传递错误信息）。

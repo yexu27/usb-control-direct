@@ -1,0 +1,16 @@
+[Unit]
+Description=USB Security Control Device Service
+After=network.target clamd@scan.service
+Wants=clamd@scan.service
+
+[Service]
+Type=simple
+ExecStart=/opt/usb-control/usb-control
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/usb-control
+Environment=RUST_LOG=info
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

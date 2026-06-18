@@ -2,15 +2,14 @@
 
 use prost::Message;
 
-use auth_session::session::SessionInfo;
 use common::code::ResultCode;
 use common::mapping::{role_int_to_str, role_str_to_int};
 use common::proto::{
     CmdCreateUser, CmdDeleteUser, CmdListUsers, CmdResetPassword, RspCommon, RspListUsers,
     UserItem,
 };
-use storage::model::OperationLogInsert;
 
+use super::audit_helper::log_operation;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -49,7 +48,10 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let role = match role_str_to_int(&cmd.role) {
         Ok(r) => r,
@@ -63,7 +65,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         .create_user(&cmd.username, role, &cmd.password, &cmd.confirm_password)
     {
         Ok(_id) => {
-            log_operation(ctx, session, "create", &cmd.username, 0, None);
+            log_operation(ctx, session, "user_management", "create", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -71,6 +73,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "user_management",
                 "create",
                 &cmd.username,
                 1,
@@ -90,14 +93,17 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     match ctx
         .auth_service
         .delete_user(&cmd.username, session.user_id)
     {
         Ok(()) => {
-            log_operation(ctx, session, "delete", &cmd.username, 0, None);
+            log_operation(ctx, session, "user_management", "delete", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -105,6 +111,7 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "user_management",
                 "delete",
                 &cmd.username,
                 1,
@@ -124,14 +131,17 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     match ctx
         .auth_service
         .reset_password(&cmd.username, &cmd.new_password, &cmd.confirm_password)
     {
         Ok(()) => {
-            log_operation(ctx, session, "reset_password", &cmd.username, 0, None);
+            log_operation(ctx, session, "user_management", "reset_password", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -139,6 +149,7 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "user_management",
                 "reset_password",
                 &cmd.username,
                 1,
@@ -169,37 +180,6 @@ fn map_user_item(user: &storage::model::User) -> UserItem {
         is_builtin: user.is_builtin != 0,
         created_at: user.created_at,
     }
-}
-
-/// 记录操作日志。
-fn log_operation(
-    ctx: &RequestContext,
-    session: &SessionInfo,
-    action_type: &str,
-    target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: session.username.clone(),
-        role: session.role,
-        log_type: "user_management".into(),
-        action_type: Some(action_type.into()),
-        target: Some(target.into()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 fn success_response(seq_id: u32) -> Vec<u8> {

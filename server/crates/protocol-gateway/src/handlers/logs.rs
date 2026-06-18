@@ -2,14 +2,15 @@
 
 use prost::Message;
 
-use auth_session::session::SessionInfo;
 use common::code::ResultCode;
 use common::proto::{
     CmdDeleteLogs, CmdExportLogs, CmdQueryLogs, MalwareLogEntry, OperationLogEntry,
     RspCommon, RspExportLogs, RspQueryLogs, UsbAuditLogEntry,
 };
 use log_audit::query::LogType;
-use storage::model::{LogQueryParams, OperationLogInsert};
+use storage::model::LogQueryParams;
+
+use super::audit_helper::log_operation;
 
 use crate::codec;
 use crate::context::RequestContext;
@@ -119,7 +120,10 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return export_error(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
@@ -135,8 +139,10 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    // 导出查询全量，使用较大 page_size
-    let params = LogQueryParams {
+    // 导出查询全量，分批查询避免单次查询过大
+    const EXPORT_PAGE_SIZE: i32 = 5_000;
+
+    let base_params = LogQueryParams {
         start_time: if cmd.start_time > 0 {
             Some(cmd.start_time)
         } else {
@@ -152,28 +158,76 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         log_category: optional_str(&cmd.log_category),
         action_type: optional_str(&cmd.action_type),
         page: 1,
-        page_size: 10_000,
+        page_size: EXPORT_PAGE_SIZE,
     };
 
     let csv_content = match log_type {
-        LogType::UsbAudit => match storage.usb_audit_query_paged(&params) {
-            Ok((items, _)) => generate_usb_audit_csv(&items),
-            Err(_e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+        LogType::UsbAudit => {
+            let mut all_items = Vec::new();
+            let mut page = 1;
+            loop {
+                let mut params = base_params.clone();
+                params.page = page;
+                match storage.usb_audit_query_paged(&params) {
+                    Ok((items, _)) => {
+                        let count = items.len();
+                        all_items.extend(items);
+                        if (count as i32) < EXPORT_PAGE_SIZE {
+                            break;
+                        }
+                        page += 1;
+                    }
+                    Err(_e) => {
+                        return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+                    }
+                }
             }
-        },
-        LogType::Malware => match storage.malware_query_paged(&params) {
-            Ok((items, _)) => generate_malware_csv(&items),
-            Err(_e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+            generate_usb_audit_csv(&all_items)
+        }
+        LogType::Malware => {
+            let mut all_items = Vec::new();
+            let mut page = 1;
+            loop {
+                let mut params = base_params.clone();
+                params.page = page;
+                match storage.malware_query_paged(&params) {
+                    Ok((items, _)) => {
+                        let count = items.len();
+                        all_items.extend(items);
+                        if (count as i32) < EXPORT_PAGE_SIZE {
+                            break;
+                        }
+                        page += 1;
+                    }
+                    Err(_e) => {
+                        return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+                    }
+                }
             }
-        },
-        LogType::Operation => match storage.operation_log_query_paged(&params) {
-            Ok((items, _)) => generate_operation_csv(&items),
-            Err(_e) => {
-                return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+            generate_malware_csv(&all_items)
+        }
+        LogType::Operation => {
+            let mut all_items = Vec::new();
+            let mut page = 1;
+            loop {
+                let mut params = base_params.clone();
+                params.page = page;
+                match storage.operation_log_query_paged(&params) {
+                    Ok((items, _)) => {
+                        let count = items.len();
+                        all_items.extend(items);
+                        if (count as i32) < EXPORT_PAGE_SIZE {
+                            break;
+                        }
+                        page += 1;
+                    }
+                    Err(_e) => {
+                        return export_error(ctx.seq_id, ResultCode::LogExportFailed, "日志查询失败");
+                    }
+                }
             }
-        },
+            generate_operation_csv(&all_items)
+        }
     };
 
     let suggested_filename = log_audit::export::generate_filename(&cmd.log_type);
@@ -181,7 +235,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match log_audit::export::generate_zip(&csv_filename, &csv_content) {
         Ok(zip_data) => {
-            log_operation(ctx, session, "export", &cmd.log_type, 0, None);
+            log_operation(ctx, session, "log_management", "export", &cmd.log_type, 0, None);
             let rsp = RspExportLogs {
                 success: true,
                 zip_data,
@@ -196,6 +250,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "log_management",
                 "export",
                 &cmd.log_type,
                 1,
@@ -215,7 +270,10 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
@@ -269,6 +327,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "log_management",
                 "delete",
                 &format!("{}({}条)", cmd.log_type, count),
                 0,
@@ -280,6 +339,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
+                "log_management",
                 "delete",
                 &cmd.log_type,
                 1,
@@ -480,37 +540,6 @@ fn escape_csv(value: &str) -> String {
     } else {
         value.to_string()
     }
-}
-
-/// 记录操作日志。
-fn log_operation(
-    ctx: &RequestContext,
-    session: &SessionInfo,
-    action_type: &str,
-    target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: session.username.clone(),
-        role: session.role,
-        log_type: "log_management".into(),
-        action_type: Some(action_type.into()),
-        target: Some(target.into()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 /// 构造 RspQueryLogs 错误响应。

@@ -21,6 +21,7 @@ rustls-pemfile = { workspace = true }
 thiserror = { workspace = true }
 crc32fast = { workspace = true }
 prost = { workspace = true }
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = { workspace = true }

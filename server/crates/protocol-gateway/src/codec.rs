@@ -4,6 +4,7 @@
 //! 读取时累积字节直到帧头 + payload 完整，写出时拼接帧头 + payload。
 
 use common::frame::{self, FrameHeader, FRAME_HEADER_LEN};
+use tracing::error;
 
 use crate::error::GatewayError;
 
@@ -38,7 +39,16 @@ pub fn verify_crc(header: &FrameHeader, payload: &[u8]) -> bool {
 /// 编码帧为字节流（帧头 + payload）。
 pub fn encode_frame(msg_type: u32, seq_id: u32, payload: &[u8]) -> Result<Vec<u8>, GatewayError> {
     let crc = frame::payload_crc32(payload);
-    let header = FrameHeader::new(msg_type, seq_id, payload.len() as u32, crc)?;
+    let header = FrameHeader::new(msg_type, seq_id, payload.len() as u32, crc).map_err(|e| {
+        error!(
+            "encode_frame 失败: msg_type=0x{:04X}, seq_id={}, payload_len={}, error={}",
+            msg_type,
+            seq_id,
+            payload.len(),
+            e
+        );
+        e
+    })?;
     let header_bytes = header.encode();
     let mut out = Vec::with_capacity(FRAME_HEADER_LEN + payload.len());
     out.extend_from_slice(&header_bytes);

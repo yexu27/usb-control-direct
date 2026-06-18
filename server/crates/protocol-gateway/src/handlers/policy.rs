@@ -2,13 +2,13 @@
 
 use prost::Message;
 
-use auth_session::session::SessionInfo;
 use common::code::ResultCode;
 use common::proto::{CmdExportPolicy, CmdImportPolicy, RspCommon, RspExportPolicy};
-use storage::model::OperationLogInsert;
 
 use crate::codec;
 use crate::context::RequestContext;
+
+use super::audit_helper::log_operation;
 
 /// RspExportPolicy 消息类型。
 const RSP_EXPORT_POLICY: u32 = 0x0301;
@@ -25,7 +25,10 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return export_error(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,
@@ -36,7 +39,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match policy_service.export_policy() {
         Ok(data) => {
-            log_operation(ctx, session, "export", "策略配置", 0, None);
+            log_operation(ctx, session, "policy_management", "export", "策略配置", 0, None);
             let rsp = RspExportPolicy {
                 success: true,
                 policy_data: data,
@@ -48,7 +51,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
         Err(e) => {
             let code = e.to_result_code();
-            log_operation(ctx, session, "export", "策略配置", 1, Some(&e.to_string()));
+            log_operation(ctx, session, "policy_management", "export", "策略配置", 1, Some(&e.to_string()));
             export_error(ctx.seq_id, code, "策略导出失败")
         }
     }
@@ -63,7 +66,10 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let session = ctx.session_required();
+    let session = match ctx.session_required() {
+        Ok(s) => s,
+        Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
+    };
 
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,
@@ -76,48 +82,22 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         return error_response(ctx.seq_id, ResultCode::ValidationFailed, "策略数据不能为空");
     }
 
+    const MAX_POLICY_SIZE: usize = 10 * 1024 * 1024;
+    if cmd.policy_data.len() > MAX_POLICY_SIZE {
+        return error_response(ctx.seq_id, ResultCode::ValidationFailed, "策略数据超过10MB大小限制");
+    }
+
     match policy_service.import_policy(&cmd.policy_data) {
         Ok(()) => {
-            log_operation(ctx, session, "import", "策略配置", 0, None);
+            log_operation(ctx, session, "policy_management", "import", "策略配置", 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             let code = e.to_result_code();
-            log_operation(ctx, session, "import", "策略配置", 1, Some(&e.to_string()));
+            log_operation(ctx, session, "policy_management", "import", "策略配置", 1, Some(&e.to_string()));
             error_response(ctx.seq_id, code, "策略导入失败")
         }
     }
-}
-
-/// 记录操作日志。
-fn log_operation(
-    ctx: &RequestContext,
-    session: &SessionInfo,
-    action_type: &str,
-    target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: session.username.clone(),
-        role: session.role,
-        log_type: "policy_management".into(),
-        action_type: Some(action_type.into()),
-        target: Some(target.into()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 /// 构造 RspExportPolicy 错误响应。

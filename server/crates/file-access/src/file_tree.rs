@@ -64,6 +64,19 @@ fn build_directory(
             }
         };
 
+        // 跳过符号链接，防止路径穿越
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(e) => {
+                warn!("读取文件类型失败 {}: {}", entry.path().display(), e);
+                continue;
+            }
+        };
+        if file_type.is_symlink() {
+            warn!("跳过符号链接: {}", entry.path().display());
+            continue;
+        }
+
         let metadata = match entry.metadata() {
             Ok(m) => m,
             Err(e) => {
@@ -100,8 +113,9 @@ fn build_directory(
 
         let is_autorun_inf = is_root && file_name.eq_ignore_ascii_case("autorun.inf");
 
-        let is_autorun_target = if is_root {
-            autorun_targets.contains(&file_name.to_lowercase())
+        let is_autorun_target = if !is_dir {
+            let rel_lower = relative.replace('\\', "/").to_lowercase();
+            autorun_targets.contains(&rel_lower)
         } else {
             false
         };
@@ -161,14 +175,8 @@ fn parse_autorun_file(path: &Path) -> HashSet<String> {
     autorun::parse_autorun_targets(&content)
         .into_iter()
         .map(|p| {
-            // 将反斜杠路径转为文件名（只取最后一个路径段）
-            let normalized = p.replace('\\', "/");
-            let file_name = normalized
-                .rsplit('/')
-                .next()
-                .unwrap_or(&normalized)
-                .to_lowercase();
-            file_name
+            // 统一分隔符并转小写，保留完整相对路径
+            p.replace('\\', "/").to_lowercase()
         })
         .collect()
 }

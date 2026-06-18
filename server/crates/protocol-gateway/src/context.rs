@@ -4,6 +4,8 @@
 
 use std::sync::{Arc, RwLock};
 
+use common::code::ResultCode;
+
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
 use license_upgrade::{LicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
@@ -65,11 +67,9 @@ impl RequestContext {
 
     /// 获取已验证的会话信息。
     ///
-    /// 中间件已保证 role-restricted handler 进入时 session 一定存在，
-    /// 此方法用于统一获取 session 而不必在每个 handler 重复检查。
-    pub fn session_required(&self) -> &SessionInfo {
-        self.session
-            .as_ref()
-            .expect("middleware guarantees session exists for role-restricted handlers")
+    /// 中间件已保证 role-restricted handler 进入时 session 一定存在。
+    /// 返回 Err(InternalError) 表示中间件异常，调用方应返回错误响应。
+    pub fn session_required(&self) -> Result<&SessionInfo, ResultCode> {
+        self.session.as_ref().ok_or(ResultCode::InternalError)
     }
 }
