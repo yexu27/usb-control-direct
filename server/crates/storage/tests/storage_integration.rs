@@ -177,7 +177,7 @@ fn t06_malware_insert_and_query() {
 fn t07_config_get_and_set() {
     let (s, _tmp) = setup();
     let c = s.config_get("device_description").unwrap().unwrap();
-    assert_eq!(c.config_value.as_deref(), Some("\"USB安全管理装置\""));
+    assert_eq!(c.config_value.as_deref(), Some("\"(AD USB protection dev)USB Device\""));
 
     s.config_set("device_description", "\"新描述\"").unwrap();
     let c = s.config_get("device_description").unwrap().unwrap();

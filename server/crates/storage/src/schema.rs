@@ -283,7 +283,7 @@ fn insert_default_exec_types(conn: &Connection) -> Result<(), StorageError> {
 /// T07: 系统配置初始值。
 fn insert_default_system_config(conn: &Connection, now: i64) -> Result<(), StorageError> {
     let configs: &[(&str, &str)] = &[
-        ("device_description", "\"USB安全管理装置\""),
+        ("device_description", "\"(AD USB protection dev)USB Device\""),
         ("auth_status", "\"unauthorized\""),
         ("auth_expire_time", "0"),
         ("machine_code", "\"\""),
