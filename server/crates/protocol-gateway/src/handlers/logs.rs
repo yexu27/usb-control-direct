@@ -533,12 +533,26 @@ fn generate_operation_csv(items: &[storage::model::OperationLog]) -> String {
     csv
 }
 
-/// CSV 字段转义：包含逗号、引号、换行时用双引号包裹。
+/// CSV 字段转义：包含逗号、引号、换行时用双引号包裹；
+/// 以公式字符开头时加前缀单引号防止注入。
 fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
-        format!("\"{}\"", value.replace('"', "\"\""))
+    let sanitized = if value.starts_with('=')
+        || value.starts_with('+')
+        || value.starts_with('-')
+        || value.starts_with('@')
+    {
+        format!("'{value}")
     } else {
         value.to_string()
+    };
+    if sanitized.contains(',')
+        || sanitized.contains('"')
+        || sanitized.contains('\n')
+        || sanitized.contains('\r')
+    {
+        format!("\"{}\"", sanitized.replace('"', "\"\""))
+    } else {
+        sanitized
     }
 }
 

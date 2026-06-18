@@ -2,6 +2,7 @@
 
 use prost::Message;
 
+use sha2::{Digest, Sha256};
 use tracing::warn;
 
 use common::code::ResultCode;
@@ -90,6 +91,11 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
 
     let current_version = config_value(storage, "system_version");
 
+    if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
+        log_operation(ctx, session, "system_management", "system_upgrade", &cmd.target_version, 1, Some("SHA-256 校验失败"));
+        return error_response(ctx.seq_id, ResultCode::ValidationFailed, "升级包 SHA-256 校验失败");
+    }
+
     match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
         Ok(validation) => {
             if let Err(e) = mgr.apply_upgrade(validation) {
@@ -173,6 +179,11 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     };
 
     let current_version = config_value(storage, "virus_db_version");
+
+    if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
+        log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("SHA-256 校验失败"));
+        return error_response(ctx.seq_id, ResultCode::ValidationFailed, "病毒库升级包 SHA-256 校验失败");
+    }
 
     if let Err(e) = mgr.validate_upgrade(&cmd.target_version, &current_version) {
         log_operation(
@@ -339,4 +350,14 @@ fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
         error_message: msg.to_string(),
     };
     codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+/// 校验升级包 SHA-256 摘要。checksum 为空时跳过校验（向后兼容）。
+fn verify_sha256(data: &[u8], checksum: &str) -> bool {
+    if checksum.is_empty() {
+        return true;
+    }
+    let digest = Sha256::digest(data);
+    let hex = format!("{digest:x}");
+    hex.eq_ignore_ascii_case(checksum)
 }

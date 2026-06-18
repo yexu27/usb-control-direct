@@ -361,6 +361,7 @@ message CmdUploadSystemUpgrade {
     string session_token = 1;
     bytes upgrade_data = 2;         // .bin 升级包字节流
     string target_version = 3;      // 目标版本号（升级包内声明）
+    string sha256_checksum = 4;     // upgrade_data 的 SHA-256 十六进制摘要，空串时跳过校验
 }
 
 // CMD_UPLOAD_VIRUSDB_UPGRADE（0x0503）—— 上传病毒库升级包，响应使用 RspCommon
@@ -368,6 +369,7 @@ message CmdUploadVirusdbUpgrade {
     string session_token = 1;
     bytes upgrade_data = 2;         // .zip 升级包字节流
     string target_version = 3;      // 版本递增逢数字 4 跳过
+    string sha256_checksum = 4;     // upgrade_data 的 SHA-256 十六进制摘要，空串时跳过校验
 }
 
 // CMD_UPDATE_DEVICE_DESC（0x0504）—— 修改设备描述，响应使用 RspCommon
