@@ -1,5 +1,4 @@
-import { BrowserWindow } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow } from 'electron'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -17,7 +16,7 @@ export function createMainWindow(): BrowserWindow {
     },
   })
 
-  const isDev = !require('electron').app.isPackaged
+  const isDev = !app.isPackaged
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

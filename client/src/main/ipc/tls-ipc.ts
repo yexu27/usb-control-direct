@@ -23,7 +23,7 @@ export function registerTlsIpc(
     },
   )
 
-  tlsClient.on('state-change', (from, to, event) => {
+  tlsClient.on('state-change', (_from, to, _event) => {
     const mainWindow = getMainWindow()
     if (mainWindow != null && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IpcChannels.connectionStateChanged, to)

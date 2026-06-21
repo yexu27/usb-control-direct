@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   FRAME_MAGIC,
   FRAME_HEADER_SIZE,
-  MAX_PAYLOAD_SIZE,
   encodeFrame,
   decodeFrameHeader,
   calculateCrc32,
