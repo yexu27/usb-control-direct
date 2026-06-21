@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import type { ConnectionStatus } from '../shared/connection-state'
+import type { TlsResponse } from '../shared/tls-response'
 import { TlsTransport } from './tls/tls-transport'
 import { FrameStreamParser, encodeFrame } from './tls/frame-codec'
 import { RequestDispatcher } from './tls/request-dispatcher'
@@ -48,6 +49,12 @@ export class TlsClient extends EventEmitter {
     }
 
     this.stateMachine.onStateChange = (from, to, event) => {
+      if (from === 'CONNECTED' && to !== 'CONNECTED') {
+        this.stopHeartbeat()
+      }
+      if (to === 'CONNECTED' && from !== 'CONNECTED') {
+        this.startHeartbeat()
+      }
       this.emit('state-change', from, to, event)
     }
   }
@@ -74,15 +81,15 @@ export class TlsClient extends EventEmitter {
     this.dispatcher.rejectAll(new Error('主动断开连接'))
 
     if (this.stateMachine.current !== 'DISCONNECTED') {
-      try {
-        this.stateMachine.transition('LOGOUT')
-      } catch {
-        // 某些状态下 LOGOUT 不合法，忽略
-      }
+      this.stateMachine.transition('LOGOUT')
     }
   }
 
-  async send(msgType: number, payload: Uint8Array, timeout?: number): Promise<Uint8Array> {
+  async send(msgType: number, payload: Uint8Array, timeout?: number): Promise<TlsResponse> {
+    if (!this.transport.isConnected()) {
+      throw new Error('装置已断开，请重新连接后再操作')
+    }
+
     return this.dispatcher.dispatch(msgType, payload, timeout)
   }
 

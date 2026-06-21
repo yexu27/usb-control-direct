@@ -1,4 +1,5 @@
 import { encodeFrame } from './frame-codec'
+import type { TlsResponse } from '../../shared/tls-response'
 
 const RETRYABLE_COMMANDS = new Set([
   0x0100, 0x0102, 0x0200, 0x0400, 0x0500, 0x0600, 0x0003,
@@ -12,7 +13,7 @@ const DEFAULT_TIMEOUT = 15_000
 const FILE_TRANSFER_TIMEOUT = 300_000
 
 interface PendingRequest {
-  resolve: (payload: Uint8Array) => void
+  resolve: (response: TlsResponse) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
   msgType: number
@@ -29,11 +30,11 @@ export class RequestDispatcher {
     this.writeFn = writeFn
   }
 
-  dispatch(msgType: number, payload: Uint8Array, timeout?: number): Promise<Uint8Array> {
+  dispatch(msgType: number, payload: Uint8Array, timeout?: number): Promise<TlsResponse> {
     const resolvedTimeout =
       timeout ?? (FILE_TRANSFER_COMMANDS.has(msgType) ? FILE_TRANSFER_TIMEOUT : DEFAULT_TIMEOUT)
 
-    return new Promise<Uint8Array>((resolve, reject) => {
+    return new Promise<TlsResponse>((resolve, reject) => {
       const seqId = this.nextSeqId++
       this.sendAndTrack(seqId, msgType, payload, resolvedTimeout, resolve, reject, false)
     })
@@ -44,7 +45,7 @@ export class RequestDispatcher {
     msgType: number,
     payload: Uint8Array,
     timeout: number,
-    resolve: (payload: Uint8Array) => void,
+    resolve: (response: TlsResponse) => void,
     reject: (error: Error) => void,
     retried: boolean,
   ): void {
@@ -66,7 +67,7 @@ export class RequestDispatcher {
     this.writeFn(frame)
   }
 
-  handleResponse(seqId: number, _msgType: number, payload: Uint8Array): void {
+  handleResponse(seqId: number, msgType: number, payload: Uint8Array): void {
     const request = this.pending.get(seqId)
     if (request == null) {
       return
@@ -74,7 +75,7 @@ export class RequestDispatcher {
 
     clearTimeout(request.timer)
     this.pending.delete(seqId)
-    request.resolve(payload)
+    request.resolve({ msgType, payload })
   }
 
   rejectAll(reason: Error): void {

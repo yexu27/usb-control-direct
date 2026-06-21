@@ -1,5 +1,6 @@
 import * as tls from 'tls'
 import { EventEmitter } from 'events'
+import { assertCertificateFingerprint } from './certificate-fingerprint'
 
 const CONNECT_TIMEOUT = 15_000
 
@@ -26,17 +27,15 @@ export class TlsTransport extends EventEmitter {
           clearTimeout(timer)
 
           const cert = this.socket!.getPeerCertificate()
-          const fingerprint = cert.fingerprint256?.replace(/:/g, '').toLowerCase()
-          const expectedFingerprint = process.env['VITE_CERT_FINGERPRINT']
-
-          if (
-            expectedFingerprint != null &&
-            expectedFingerprint !== '' &&
-            fingerprint !== expectedFingerprint.toLowerCase()
-          ) {
+          try {
+            assertCertificateFingerprint(
+              cert.fingerprint256,
+              __USB_CONTROL_CERT_FINGERPRINT__,
+            )
+          } catch (error: unknown) {
             this.socket!.destroy()
             this.socket = null
-            reject(new Error('版本不兼容，请升级管理端'))
+            reject(error)
             return
           }
 

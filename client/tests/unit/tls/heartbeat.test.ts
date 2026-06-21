@@ -43,7 +43,7 @@ describe('HeartbeatManager', () => {
     hb.stop()
   })
 
-  it('triggers onTimeout after 3 consecutive misses', () => {
+  it('sends 3 heartbeats before timing out after 3 consecutive misses', () => {
     const sendFn = vi.fn().mockResolvedValue(undefined)
     const onTimeout = vi.fn()
     const hb = new HeartbeatManager()
@@ -52,6 +52,11 @@ describe('HeartbeatManager', () => {
 
     vi.advanceTimersByTime(30_000)
     vi.advanceTimersByTime(30_000)
+    vi.advanceTimersByTime(30_000)
+
+    expect(sendFn).toHaveBeenCalledTimes(3)
+    expect(onTimeout).not.toHaveBeenCalled()
+
     vi.advanceTimersByTime(30_000)
 
     expect(onTimeout).toHaveBeenCalledTimes(1)

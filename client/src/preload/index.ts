@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { ConnectionStatus } from '../shared/connection-state'
+import type { ConnectionEvent, ConnectionStatus } from '../shared/connection-state'
+import type { TlsResponse } from '../shared/tls-response'
+import { IpcChannels } from '../shared/ipc-channels'
 
 export interface OpenFileOptions {
   title?: string
@@ -14,31 +16,41 @@ export interface SaveFileOptions {
 
 const desktopApi = {
   tls: {
-    connect: (ip: string): Promise<void> => ipcRenderer.invoke('tls:connect', ip),
+    connect: (ip: string): Promise<void> => ipcRenderer.invoke(IpcChannels.tlsConnect, ip),
 
-    disconnect: (): Promise<void> => ipcRenderer.invoke('tls:disconnect'),
+    disconnect: (): Promise<void> => ipcRenderer.invoke(IpcChannels.tlsDisconnect),
+
+    applyStateEvent: (event: ConnectionEvent): Promise<void> =>
+      ipcRenderer.invoke(IpcChannels.tlsApplyStateEvent, event),
 
     send: (
       msgType: number,
       payload: Uint8Array,
       timeout?: number,
-    ): Promise<Uint8Array> => ipcRenderer.invoke('tls:send', msgType, payload, timeout),
+    ): Promise<TlsResponse> =>
+      ipcRenderer.invoke(IpcChannels.tlsSend, msgType, payload, timeout),
 
     onStateChanged: (callback: (status: ConnectionStatus) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, status: ConnectionStatus) => callback(status)
-      ipcRenderer.on('connection:state-changed', handler)
+      ipcRenderer.on(IpcChannels.connectionStateChanged, handler)
       return () => {
-        ipcRenderer.removeListener('connection:state-changed', handler)
+        ipcRenderer.removeListener(IpcChannels.connectionStateChanged, handler)
       }
     },
   },
 
   dialog: {
     openFile: (options: OpenFileOptions): Promise<{ canceled: boolean; filePaths: string[] }> =>
-      ipcRenderer.invoke('dialog:open-file', options),
+      ipcRenderer.invoke(IpcChannels.dialogOpenFile, options),
 
     saveFile: (options: SaveFileOptions): Promise<{ canceled: boolean; filePath?: string }> =>
-      ipcRenderer.invoke('dialog:save-file', options),
+      ipcRenderer.invoke(IpcChannels.dialogSaveFile, options),
+
+    readFile: (filePath: string): Promise<Uint8Array> =>
+      ipcRenderer.invoke(IpcChannels.dialogReadFile, filePath),
+
+    writeFile: (filePath: string, content: Uint8Array): Promise<void> =>
+      ipcRenderer.invoke(IpcChannels.dialogWriteFile, filePath, content),
   },
 }
 

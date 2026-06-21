@@ -34,7 +34,10 @@ describe('RequestDispatcher', () => {
     const promise = dispatcher.dispatch(0x0001, new Uint8Array([0x01]))
     dispatcher.handleResponse(1, 0x0002, new Uint8Array([0x02]))
     const result = await promise
-    expect(result).toEqual(new Uint8Array([0x02]))
+    expect(result).toEqual({
+      msgType: 0x0002,
+      payload: new Uint8Array([0x02]),
+    })
   })
 
   it('rejects on timeout for non-retryable command', async () => {
@@ -51,7 +54,10 @@ describe('RequestDispatcher', () => {
 
     dispatcher.handleResponse(2, 0x0101, new Uint8Array([0x0a]))
     const result = await promise
-    expect(result).toEqual(new Uint8Array([0x0a]))
+    expect(result).toEqual({
+      msgType: 0x0101,
+      payload: new Uint8Array([0x0a]),
+    })
   })
 
   it('rejects after retry also times out', async () => {

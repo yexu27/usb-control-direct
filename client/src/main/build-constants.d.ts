@@ -1,0 +1,1 @@
+declare const __USB_CONTROL_CERT_FINGERPRINT__: string
