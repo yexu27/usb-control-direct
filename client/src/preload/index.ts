@@ -52,6 +52,12 @@ const desktopApi = {
     writeFile: (filePath: string, content: Uint8Array): Promise<void> =>
       ipcRenderer.invoke(IpcChannels.dialogWriteFile, filePath, content),
   },
+
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke(IpcChannels.windowMinimize),
+    maximize: (): Promise<void> => ipcRenderer.invoke(IpcChannels.windowMaximize),
+    close: (): Promise<void> => ipcRenderer.invoke(IpcChannels.windowClose),
+  },
 }
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi)

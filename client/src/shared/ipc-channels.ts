@@ -8,4 +8,7 @@ export const IpcChannels = {
   dialogSaveFile: 'dialog:save-file',
   dialogReadFile: 'dialog:read-file',
   dialogWriteFile: 'dialog:write-file',
+  windowMinimize: 'window:minimize',
+  windowMaximize: 'window:maximize',
+  windowClose: 'window:close',
 } as const

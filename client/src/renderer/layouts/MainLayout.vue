@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Minus, FullScreen, Close } from '@element-plus/icons-vue'
 import { useSessionStore } from '@/stores/session'
 import { useConnectionStore } from '@/stores/connection'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
@@ -53,28 +53,45 @@ async function handleLogout(): Promise<void> {
   await session.logout()
   router.push('/login')
 }
+
+function handleMinimize(): void {
+  window.desktopApi.window.minimize()
+}
+
+function handleMaximize(): void {
+  window.desktopApi.window.maximize()
+}
+
+function handleClose(): void {
+  window.desktopApi.window.close()
+}
 </script>
 
 <template>
   <div class="main-layout">
     <header class="main-header">
       <div class="header-left">
-        <div class="brand-logo" aria-hidden="true">
-          <svg viewBox="0 0 16 16" role="img">
-            <path d="M8 1 3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1Z" />
-            <path class="brand-logo-inner" d="M8 3 5 5v3.5c0 2.2 1.3 4 3 4.6 1.7-.6 3-2.4 3-4.6V5L8 3Z" />
-          </svg>
+        <div class="brand-logo">
+          <div class="shield-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="#0056b3" />
+              <text x="8" y="10" text-anchor="middle" font-size="6" font-weight="700" fill="#fff">
+                A
+              </text>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-cn" data-testid="brand-name">安帝科技</span>
+            <span class="brand-en" data-testid="brand-en-name">ANDISEC</span>
+          </div>
         </div>
-        <div class="brand-copy">
-          <span class="brand-name" data-testid="brand-name">安帝科技</span>
-          <span class="brand-name-en" data-testid="brand-en-name">ANDISEC</span>
-        </div>
-        <span class="header-divider" aria-hidden="true" />
-        <div class="product-copy">
-          <span class="product-name" data-testid="product-name">USB安全管理系统</span>
-          <span class="product-subtitle">运维管理控制台</span>
+        <span class="header-separator" aria-hidden="true" />
+        <div class="system-title">
+          <span class="sys-name" data-testid="product-name">USB安全管理系统</span>
+          <span class="sys-sub">运维管理控制台 V1.0</span>
         </div>
       </div>
+
       <div class="header-right">
         <span class="device-ip" data-testid="device-ip">
           装置：{{ connection.deviceIp || '--' }}
@@ -91,6 +108,18 @@ async function handleLogout(): Promise<void> {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+      </div>
+
+      <div class="win-controls">
+        <button class="win-btn" title="最小化" @click="handleMinimize">
+          <el-icon><Minus /></el-icon>
+        </button>
+        <button class="win-btn" title="最大化" @click="handleMaximize">
+          <el-icon><FullScreen /></el-icon>
+        </button>
+        <button class="win-btn win-btn-close" title="关闭" @click="handleClose">
+          <el-icon><Close /></el-icon>
+        </button>
       </div>
     </header>
 
@@ -147,92 +176,133 @@ async function handleLogout(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   height: $header-height;
-  padding: 0 $spacing-7;
-  background: linear-gradient(90deg, $brand-header-start, $brand-header-end);
-  color: $text-on-brand;
+  padding: 0 12px;
+  color: $color-white;
+  background: linear-gradient(135deg, $brand-header-start, $brand-header-end);
+  user-select: none;
+  -webkit-app-region: drag;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: $spacing-4;
+  min-width: 0;
+  gap: 12px;
 }
 
 .brand-logo {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.shield-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
   justify-content: center;
   width: $brand-logo-size;
   height: $brand-logo-size;
-  color: $brand-primary;
-  background: $color-white;
+  background: $brand-logo-shield-bg;
   border-radius: $brand-logo-radius;
-
-  svg {
-    width: $font-size-lg;
-    height: $font-size-lg;
-    fill: currentcolor;
-  }
-
-  .brand-logo-inner {
-    fill: $color-white;
-  }
 }
 
-.brand-copy,
-.product-copy {
+.brand-text {
   display: flex;
   flex-direction: column;
+  line-height: 1.2;
 }
 
-.brand-name {
-  font-size: $font-size-sm;
+.brand-cn {
+  color: $brand-text-cn;
+  font-size: $font-base;
   font-weight: $font-weight-semibold;
   letter-spacing: $letter-spacing-brand;
 }
 
-.brand-name-en {
-  color: $text-on-brand-muted;
-  font-size: $font-size-xs;
+.brand-en {
+  color: $brand-text-en;
+  font-size: $font-xs;
   letter-spacing: $letter-spacing-brand-en;
 }
 
-.header-divider {
+.header-separator {
+  flex-shrink: 0;
   width: $border-width;
   height: $spacing-8;
-  margin: 0 $spacing-2;
-  background: rgba($color-white, 0.25);
+  background: $brand-separator;
 }
 
-.product-name {
-  font-size: $font-size-md;
+.system-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.sys-name {
+  color: $brand-sys-name;
+  font-size: $font-lg;
   font-weight: $font-weight-semibold;
   letter-spacing: $letter-spacing-product;
 }
 
-.product-subtitle {
-  color: $text-on-brand-muted;
-  font-size: $font-size-xs;
+.sys-sub {
+  color: $brand-sys-sub;
+  font-size: $font-sm;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: $spacing-5;
+  margin-right: 8px;
+  margin-left: auto;
+  gap: 12px;
+  -webkit-app-region: no-drag;
 }
 
 .device-ip {
-  color: $text-on-brand-muted;
-  font-size: $font-size-sm;
+  padding: 2px 8px;
+  color: $device-ip-color;
+  font-size: $font-base;
+  background: $device-ip-bg;
+  border-radius: $border-radius;
 }
 
 .user-dropdown-trigger {
   display: flex;
   align-items: center;
-  gap: $spacing-1;
-  color: $text-on-brand;
+  color: $color-white;
+  font-size: $font-md;
   cursor: pointer;
-  font-size: $font-size-md;
+  gap: 4px;
+}
+
+.win-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.win-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 28px;
+  color: $win-btn-color;
+  font-size: $font-base;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+
+  &:hover {
+    background: $win-btn-hover-bg;
+  }
+}
+
+.win-btn-close:hover {
+  color: $color-white;
+  background: $win-btn-close-hover-bg;
 }
 
 .main-body {
@@ -243,37 +313,35 @@ async function handleLogout(): Promise<void> {
 }
 
 .main-sidebar {
+  flex-shrink: 0;
   width: $sidebar-width;
+  overflow-y: auto;
   background: $bg-sidebar;
   border-right: $border-width solid $border-color;
-  flex-shrink: 0;
-  overflow-y: auto;
 }
 
 .sidebar-nav {
-  padding: $spacing-2 0;
+  padding: $spacing-3 0;
 }
 
 .nav-item {
   padding: $menu-item-padding-block $menu-item-padding-inline;
   color: $text-primary;
-  font-size: $font-size-base;
+  font-size: $font-lg;
   cursor: pointer;
-  border-left: $menu-active-border-width solid transparent;
   transition:
     color 0.15s,
     background-color 0.15s;
 
   &:hover {
-    color: $brand-primary;
-    background: $menu-item-hover-bg;
+    background: $hover-sidebar;
   }
 
   &.active {
     color: $brand-primary;
-    font-weight: $font-weight-semibold;
-    background: $menu-item-active-bg;
-    border-left-color: $brand-primary;
+    font-weight: $font-weight-medium;
+    background: $active-sidebar-bg;
+    border-right: $menu-active-border-width solid $active-sidebar-border;
   }
 }
 
@@ -289,12 +357,12 @@ async function handleLogout(): Promise<void> {
   flex-shrink: 0;
   align-items: center;
   height: $footer-height;
-  padding: 0 $spacing-6;
-  gap: $spacing-2;
+  padding: 0 $content-padding;
   color: $text-secondary;
-  font-size: $font-size-sm;
-  background: $bg-sidebar-footer;
+  font-size: $font-base;
+  background: $bg-white;
   border-top: $border-width solid $border-color;
+  gap: $spacing-2;
 }
 
 .connection-dot {

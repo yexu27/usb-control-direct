@@ -9,6 +9,7 @@ export function createMainWindow(): BrowserWindow {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
+    frame: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
