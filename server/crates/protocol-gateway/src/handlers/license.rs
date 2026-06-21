@@ -8,6 +8,7 @@ use common::proto::{
 };
 
 use super::audit_helper::log_operation;
+use super::license_state::read_license_snapshot;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -41,7 +42,13 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             return machine_code_error(ctx.seq_id, ResultCode::InternalError, "存储未初始化");
         }
     };
-    if is_device_authorized(storage) && session.role != 0 {
+    let license = match read_license_snapshot(storage, common::time::now_unix()) {
+        Ok(license) => license,
+        Err(_) => {
+            return machine_code_error(ctx.seq_id, ResultCode::InternalError, "授权状态读取失败");
+        }
+    };
+    if license.authorized && session.role != 0 {
         return machine_code_error(
             ctx.seq_id,
             ResultCode::PermissionDenied,
@@ -96,7 +103,13 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             return license_error(ctx.seq_id, ResultCode::InternalError, "存储未初始化");
         }
     };
-    if is_device_authorized(storage) && session.role != 0 {
+    let license = match read_license_snapshot(storage, common::time::now_unix()) {
+        Ok(license) => license,
+        Err(_) => {
+            return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态读取失败");
+        }
+    };
+    if license.authorized && session.role != 0 {
         return license_error(
             ctx.seq_id,
             ResultCode::PermissionDenied,
@@ -158,16 +171,6 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             license_error(ctx.seq_id, code, "授权校验失败")
         }
     }
-}
-
-/// 判断设备是否已授权。
-fn is_device_authorized(storage: &storage::Storage) -> bool {
-    storage
-        .config_get("auth_status")
-        .ok()
-        .flatten()
-        .map(|c| c.config_value.as_deref() == Some("authorized"))
-        .unwrap_or(false)
 }
 
 /// 构造机器码错误响应（使用 RspCommon 传递错误信息）。

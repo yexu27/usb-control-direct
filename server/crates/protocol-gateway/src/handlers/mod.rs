@@ -6,6 +6,7 @@ pub mod change_password;
 pub mod connected_devices;
 pub mod file_access;
 pub mod license;
+pub(crate) mod license_state;
 pub mod login;
 pub mod logout;
 pub mod logs;

@@ -12,6 +12,7 @@ use common::proto::{
 };
 
 use super::audit_helper::log_operation;
+use super::license_state::read_license_snapshot;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -39,12 +40,12 @@ pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     let system_version = config_value(storage, "system_version");
     let virus_db_version = config_value(storage, "virus_db_version");
-    let auth_status_str = config_value(storage, "auth_status");
-    let authorized = auth_status_str == "authorized";
-    let auth_expire_time = config_value(storage, "auth_expire_time")
-        .parse::<i64>()
-        .unwrap_or(0);
-    let device_description = config_value(storage, "device_description");
+    let license = match read_license_snapshot(storage, common::time::now_unix()) {
+        Ok(license) => license,
+        Err(_) => {
+            return sysinfo_error(ctx.seq_id, ResultCode::InternalError, "授权状态读取失败");
+        }
+    };
     let virus_db_updated_at = config_value(storage, "virus_db_updated_at")
         .parse::<i64>()
         .unwrap_or(0);
@@ -52,11 +53,11 @@ pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     let rsp = RspSystemInfo {
         system_version,
         virus_db_version,
-        authorized,
-        auth_expire_time,
-        device_description,
+        authorized: license.authorized,
+        auth_expire_time: license.expire_time,
+        device_description: license.device_description,
         virus_db_updated_at,
-        auth_status: auth_status_str,
+        auth_status: license.status,
     };
     codec::encode_frame(RSP_SYSTEM_INFO, ctx.seq_id, &rsp.encode_to_vec()).unwrap_or_default()
 }

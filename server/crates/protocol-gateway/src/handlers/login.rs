@@ -2,11 +2,13 @@
 
 use prost::Message;
 
+use auth_session::service::LoginResult;
 use common::code::ResultCode;
 use common::mapping::role_int_to_str;
 use common::proto::{CmdLogin, RspLogin};
 use storage::model::OperationLogInsert;
 
+use super::license_state::{read_license_snapshot, LicenseSnapshot};
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -59,18 +61,30 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 .ok()
                 .unwrap_or("unknown");
 
-            let rsp = RspLogin {
-                success: true,
-                session_token: login_result.token,
-                username: login_result.username,
-                role: role_str.to_string(),
-                authorized: false,
-                auth_expire_time: 0,
-                device_description: String::new(),
-                result_code: ResultCode::Success.as_u16() as i32,
-                error_message: String::new(),
-                auth_status: "unauthorized".to_string(),
+            let storage = match ctx.storage() {
+                Some(storage) => storage,
+                None => {
+                    let _ = ctx.auth_service.logout(&login_result.token);
+                    return error_response(
+                        ctx.seq_id,
+                        ResultCode::InternalError,
+                        "存储服务未初始化",
+                    );
+                }
             };
+            let license = match read_license_snapshot(storage, common::time::now_unix()) {
+                Ok(license) => license,
+                Err(_) => {
+                    let _ = ctx.auth_service.logout(&login_result.token);
+                    return error_response(
+                        ctx.seq_id,
+                        ResultCode::InternalError,
+                        "授权状态读取失败",
+                    );
+                }
+            };
+
+            let rsp = build_success_response(login_result, role_str, license);
             let payload = rsp.encode_to_vec();
             codec::encode_frame(RSP_LOGIN, ctx.seq_id, &payload).unwrap_or_default()
         }
@@ -94,6 +108,25 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     }
 }
 
+fn build_success_response(
+    login_result: LoginResult,
+    role: &str,
+    license: LicenseSnapshot,
+) -> RspLogin {
+    RspLogin {
+        success: true,
+        session_token: login_result.token,
+        username: login_result.username,
+        role: role.to_string(),
+        authorized: license.authorized,
+        auth_expire_time: license.expire_time,
+        device_description: license.device_description,
+        result_code: ResultCode::Success.as_u16() as i32,
+        error_message: String::new(),
+        auth_status: license.status,
+    }
+}
+
 /// 构造错误 RspLogin。
 fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
     let rsp = RspLogin {
@@ -103,4 +136,38 @@ fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
         ..Default::default()
     };
     codec::encode_frame(RSP_LOGIN, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use auth_session::service::LoginResult;
+
+    use super::build_success_response;
+    use crate::handlers::license_state::LicenseSnapshot;
+
+    #[test]
+    fn success_response_contains_real_license_snapshot() {
+        let response = build_success_response(
+            LoginResult {
+                token: "session-token".to_string(),
+                username: "admin".to_string(),
+                role: 0,
+            },
+            "admin",
+            LicenseSnapshot {
+                authorized: true,
+                status: "authorized".to_string(),
+                expire_time: 1_893_455_999,
+                device_description: "USB_DEVICE_01".to_string(),
+            },
+        );
+
+        assert!(response.success);
+        assert!(response.authorized);
+        assert_eq!(response.auth_status, "authorized");
+        assert_eq!(response.auth_expire_time, 1_893_455_999);
+        assert_eq!(response.device_description, "USB_DEVICE_01");
+        assert_eq!(response.session_token, "session-token");
+        assert_eq!(response.role, "admin");
+    }
 }

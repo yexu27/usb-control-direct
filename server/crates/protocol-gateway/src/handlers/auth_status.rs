@@ -4,6 +4,7 @@ use prost::Message;
 
 use common::proto::{CmdAuthStatusQuery, RspAuthStatus};
 
+use super::license_state::read_license_snapshot;
 use crate::codec;
 use crate::context::RequestContext;
 
@@ -44,26 +45,16 @@ pub fn handle_auth_status(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let auth_status_str = config_value(storage, "auth_status");
-    let authorized = auth_status_str == "authorized";
-    let expire_time = config_value(storage, "auth_expire_time")
-        .parse::<i64>()
-        .unwrap_or(0);
-    let device_description = config_value(storage, "device_description");
-
-    let status = if authorized { "authorized" } else { "unauthorized" };
-
-    make_rsp(ctx.seq_id, authorized, expire_time, &device_description, status)
-}
-
-/// 从系统配置读取值。
-fn config_value(storage: &storage::Storage, key: &str) -> String {
-    storage
-        .config_get(key)
-        .ok()
-        .flatten()
-        .and_then(|c| c.config_value)
-        .unwrap_or_default()
+    match read_license_snapshot(storage, common::time::now_unix()) {
+        Ok(license) => make_rsp(
+            ctx.seq_id,
+            license.authorized,
+            license.expire_time,
+            &license.device_description,
+            &license.status,
+        ),
+        Err(_) => make_rsp(ctx.seq_id, false, 0, "", "failed"),
+    }
 }
 
 /// 构造 RspAuthStatus 响应帧。
