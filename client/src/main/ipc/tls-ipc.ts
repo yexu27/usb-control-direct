@@ -8,9 +8,6 @@ import { assertTrustedSender } from './trusted-sender'
 const DEFAULT_PORT = 9600
 const MAX_REQUEST_TIMEOUT = 300_000
 const CONNECTION_EVENTS: ReadonlySet<ConnectionEvent> = new Set([
-  'CONNECT_START',
-  'CONNECT_SUCCESS',
-  'CONNECT_FAIL',
   'AUTH_SUCCESS',
   'AUTH_FAIL',
   'LICENSE_AUTHORIZED',
@@ -18,9 +15,6 @@ const CONNECTION_EVENTS: ReadonlySet<ConnectionEvent> = new Set([
   'LICENSE_EXPIRED',
   'CONFIG_LOADED',
   'CONFIG_FAILED',
-  'HEARTBEAT_TIMEOUT',
-  'NETWORK_ERROR',
-  'LOGOUT',
   'LICENSE_UPLOAD_SUCCESS',
 ])
 
@@ -55,7 +49,7 @@ function parseTimeout(input: unknown): number | undefined {
   return input as number
 }
 
-function parseConnectionEvent(input: unknown): ConnectionEvent {
+export function parseRendererConnectionEvent(input: unknown): ConnectionEvent {
   if (typeof input !== 'string' || !CONNECTION_EVENTS.has(input as ConnectionEvent)) {
     throw new Error('连接状态事件无效')
   }
@@ -90,7 +84,7 @@ export function registerTlsIpc(
 
   ipcMain.handle(IpcChannels.tlsApplyStateEvent, (event, stateEvent: unknown) => {
     assertTrustedSender(event, getMainWindow())
-    tlsClient.transitionState(parseConnectionEvent(stateEvent))
+    tlsClient.transitionState(parseRendererConnectionEvent(stateEvent))
   })
 
   tlsClient.on('state-change', (from, to, event) => {

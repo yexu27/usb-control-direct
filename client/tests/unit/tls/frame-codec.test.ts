@@ -58,6 +58,14 @@ describe('encodeFrame', () => {
     const frame = encodeFrame(0x0001, 1, payload)
     expect(frame.readUInt32BE(16)).toBe(0xcbf43926)
   })
+
+  it('rejects payloads larger than the protocol limit before allocating a frame', () => {
+    const oversizedPayload = { length: MAX_PAYLOAD_SIZE + 1 } as Uint8Array
+
+    expect(() => encodeFrame(0x0001, 1, oversizedPayload)).toThrow(
+      `消息载荷超过上限：${MAX_PAYLOAD_SIZE} 字节`,
+    )
+  })
 })
 
 describe('decodeFrameHeader', () => {

@@ -24,6 +24,12 @@ describe('ConnectionStateMachine', () => {
     expect(sm.transition('CONNECT_FAIL')).toBe('DISCONNECTED')
   })
 
+  it('transitions CONNECTING → DISCONNECTED on LOGOUT', () => {
+    const sm = new ConnectionStateMachine()
+    sm.transition('CONNECT_START')
+    expect(sm.transition('LOGOUT')).toBe('DISCONNECTED')
+  })
+
   it('transitions AUTHENTICATING → CHECK_LICENSE on AUTH_SUCCESS', () => {
     const sm = new ConnectionStateMachine()
     sm.transition('CONNECT_START')

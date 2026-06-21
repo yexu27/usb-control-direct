@@ -110,7 +110,7 @@ export const useSessionStore = defineStore('session', () => {
       }
       bootstrap.clear()
       clearSession()
-      await connection.disconnect().catch(() => {})
+      await connection.disconnect(true).catch(() => {})
       throw error
     }
   }
@@ -159,7 +159,7 @@ export const useSessionStore = defineStore('session', () => {
     } finally {
       bootstrap.clear()
       clearSession()
-      await connection.disconnect().catch(() => {})
+      await connection.disconnect(true).catch(() => {})
     }
   }
 
@@ -179,7 +179,7 @@ export const useSessionStore = defineStore('session', () => {
       if (error instanceof ServiceError && error.kind === 'unauthenticated') {
         useBootstrapStore().clear()
         clearSession()
-        await useConnectionStore().disconnect().catch(() => {})
+        await useConnectionStore().disconnect(true).catch(() => {})
         return false
       }
       throw error

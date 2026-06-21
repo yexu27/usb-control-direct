@@ -199,7 +199,21 @@ describe('useSessionStore', () => {
     await store.logout()
 
     expect(store.isLoggedIn).toBe(false)
+    expect(useConnectionStore().deviceIp).toBe('')
     expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('认证失败后重试密码时复用当前 TLS 连接', async () => {
+    loginMock
+      .mockRejectedValueOnce(new Error('用户名或密码错误'))
+      .mockRejectedValueOnce(new Error('用户名或密码错误'))
+    const store = useSessionStore()
+
+    await expect(store.login('19.19.19.16', 'admin', 'wrong-1')).rejects.toThrow()
+    await expect(store.login('19.19.19.16', 'admin', 'wrong-2')).rejects.toThrow()
+
+    expect(connect).toHaveBeenCalledTimes(1)
+    expect(loginMock).toHaveBeenCalledTimes(2)
   })
 
   it('重连校验授权状态后恢复会话', async () => {

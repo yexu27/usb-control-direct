@@ -11,14 +11,19 @@ const MSG_HEARTBEAT_CMD = 0xff01
 const MSG_HEARTBEAT_RSP = 0xff02
 
 export class TlsClient extends EventEmitter {
-  private transport = new TlsTransport()
+  private transport: TlsTransport
   private parser = new FrameStreamParser()
   private dispatcher: RequestDispatcher
-  private heartbeat = new HeartbeatManager()
+  private heartbeat: HeartbeatManager
   private stateMachine = new ConnectionStateMachine()
 
-  constructor() {
+  constructor(
+    transport: TlsTransport = new TlsTransport(),
+    heartbeat: HeartbeatManager = new HeartbeatManager(),
+  ) {
     super()
+    this.transport = transport
+    this.heartbeat = heartbeat
 
     this.dispatcher = new RequestDispatcher((frame: Buffer) => {
       this.transport.write(frame)
@@ -124,6 +129,10 @@ export class TlsClient extends EventEmitter {
       } catch {
         // 已经 DISCONNECTED
       }
+    }
+
+    if (event === 'HEARTBEAT_TIMEOUT') {
+      this.transport.disconnect()
     }
   }
 }

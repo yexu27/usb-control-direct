@@ -36,6 +36,10 @@ export function calculateCrc32(data: Uint8Array): number {
 }
 
 export function encodeFrame(msgType: number, seqId: number, payload: Uint8Array): Buffer {
+  if (payload.length > MAX_PAYLOAD_SIZE) {
+    throw new Error(`消息载荷超过上限：${MAX_PAYLOAD_SIZE} 字节`)
+  }
+
   const frame = Buffer.alloc(FRAME_HEADER_SIZE + payload.length)
   frame.writeUInt32BE(FRAME_MAGIC, 0)
   frame.writeUInt32BE(msgType, 4)

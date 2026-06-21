@@ -6,6 +6,7 @@ export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ConnectionStatus>('DISCONNECTED')
   const deviceIp = ref('')
   const wasConnected = ref(false)
+  let transportConnected = false
 
   const isConnected = computed(() => status.value === 'CONNECTED')
   const isDisconnected = computed(() => status.value === 'DISCONNECTED')
@@ -20,6 +21,9 @@ export const useConnectionStore = defineStore('connection', () => {
       if (newStatus === 'CONNECTED') {
         wasConnected.value = true
       }
+      if (newStatus === 'DISCONNECTED') {
+        transportConnected = false
+      }
       status.value = newStatus
     })
   }
@@ -32,12 +36,30 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   async function connect(ip: string): Promise<void> {
+    if (transportConnected && deviceIp.value === ip && status.value === 'AUTHENTICATING') {
+      return
+    }
+
+    if (transportConnected || !isDisconnected.value) {
+      await disconnect()
+    }
+
     deviceIp.value = ip
     await window.desktopApi.tls.connect(ip)
+    transportConnected = true
+    status.value = 'AUTHENTICATING'
   }
 
-  async function disconnect(): Promise<void> {
-    await window.desktopApi.tls.disconnect()
+  async function disconnect(clearDeviceIp = false): Promise<void> {
+    try {
+      await window.desktopApi.tls.disconnect()
+    } finally {
+      transportConnected = false
+      status.value = 'DISCONNECTED'
+      if (clearDeviceIp) {
+        deviceIp.value = ''
+      }
+    }
   }
 
   async function applyStateEvent(event: ConnectionEvent): Promise<void> {
@@ -53,7 +75,7 @@ export const useConnectionStore = defineStore('connection', () => {
       return false
     }
     try {
-      await window.desktopApi.tls.connect(deviceIp.value)
+      await connect(deviceIp.value)
       return true
     } catch {
       return false
