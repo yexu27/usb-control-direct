@@ -2,5 +2,5 @@
 </script>
 
 <template>
-  <router-view />
+  <div class="login-page">登录页（占位）</div>
 </template>

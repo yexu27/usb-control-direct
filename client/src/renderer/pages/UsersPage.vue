@@ -2,5 +2,5 @@
 </script>
 
 <template>
-  <router-view />
+  <div class="users-page">用户管理（占位）</div>
 </template>
