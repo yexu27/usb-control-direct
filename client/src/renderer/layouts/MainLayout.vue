@@ -161,7 +161,7 @@ function handleClose(): void {
 .main-header {
   height: $header-height;
   background: linear-gradient(135deg, $brand-header-start, $brand-header-end);
-  color: #fff;
+  color: $color-white;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -187,8 +187,8 @@ function handleClose(): void {
 .shield-icon {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, #fff, #e0e8f0);
-  border-radius: 6px;
+  background: $brand-logo-shield-bg;
+  border-radius: $border-radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -202,21 +202,22 @@ function handleClose(): void {
 }
 
 .brand-cn {
-  font-size: 12px;
+  font-size: $font-base;
   font-weight: 600;
+  color: $brand-text-cn;
   letter-spacing: 1px;
 }
 
 .brand-en {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: $font-xs;
+  color: $brand-text-en;
   letter-spacing: 1.5px;
 }
 
 .header-separator {
   width: 1px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.25);
+  background: $brand-separator;
   flex-shrink: 0;
 }
 
@@ -227,14 +228,15 @@ function handleClose(): void {
 }
 
 .sys-name {
-  font-size: 14px;
+  font-size: $font-lg;
   font-weight: 600;
+  color: $brand-sys-name;
   letter-spacing: 0.5px;
 }
 
 .sys-sub {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: $font-sm;
+  color: $brand-sys-sub;
 }
 
 .header-right {
@@ -247,10 +249,10 @@ function handleClose(): void {
 }
 
 .device-ip {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  font-size: $font-base;
+  color: $device-ip-color;
+  background: $device-ip-bg;
+  border-radius: $border-radius;
   padding: 2px 8px;
 }
 
@@ -258,9 +260,9 @@ function handleClose(): void {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #fff;
+  color: $color-white;
   cursor: pointer;
-  font-size: 13px;
+  font-size: $font-md;
 }
 
 .win-controls {
@@ -273,22 +275,22 @@ function handleClose(): void {
   height: 28px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: $win-btn-color;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: $font-base;
   border-radius: 0;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: $win-btn-hover-bg;
   }
 }
 
 .win-btn-close:hover {
-  background: #e81123;
-  color: #fff;
+  background: $win-btn-close-hover-bg;
+  color: $color-white;
 }
 
 .main-body {
@@ -313,16 +315,16 @@ function handleClose(): void {
   padding: 12px 20px;
   cursor: pointer;
   color: $text-primary;
-  font-size: 14px;
+  font-size: $font-lg;
 
   &:hover {
-    background: #e8ecf2;
+    background: $hover-sidebar;
   }
 
   &.active {
     color: $brand-primary;
-    background: #e6f0fa;
-    border-right: 3px solid $brand-primary;
+    background: $active-sidebar-bg;
+    border-right: 3px solid $active-sidebar-border;
     font-weight: 500;
   }
 }
@@ -331,18 +333,18 @@ function handleClose(): void {
   flex: 1;
   overflow-y: auto;
   background: $bg-page;
-  padding: 16px;
+  padding: $content-padding;
 }
 
 .main-footer {
-  height: 28px;
-  background: #fff;
+  height: $footer-height;
+  background: $bg-white;
   border-top: 1px solid $border-color;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 $content-padding;
   gap: 6px;
-  font-size: 12px;
+  font-size: $font-base;
   color: $text-secondary;
   flex-shrink: 0;
 }

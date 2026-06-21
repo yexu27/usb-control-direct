@@ -37,6 +37,7 @@ function handleClose(): void {
   height: 100vh;
   overflow: hidden;
   position: relative;
+  background: $bg-white;
 }
 
 .win-controls {
@@ -53,20 +54,20 @@ function handleClose(): void {
   height: 28px;
   border: none;
   background: transparent;
-  color: $text-secondary;
+  color: $win-btn-light-color;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: $font-base;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.06);
+    background: $win-btn-light-hover-bg;
   }
 }
 
 .win-btn-close:hover {
-  background: #e81123;
-  color: #fff;
+  background: $win-btn-close-hover-bg;
+  color: $color-white;
 }
 </style>
