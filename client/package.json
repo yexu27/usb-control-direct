@@ -10,12 +10,16 @@
     "preview": "electron-vite preview",
     "gen-proto": "ts-node scripts/gen-proto.ts",
     "prebuild": "npm run gen-proto",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint . --ext .ts,.tsx,.vue",
     "format": "prettier --write \"src/**/*.{ts,tsx,vue,scss}\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "vue": "^3.4.0",
     "vue-router": "^4.0.0",
     "pinia": "^2.0.0",
@@ -23,6 +27,7 @@
     "protobufjs": "^7.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@vitejs/plugin-vue": "^5.0.0",
     "electron": "^32.0.0",
     "electron-vite": "^2.0.0",
@@ -42,6 +47,7 @@
     "@vue/test-utils": "^2.0.0",
     "happy-dom": "^14.0.0",
     "unplugin-auto-import": "^0.18.0",
-    "unplugin-vue-components": "^0.27.0"
+    "unplugin-vue-components": "^0.27.0",
+    "vue-tsc": "^2.1.0"
   }
 }
