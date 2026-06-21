@@ -55,7 +55,18 @@ function resetForm(): void {
 }
 
 function close(): void {
+  if (isSubmitting.value) {
+    return
+  }
   emit('update:visible', false)
+}
+
+function handleVisibilityChange(visible: boolean): void {
+  if (visible) {
+    emit('update:visible', true)
+    return
+  }
+  close()
 }
 
 async function handleSubmit(): Promise<void> {
@@ -63,12 +74,13 @@ async function handleSubmit(): Promise<void> {
     return
   }
 
+  isSubmitting.value = true
   const isValid = await formRef.value.validate().catch(() => false)
   if (!isValid) {
+    isSubmitting.value = false
     return
   }
 
-  isSubmitting.value = true
   try {
     await changePassword(
       session.token,
@@ -77,7 +89,8 @@ async function handleSubmit(): Promise<void> {
       passwordForm.confirmPassword,
     )
     ElMessage.success('密码修改成功')
-    close()
+    resetForm()
+    emit('update:visible', false)
   } catch (error: unknown) {
     if (error instanceof ServiceError && error.kind === 'unauthenticated') {
       return
@@ -104,7 +117,9 @@ watch(
     title="修改密码"
     width="420px"
     :close-on-click-modal="false"
-    @update:model-value="emit('update:visible', $event)"
+    :close-on-press-escape="!isSubmitting"
+    :show-close="!isSubmitting"
+    @update:model-value="handleVisibilityChange"
   >
     <el-form ref="formRef" :model="passwordForm" :rules="rules" label-width="80px">
       <el-form-item label="旧密码" prop="oldPassword">
@@ -113,6 +128,7 @@ watch(
           type="password"
           show-password
           placeholder="请输入旧密码"
+          :disabled="isSubmitting"
         />
       </el-form-item>
       <el-form-item label="新密码" prop="newPassword">
@@ -121,6 +137,7 @@ watch(
           type="password"
           show-password
           placeholder="请输入新密码"
+          :disabled="isSubmitting"
         />
       </el-form-item>
       <el-form-item label="确认密码" prop="confirmPassword">
@@ -129,6 +146,7 @@ watch(
           type="password"
           show-password
           placeholder="请再次输入新密码"
+          :disabled="isSubmitting"
         />
       </el-form-item>
     </el-form>

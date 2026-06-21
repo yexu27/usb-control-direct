@@ -37,6 +37,18 @@ interface ChangePasswordDialogVm {
     newPassword: string
     confirmPassword: string
   }
+  rules: Record<
+    string,
+    Array<{
+      validator?: (
+        rule: unknown,
+        value: string,
+        callback: (error?: Error) => void,
+      ) => void
+    }>
+  >
+  isSubmitting: boolean
+  close: () => void
   handleSubmit: () => Promise<void>
 }
 
@@ -88,6 +100,11 @@ describe('ChangePasswordDialog', () => {
     )
     expect(ElMessage.success).toHaveBeenCalledWith('密码修改成功')
     expect(wrapper.emitted('update:visible')).toEqual([[false]])
+    expect(component.passwordForm).toEqual({
+      oldPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    })
   })
 
   it('服务失败时保留弹窗并展示错误', async () => {
@@ -109,5 +126,53 @@ describe('ChangePasswordDialog', () => {
     await component.handleSubmit()
 
     expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  it('弱密码未通过复杂度校验', () => {
+    const wrapper = mountDialog()
+    const component = wrapper.vm as unknown as ChangePasswordDialogVm
+    const validator = component.rules.newPassword.find(
+      (rule) => rule.validator != null,
+    )?.validator
+    const callback = vi.fn()
+
+    validator?.({}, '12345678', callback)
+
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '密码至少包含字母、数字、特殊字符中的两种' }),
+    )
+  })
+
+  it('两次新密码不一致时未通过校验', () => {
+    const wrapper = mountDialog()
+    const component = wrapper.vm as unknown as ChangePasswordDialogVm
+    component.passwordForm.newPassword = 'new@1234'
+    const validator = component.rules.confirmPassword.find(
+      (rule) => rule.validator != null,
+    )?.validator
+    const callback = vi.fn()
+
+    validator?.({}, 'different@1234', callback)
+
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '两次输入的密码不一致' }),
+    )
+  })
+
+  it('提交过程中拒绝重复请求和关闭操作', async () => {
+    changePasswordMock.mockResolvedValue(undefined)
+    const wrapper = mountDialog()
+    const component = wrapper.vm as unknown as ChangePasswordDialogVm
+    component.passwordForm.oldPassword = 'old@1234'
+    component.passwordForm.newPassword = 'new@1234'
+    component.passwordForm.confirmPassword = 'new@1234'
+
+    const firstSubmit = component.handleSubmit()
+    component.close()
+    const secondSubmit = component.handleSubmit()
+    await Promise.all([firstSubmit, secondSubmit])
+
+    expect(changePasswordMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('update:visible')).toEqual([[false]])
   })
 })
