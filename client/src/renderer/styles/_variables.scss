@@ -1,13 +1,15 @@
-// 品牌色
+// 品牌
 $brand-primary: #0056b3;
+$brand-primary-dark: #003d82;
+$brand-primary-light: #e8f0fe;
 $brand-header-start: #004b9a;
 $brand-header-end: #0066cc;
+$brand-logo-size: 28px;
+$brand-logo-radius: 6px;
 
-// 布局
-$sidebar-width: 190px;
-$header-height: 48px;
-
-// 通用色彩
+// 基础色彩
+$color-white: #fff;
+$color-black: #000;
 $color-success: #67c23a;
 $color-warning: #e6a23c;
 $color-danger: #f56c6c;
@@ -17,12 +19,60 @@ $color-info: #909399;
 $text-primary: #303133;
 $text-regular: #606266;
 $text-secondary: #909399;
+$text-on-brand: $color-white;
+$text-on-brand-muted: rgba($color-white, 0.7);
 
-// 背景
+// 背景与边框
+$bg-app: #e8ecf1;
+$bg-page: $color-white;
 $bg-sidebar: #f5f7fa;
-$bg-page: #f0f2f5;
-
-// 边框/圆角/阴影
+$bg-sidebar-footer: #f0f2f5;
 $border-color: #dcdfe6;
+$menu-item-hover-bg: #e8f0fe;
+$menu-item-active-bg: #e3edfc;
+
+// 字体
+$font-family-base:
+  -apple-system, 'BlinkMacSystemFont', 'Microsoft YaHei', 'Segoe UI', 'Roboto', sans-serif;
+$font-size-xs: 11px;
+$font-size-sm: 12px;
+$font-size-base: 13px;
+$font-size-md: 14px;
+$font-size-lg: 16px;
+$line-height-base: 1.5;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$letter-spacing-brand: 1px;
+$letter-spacing-brand-en: 1.5px;
+$letter-spacing-product: 0.5px;
+
+// 间距
+$spacing-1: 4px;
+$spacing-2: 6px;
+$spacing-3: 8px;
+$spacing-4: 10px;
+$spacing-5: 12px;
+$spacing-6: 16px;
+$spacing-7: 20px;
+$spacing-8: 24px;
+
+// 布局尺寸
+$sidebar-width: 190px;
+$header-height: 48px;
+$footer-height: 28px;
+$content-padding: $spacing-6;
+$window-min-width: 1024px;
+$window-min-height: 700px;
+
+// 圆角与阴影
+$border-width: 1px;
 $border-radius: 4px;
+$border-radius-lg: 8px;
 $box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+$window-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+
+// 菜单与状态
+$menu-item-padding-block: $spacing-4;
+$menu-item-padding-inline: $spacing-6;
+$menu-active-border-width: 3px;
+$connection-dot-size: 8px;
