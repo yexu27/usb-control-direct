@@ -1,14 +1,18 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { createMainWindow, getMainWindow } from './window'
 import { TlsClient } from './tls-client'
 import { registerTlsIpc } from './ipc/tls-ipc'
 import { registerDialogIpc } from './ipc/dialog-ipc'
+import { registerWindowIpc } from './ipc/window-ipc'
 
 const tlsClient = new TlsClient()
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
+
   registerTlsIpc(tlsClient, getMainWindow)
   registerDialogIpc(getMainWindow)
+  registerWindowIpc(getMainWindow)
   createMainWindow()
 
   app.on('activate', () => {

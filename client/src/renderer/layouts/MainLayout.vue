@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Minus, FullScreen, Close } from '@element-plus/icons-vue'
 import { useSessionStore } from '@/stores/session'
 import { useConnectionStore } from '@/stores/connection'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
@@ -53,16 +53,45 @@ async function handleLogout(): Promise<void> {
   await session.logout()
   router.push('/login')
 }
+
+function handleMinimize(): void {
+  window.desktopApi.window.minimize()
+}
+
+function handleMaximize(): void {
+  window.desktopApi.window.maximize()
+}
+
+function handleClose(): void {
+  window.desktopApi.window.close()
+}
 </script>
 
 <template>
   <div class="main-layout">
     <header class="main-header">
       <div class="header-left">
-        <span class="brand-name">USB安全管理系统</span>
+        <div class="brand-logo">
+          <div class="shield-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="#0056b3"/>
+              <text x="8" y="10" text-anchor="middle" font-size="6" font-weight="700" fill="#fff">A</text>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-cn">安帝科技</span>
+            <span class="brand-en">ANDISEC</span>
+          </div>
+        </div>
+        <span class="header-separator" />
+        <div class="system-title">
+          <span class="sys-name">USB安全管理系统</span>
+          <span class="sys-sub">运维管理控制台 V1.0</span>
+        </div>
       </div>
+
       <div class="header-right">
-        <span class="device-ip">{{ connection.deviceIp }}</span>
+        <span v-if="connection.deviceIp" class="device-ip">{{ connection.deviceIp }}</span>
         <el-dropdown trigger="click" @command="handleUserCommand">
           <span class="user-dropdown-trigger">
             {{ session.username }}
@@ -75,6 +104,18 @@ async function handleLogout(): Promise<void> {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+      </div>
+
+      <div class="win-controls">
+        <button class="win-btn" title="最小化" @click="handleMinimize">
+          <el-icon><Minus /></el-icon>
+        </button>
+        <button class="win-btn" title="最大化" @click="handleMaximize">
+          <el-icon><FullScreen /></el-icon>
+        </button>
+        <button class="win-btn win-btn-close" title="关闭" @click="handleClose">
+          <el-icon><Close /></el-icon>
+        </button>
       </div>
     </header>
 
@@ -119,29 +160,98 @@ async function handleLogout(): Promise<void> {
 
 .main-header {
   height: $header-height;
-  background: linear-gradient(90deg, $brand-header-start, $brand-header-end);
+  background: linear-gradient(135deg, $brand-header-start, $brand-header-end);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 .header-left {
   display: flex;
   align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
-.brand-name {
-  font-size: 16px;
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shield-icon {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #fff, #e0e8f0);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.brand-cn {
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.brand-en {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 1.5px;
+}
+
+.header-separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.system-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.sys-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.sys-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
+  margin-right: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.device-ip {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 2px 8px;
 }
 
 .user-dropdown-trigger {
@@ -150,7 +260,35 @@ async function handleLogout(): Promise<void> {
   gap: 4px;
   color: #fff;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.win-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.win-btn {
+  width: 36px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  border-radius: 0;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.win-btn-close:hover {
+  background: #e81123;
+  color: #fff;
 }
 
 .main-body {
@@ -178,7 +316,7 @@ async function handleLogout(): Promise<void> {
   font-size: 14px;
 
   &:hover {
-    background: darken($bg-sidebar, 5%);
+    background: #e8ecf2;
   }
 
   &.active {
