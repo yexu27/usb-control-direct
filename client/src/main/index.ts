@@ -1,36 +1,12 @@
 import { app, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { createMainWindow, getMainWindow } from './window'
+import { TlsClient } from './tls-client'
+import { registerTlsIpc } from './ipc/tls-ipc'
 
-let mainWindow: BrowserWindow | null = null
-
-function createMainWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 700,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      preload: join(__dirname, '../preload/index.js'),
-    },
-  })
-
-  const isDev = !app.isPackaged
-
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-}
+const tlsClient = new TlsClient()
 
 app.whenReady().then(() => {
+  registerTlsIpc(tlsClient, getMainWindow)
   createMainWindow()
 
   app.on('activate', () => {
@@ -41,5 +17,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  tlsClient.disconnect()
   app.quit()
 })
