@@ -15,7 +15,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,vue,scss}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest:e2e": "npm run build",
+    "pretest:e2e": "node scripts/build-e2e.cjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
