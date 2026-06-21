@@ -23,44 +23,50 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false },
   },
   {
-    path: '/file-access',
-    name: 'FileAccess',
-    component: () => import('@/pages/FileAccessPage.vue'),
-    meta: { requiresAuth: true, roles: ['operator'] },
-  },
-  {
-    path: '/usb-devices',
-    name: 'UsbDevices',
-    component: () => import('@/pages/UsbDevicesPage.vue'),
-    meta: { requiresAuth: true, roles: ['operator'] },
-  },
-  {
-    path: '/policies',
-    name: 'Policies',
-    component: () => import('@/pages/PoliciesPage.vue'),
-    meta: { requiresAuth: true, roles: ['operator'] },
-  },
-  {
-    path: '/logs',
-    name: 'Logs',
-    component: () => import('@/pages/LogsPage.vue'),
-    meta: { requiresAuth: true, roles: ['auditor'] },
-  },
-  {
-    path: '/system',
-    name: 'System',
-    component: () => import('@/pages/SystemPage.vue'),
-    meta: { requiresAuth: true, roles: ['admin'] },
-  },
-  {
-    path: '/users',
-    name: 'Users',
-    component: () => import('@/pages/UsersPage.vue'),
-    meta: { requiresAuth: true, roles: ['admin'] },
-  },
-  {
     path: '/',
-    redirect: '/login',
+    component: () => import('@/layouts/MainLayout.vue'),
+    children: [
+      {
+        path: 'file-access',
+        name: 'FileAccess',
+        component: () => import('@/pages/FileAccessPage.vue'),
+        meta: { requiresAuth: true, roles: ['operator'] },
+      },
+      {
+        path: 'usb-devices',
+        name: 'UsbDevices',
+        component: () => import('@/pages/UsbDevicesPage.vue'),
+        meta: { requiresAuth: true, roles: ['operator'] },
+      },
+      {
+        path: 'policies',
+        name: 'Policies',
+        component: () => import('@/pages/PoliciesPage.vue'),
+        meta: { requiresAuth: true, roles: ['operator'] },
+      },
+      {
+        path: 'logs',
+        name: 'Logs',
+        component: () => import('@/pages/LogsPage.vue'),
+        meta: { requiresAuth: true, roles: ['auditor'] },
+      },
+      {
+        path: 'system',
+        name: 'System',
+        component: () => import('@/pages/SystemPage.vue'),
+        meta: { requiresAuth: true, roles: ['admin'] },
+      },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/pages/UsersPage.vue'),
+        meta: { requiresAuth: true, roles: ['admin'] },
+      },
+      {
+        path: '',
+        redirect: '/login',
+      },
+    ],
   },
 ]
 
