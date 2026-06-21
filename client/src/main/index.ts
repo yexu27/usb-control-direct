@@ -2,11 +2,13 @@ import { app, BrowserWindow } from 'electron'
 import { createMainWindow, getMainWindow } from './window'
 import { TlsClient } from './tls-client'
 import { registerTlsIpc } from './ipc/tls-ipc'
+import { registerDialogIpc } from './ipc/dialog-ipc'
 
 const tlsClient = new TlsClient()
 
 app.whenReady().then(() => {
   registerTlsIpc(tlsClient, getMainWindow)
+  registerDialogIpc(getMainWindow)
   createMainWindow()
 
   app.on('activate', () => {
