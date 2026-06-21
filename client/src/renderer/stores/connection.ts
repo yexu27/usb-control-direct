@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { ConnectionStatus } from '../../shared/connection-state'
+import type { ConnectionEvent, ConnectionStatus } from '../../shared/connection-state'
 
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ConnectionStatus>('DISCONNECTED')
@@ -13,7 +13,7 @@ export const useConnectionStore = defineStore('connection', () => {
   let unsubscribe: (() => void) | null = null
 
   function setupListener(): void {
-    if (window.desktopApi?.tls?.onStateChanged == null) {
+    if (unsubscribe != null || window.desktopApi?.tls?.onStateChanged == null) {
       return
     }
     unsubscribe = window.desktopApi.tls.onStateChanged((newStatus: ConnectionStatus) => {
@@ -36,8 +36,12 @@ export const useConnectionStore = defineStore('connection', () => {
     await window.desktopApi.tls.connect(ip)
   }
 
-  function disconnect(): void {
-    window.desktopApi.tls.disconnect()
+  async function disconnect(): Promise<void> {
+    await window.desktopApi.tls.disconnect()
+  }
+
+  async function applyStateEvent(event: ConnectionEvent): Promise<void> {
+    await window.desktopApi.tls.applyStateEvent(event)
   }
 
   function updateStatus(newStatus: ConnectionStatus): void {
@@ -65,6 +69,7 @@ export const useConnectionStore = defineStore('connection', () => {
     connect,
     disconnect,
     reconnect,
+    applyStateEvent,
     updateStatus,
     setupListener,
     teardownListener,

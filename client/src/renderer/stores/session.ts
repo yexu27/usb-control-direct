@@ -2,6 +2,13 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { UserRole, AuthStatus } from '../../shared/connection-state'
 import { useConnectionStore } from './connection'
+import { useBootstrapStore } from './bootstrap'
+import {
+  login as requestLogin,
+  logout as requestLogout,
+  queryAuthStatus,
+} from '@/services/auth-service'
+import { ServiceError } from '@/services/send-command'
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000
 
@@ -9,6 +16,25 @@ export interface LoginResult {
   success: boolean
   resultCode: number
   errorMessage: string
+}
+
+function parseUserRole(role: string): UserRole {
+  if (role === 'admin' || role === 'operator' || role === 'auditor') {
+    return role
+  }
+  throw new Error(`装置返回了未知角色：${role}`)
+}
+
+function parseAuthStatus(authStatus: string): AuthStatus {
+  if (
+    authStatus === 'authorized' ||
+    authStatus === 'unauthorized' ||
+    authStatus === 'expired' ||
+    authStatus === 'failed'
+  ) {
+    return authStatus
+  }
+  return ''
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -50,38 +76,120 @@ export const useSessionStore = defineStore('session', () => {
     deviceDescription.value = data.deviceDescription
   }
 
-  /**
-   * 发起登录请求。
-   * 注意：此方法为占位，实际 protobuf 编解码将在 Task 11 Services 层实现。
-   */
-  async function login(_ip: string, _loginUsername: string, _password: string): Promise<LoginResult> {
-    throw new Error('Not implemented — see Task 11 services layer')
+  async function finishAuthentication(): Promise<void> {
+    const connection = useConnectionStore()
+    const bootstrap = useBootstrapStore()
+
+    await connection.applyStateEvent('AUTH_SUCCESS')
+
+    if (authStatus.value === 'unauthorized' || authStatus.value === 'failed') {
+      await connection.applyStateEvent('LICENSE_UNAUTHORIZED')
+      return
+    }
+
+    if (authStatus.value === 'expired') {
+      await connection.applyStateEvent('LICENSE_EXPIRED')
+      return
+    }
+
+    if (authStatus.value !== 'authorized' || role.value === '') {
+      await connection.applyStateEvent('LICENSE_UNAUTHORIZED')
+      return
+    }
+
+    await connection.applyStateEvent('LICENSE_AUTHORIZED')
+    try {
+      await bootstrap.loadForRole(token.value, role.value)
+      await connection.applyStateEvent('CONFIG_LOADED')
+      startInactivityTimer()
+    } catch (error: unknown) {
+      try {
+        await connection.applyStateEvent('CONFIG_FAILED')
+      } catch {
+        // 网络断开可能已将主进程状态推进到 DISCONNECTED。
+      }
+      bootstrap.clear()
+      clearSession()
+      await connection.disconnect().catch(() => {})
+      throw error
+    }
   }
 
-  /**
-   * 发起登出请求。
-   * 注意：此方法为占位，实际 protobuf 编解码将在 Task 11 Services 层实现。
-   */
+  async function login(
+    ip: string,
+    loginUsername: string,
+    password: string,
+  ): Promise<LoginResult> {
+    const connection = useConnectionStore()
+    await connection.connect(ip)
+
+    try {
+      const response = await requestLogin(loginUsername, password)
+      setSession({
+        token: response.sessionToken,
+        username: response.username,
+        role: parseUserRole(response.role),
+        authStatus: parseAuthStatus(response.authStatus) || (response.authorized ? 'authorized' : ''),
+        authExpireTime: Number(response.authExpireTime),
+        deviceDescription: response.deviceDescription,
+      })
+      await finishAuthentication()
+      return { success: true, resultCode: 0, errorMessage: '' }
+    } catch (error: unknown) {
+      try {
+        await connection.applyStateEvent('AUTH_FAIL')
+      } catch {
+        // 连接错误可能已由主进程状态机处理。
+      }
+      throw error
+    }
+  }
+
   async function logout(): Promise<void> {
-    throw new Error('Not implemented — see Task 11 services layer')
+    const connection = useConnectionStore()
+    const bootstrap = useBootstrapStore()
+    const currentToken = token.value
+
+    try {
+      if (currentToken !== '' && !connection.isDisconnected) {
+        await requestLogout(currentToken)
+      }
+    } catch {
+      // 本地登出必须继续，远端失败交由装置侧会话超时兜底。
+    } finally {
+      bootstrap.clear()
+      clearSession()
+      await connection.disconnect().catch(() => {})
+    }
   }
 
-  /**
-   * 校验当前会话有效性。
-   * 注意：此方法为占位，实际 protobuf 编解码将在 Task 11 Services 层实现。
-   */
   async function validateSession(): Promise<boolean> {
-    throw new Error('Not implemented — see Task 11 services layer')
+    if (token.value === '') {
+      return false
+    }
+
+    try {
+      const response = await queryAuthStatus(token.value)
+      authStatus.value = parseAuthStatus(response.authStatus)
+      authExpireTime.value = Number(response.expireTime)
+      deviceDescription.value = response.deviceDescription
+      await finishAuthentication()
+      return true
+    } catch (error: unknown) {
+      if (error instanceof ServiceError && error.kind === 'unauthenticated') {
+        useBootstrapStore().clear()
+        clearSession()
+        await useConnectionStore().disconnect().catch(() => {})
+        return false
+      }
+      throw error
+    }
   }
 
   function startInactivityTimer(): void {
     stopInactivityTimer()
     inactivityTimer = setTimeout(() => {
-      const connection = useConnectionStore()
-      clearSession()
-      if (connection.isConnected) {
-        connection.disconnect()
-      }
+      void logout()
     }, INACTIVITY_TIMEOUT)
   }
 
