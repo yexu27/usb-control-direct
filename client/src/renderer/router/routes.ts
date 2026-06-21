@@ -4,6 +4,7 @@ import type { UserRole } from '../../shared/connection-state'
 declare module 'vue-router' {
   interface RouteMeta {
     guest?: boolean
+    licenseFlow?: boolean
     requiresAuth?: boolean
     roles?: UserRole[]
   }
@@ -20,7 +21,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/license',
     name: 'License',
     component: () => import('@/pages/LicensePage.vue'),
-    meta: { requiresAuth: false },
+    meta: { licenseFlow: true },
   },
   {
     path: '/',

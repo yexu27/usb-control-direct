@@ -5,9 +5,9 @@ import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import type { UserRole } from '../../../src/shared/connection-state'
 
-function setSession(role: UserRole): void {
+function setSession(role: UserRole, token = 'session-token'): void {
   useSessionStore().setSession({
-    token: 'session-token',
+    token,
     username: role,
     role,
     authStatus: 'authorized',
@@ -34,6 +34,33 @@ describe('resolveRouteAccess', () => {
     useConnectionStore().updateStatus('AUTH_REQUIRED')
 
     expect(resolveRouteAccess({ requiresAuth: false })).toBe('/license')
+  })
+
+  it('有效临时会话在未授权状态可进入授权页', () => {
+    setSession('operator', 'temporary-token')
+    useConnectionStore().updateStatus('AUTH_REQUIRED')
+
+    expect(resolveRouteAccess({ licenseFlow: true })).toBe(true)
+  })
+
+  it('有效临时会话在授权到期状态可进入授权页续期', () => {
+    setSession('admin', 'temporary-token')
+    useConnectionStore().updateStatus('LICENSE_EXPIRED')
+
+    expect(resolveRouteAccess({ licenseFlow: true })).toBe(true)
+  })
+
+  it('无临时会话访问授权页时跳转登录页', () => {
+    useConnectionStore().updateStatus('AUTH_REQUIRED')
+
+    expect(resolveRouteAccess({ licenseFlow: true })).toBe('/login')
+  })
+
+  it('已授权用户直接访问授权页时跳转角色默认页', () => {
+    setSession('operator')
+    useConnectionStore().updateStatus('CONNECTED')
+
+    expect(resolveRouteAccess({ licenseFlow: true })).toBe('/file-access')
   })
 
   it('角色无权访问时跳转该角色默认页', () => {

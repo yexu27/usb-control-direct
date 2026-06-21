@@ -68,6 +68,15 @@ describe('ConnectionStateMachine', () => {
     expect(sm.transition('LICENSE_EXPIRED')).toBe('LICENSE_EXPIRED')
   })
 
+  it('transitions LICENSE_EXPIRED → DISCONNECTED on LICENSE_UPLOAD_SUCCESS', () => {
+    const sm = new ConnectionStateMachine()
+    sm.transition('CONNECT_START')
+    sm.transition('CONNECT_SUCCESS')
+    sm.transition('AUTH_SUCCESS')
+    sm.transition('LICENSE_EXPIRED')
+    expect(sm.transition('LICENSE_UPLOAD_SUCCESS')).toBe('DISCONNECTED')
+  })
+
   it('transitions AUTH_REQUIRED → DISCONNECTED on LICENSE_UPLOAD_SUCCESS', () => {
     const sm = new ConnectionStateMachine()
     sm.transition('CONNECT_START')
