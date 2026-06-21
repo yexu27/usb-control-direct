@@ -1,0 +1,15 @@
+appId: com.andi.usb-control
+productName: USB安全管理系统
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerLanguages:
+    - zh_CN
+directories:
+  output: dist
+  buildResources: resources
