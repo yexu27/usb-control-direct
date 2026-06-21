@@ -1,0 +1,453 @@
+// USB 管控系统直连版 —— 私有协议消息定义
+//
+// 本文件由架构文档 09-私有协议与接口设计.md 生成，两端共享。
+// 载荷通过协议帧传输，帧格式见架构文档。
+
+syntax = "proto3";
+
+package usb_control;
+
+// ============================================================
+// 1. 连接、登录、登出与授权（0x0001 - 0x00FF）
+// ============================================================
+
+// CMD_LOGIN（0x0001）—— 登录装置，无需 session token
+message CmdLogin {
+    string username = 1;
+    string password = 2;
+}
+
+// RSP_LOGIN（0x0002）—— 登录响应
+message RspLogin {
+    bool success = 1;
+    string session_token = 2;       // 成功时返回，仅管理端进程内保存
+    string username = 3;
+    string role = 4;                // admin / operator / auditor
+    bool authorized = 5;            // 兼容性字段，true 表示 auth_status=authorized
+    int64 auth_expire_time = 6;     // Unix 秒；0 表示未授权 / 无到期时间
+    string device_description = 7;
+    int32 result_code = 8;           // 0x0101 / 0x0004 / 0x0102（见统一结果码表）
+    string error_message = 9;
+    string auth_status = 10;        // authorized / unauthorized / expired / failed
+}
+
+// CMD_AUTH_STATUS_QUERY（0x0003）—— 查询装置授权状态
+message CmdAuthStatusQuery {
+    string session_token = 1;
+}
+
+// RSP_AUTH_STATUS（0x0004）—— 授权状态响应
+message RspAuthStatus {
+    bool authorized = 1;            // 兼容性字段，true 表示 auth_status=authorized
+    int64 expire_time = 2;          // 授权到期时间 Unix 秒；0 表示未授权
+    string device_description = 3;
+    string auth_status = 4;         // authorized / unauthorized / expired / failed
+}
+
+// CMD_GET_MACHINE_CODE（0x0005）—— 获取机器码
+message CmdGetMachineCode {
+    string session_token = 1;
+}
+
+// RSP_MACHINE_CODE（0x0006）—— 机器码响应
+message RspMachineCode {
+    string machine_code = 1;        // 机器码文本（Base64）
+    bytes qrcode_png = 2;           // 二维码 PNG 图片字节流
+}
+
+// CMD_UPLOAD_LICENSE（0x0007）—— 上传授权文件
+message CmdUploadLicense {
+    string session_token = 1;
+    bytes license_data = 2;         // 授权文件内容（.txt 文件字节流）
+}
+
+// RSP_UPLOAD_LICENSE（0x0008）—— 授权文件上传响应
+message RspUploadLicense {
+    bool success = 1;
+    int64 expire_time = 2;          // 成功时：授权到期时间 Unix 秒
+    int32 result_code = 3;           // 失败时的结果码（见统一结果码表）
+    string error_message = 4;       // 失败时的提示文本（中文）
+}
+
+// CMD_LOGOUT（0x0009）—— 登出，响应使用 RspCommon
+message CmdLogout {
+    string session_token = 1;
+}
+
+// ============================================================
+// 2. 白名单管理（0x0100 - 0x01FF）
+// ============================================================
+
+// 白名单设备条目
+message WhitelistDevice {
+    string serial_number = 1;
+    string vid = 2;
+    string pid = 3;
+    string device_name = 4;
+    int64 capacity_bytes = 5;
+    string permission = 6;          // readonly / readwrite
+    string description = 7;
+    string add_method = 8;          // device / management
+    int64 created_at = 9;           // Unix 秒
+    string device_type = 10;        // storage，页面不展示
+}
+
+// CMD_LIST_WHITELIST（0x0100）—— 获取全量白名单列表
+message CmdListWhitelist {
+    string session_token = 1;
+}
+
+// RSP_LIST_WHITELIST（0x0101）
+message RspListWhitelist {
+    repeated WhitelistDevice devices = 1;
+}
+
+// 当前连接装置的 USB 设备条目
+message ConnectedDevice {
+    string serial_number = 1;
+    string device_name = 2;
+    string vid = 3;
+    string pid = 4;
+    int64 capacity_bytes = 5;
+    string device_type = 6;         // storage / keyboard / mouse / unsupported / unknown
+    string interface_type = 7;      // mass_storage / hid_keyboard / hid_mouse / unsupported / unknown
+    string admission_status = 8;    // addable / unsupported / spoof_suspected / blocked
+    string fail_reason = 9;         // 不可添加或禁止映射原因
+}
+
+// CMD_GET_CONNECTED_DEVICES（0x0102）—— 获取当前连接装置的 USB 设备列表
+message CmdGetConnectedDevices {
+    string session_token = 1;
+}
+
+// RSP_CONNECTED_DEVICES（0x0103）
+message RspConnectedDevices {
+    repeated ConnectedDevice devices = 1;
+}
+
+// CMD_ADD_WHITELIST（0x0104）—— 添加白名单设备
+message CmdAddWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+    string vid = 3;
+    string pid = 4;
+    string device_name = 5;
+    int64 capacity_bytes = 6;
+    string permission = 7;
+    string description = 8;
+    string add_method = 9;
+    string device_type = 10;        // storage
+}
+
+// CMD_REMOVE_WHITELIST（0x0105）—— 删除白名单设备，响应使用 RspCommon
+message CmdRemoveWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+}
+
+// CMD_UPDATE_WHITELIST（0x0106）—— 修改白名单设备权限或描述，响应使用 RspCommon
+message CmdUpdateWhitelist {
+    string session_token = 1;
+    string serial_number = 2;
+    string permission = 3;          // 可选，不修改时为空
+    string description = 4;         // 可选，不修改时为空
+}
+
+// ============================================================
+// 3. 文件访问控制策略（0x0200 - 0x02FF）
+// ============================================================
+
+// 文件类型黑名单条目
+message FileTypeBlacklistItem {
+    string extension = 1;
+    string description = 2;
+    bool is_default = 3;
+    int64 created_at = 4;           // Unix 秒
+}
+
+// CMD_GET_FILE_POLICY（0x0200）—— 获取文件访问控制策略
+message CmdGetFilePolicy {
+    string session_token = 1;
+}
+
+// RSP_FILE_POLICY（0x0201）
+message RspFilePolicy {
+    bool exec_control_enabled = 1;
+    bool auto_read_control_enabled = 2;
+    bool file_type_blacklist_enabled = 3;
+    repeated FileTypeBlacklistItem blacklist = 4;
+}
+
+// CMD_UPDATE_FILE_POLICY_SWITCH（0x0202）—— 修改文件访问控制开关，响应使用 RspCommon
+message CmdUpdateFilePolicySwitch {
+    string session_token = 1;
+    string policy_key = 2;          // exec_control / auto_read_control / file_type_blacklist_control
+    bool enabled = 3;
+}
+
+// CMD_ADD_BLACKLIST_EXTENSION（0x0203）—— 添加黑名单条目，响应使用 RspCommon
+message CmdAddBlacklistExtension {
+    string session_token = 1;
+    string extension = 2;
+    string description = 3;
+}
+
+// CMD_REMOVE_BLACKLIST_EXTENSION（0x0204）—— 删除黑名单条目，响应使用 RspCommon
+message CmdRemoveBlacklistExtension {
+    string session_token = 1;
+    string extension = 2;
+}
+
+// ============================================================
+// 4. 策略导入导出（0x0300 - 0x03FF）
+// ============================================================
+
+// CMD_EXPORT_POLICY（0x0300）—— 导出策略
+message CmdExportPolicy {
+    string session_token = 1;
+}
+
+// RSP_EXPORT_POLICY（0x0301）
+message RspExportPolicy {
+    bool success = 1;
+    bytes policy_data = 2;          // 加密后的 .bin 文件字节流
+    int32 result_code = 3;           // 失败时的结果码（见统一结果码表）
+    string error_message = 4;       // 失败时的提示文本（中文）
+}
+
+// CMD_IMPORT_POLICY（0x0302）—— 导入策略，响应使用 RspCommon
+message CmdImportPolicy {
+    string session_token = 1;
+    bytes policy_data = 2;          // .bin 文件字节流
+}
+
+// ============================================================
+// 5. 日志查询与管理（0x0400 - 0x04FF）
+// ============================================================
+
+// CMD_QUERY_LOGS（0x0400）—— 查询日志
+message CmdQueryLogs {
+    string session_token = 1;
+    string log_type = 2;            // usb_audit / malware / operation
+    int64 start_time = 3;           // Unix 秒，包含；0 表示不限
+    int64 end_time = 4;             // Unix 秒，包含；0 表示不限
+    string keyword = 5;             // 关键字搜索，可为空
+    string event_type = 6;          // USB 审计事件类型筛选，可为空
+    int32 page = 7;                 // 页码（从 1 开始）
+    int32 page_size = 8;            // 每页条数（默认 50）
+    string log_category = 9;        // 操作日志 PRD 页面分类筛选，可为空
+    string action_type = 10;        // 操作日志具体动作筛选，可为空
+}
+
+// USB 审计日志条目
+message UsbAuditLogEntry {
+    int64 id = 1;
+    int64 event_time = 2;           // Unix 秒
+    string device_sn = 3;
+    string device_name = 4;
+    string device_type = 5;
+    string interface_type = 6;
+    string event_type = 7;
+    string permission = 8;
+    int64 capacity_bytes = 9;
+    string file_path = 10;
+    string matched_policy = 11;
+    string result = 12;
+    string fail_reason = 13;
+    string detail = 14;
+}
+
+// 恶意代码检测日志条目
+message MalwareLogEntry {
+    int64 id = 1;
+    int64 scan_time = 2;            // Unix 秒
+    string device_sn = 3;
+    string device_name = 4;
+    string file_path = 5;
+    string scan_result = 6;
+    string virus_name = 7;
+    string virus_db_version = 8;
+    string process_result = 9;
+    string fail_reason = 10;
+    string detail = 11;
+}
+
+// 操作日志条目
+message OperationLogEntry {
+    int64 id = 1;
+    int64 op_time = 2;              // Unix 秒
+    string username = 3;
+    string role = 4;
+    string log_category = 5;        // PRD 页面分类，对应 T10.log_type
+    string action_type = 6;
+    string target = 7;
+    string related_file = 8;
+    string related_version = 9;
+    string result = 10;
+    string fail_reason = 11;
+    string detail = 12;
+    string source_ip = 13;          // 排查字段，页面默认不展示
+    string app_version = 14;        // 排查字段，页面默认不展示
+    string session_id = 15;         // 排查字段，页面默认不展示
+    string request_id = 16;         // 排查字段，页面默认不展示
+    string before_value = 17;       // 操作前值（JSON 格式），对应 T10.before_value
+    string after_value = 18;        // 操作后值（JSON 格式），对应 T10.after_value
+}
+
+// RSP_QUERY_LOGS（0x0401）
+message RspQueryLogs {
+    bool success = 1;
+    repeated UsbAuditLogEntry usb_audit_entries = 2;
+    repeated MalwareLogEntry malware_entries = 3;
+    repeated OperationLogEntry operation_entries = 4;
+    int32 total = 5;                // 符合条件的总记录数
+    int32 page = 6;
+    int32 page_size = 7;
+    int32 result_code = 8;           // 失败时的结果码（见统一结果码表）
+    string error_message = 9;       // 失败时的提示文本（中文）
+}
+
+// CMD_EXPORT_LOGS（0x0402）—— 导出日志
+message CmdExportLogs {
+    string session_token = 1;
+    string log_type = 2;
+    int64 start_time = 3;           // Unix 秒，包含；0 表示不限
+    int64 end_time = 4;             // Unix 秒，包含；0 表示不限
+    string keyword = 5;
+    string event_type = 6;
+    string log_category = 7;
+    string action_type = 8;
+}
+
+// RSP_EXPORT_LOGS（0x0403）
+message RspExportLogs {
+    bool success = 1;
+    bytes zip_data = 2;             // .zip 文件字节流
+    string suggested_filename = 3;  // 装置端生成的文件名，管理端直接使用
+    int32 result_code = 4;           // 失败时的结果码（见统一结果码表）
+    string error_message = 5;       // 失败时的提示文本（中文）
+}
+
+// CMD_DELETE_LOGS（0x0404）—— 清理日志，响应使用 RspCommon
+message CmdDeleteLogs {
+    string session_token = 1;
+    string log_type = 2;
+    int64 start_time = 3;           // Unix 秒，包含
+    int64 end_time = 4;             // Unix 秒，包含
+}
+
+// ============================================================
+// 6. 系统管理（0x0500 - 0x05FF）
+// ============================================================
+
+// CMD_GET_SYSTEM_INFO（0x0500）—— 获取系统信息
+message CmdGetSystemInfo {
+    string session_token = 1;
+}
+
+// RSP_SYSTEM_INFO（0x0501）
+message RspSystemInfo {
+    string system_version = 1;
+    string virus_db_version = 2;
+    bool authorized = 3;            // 兼容性字段，true 表示 auth_status=authorized
+    int64 auth_expire_time = 4;     // Unix 秒；0 表示未授权
+    string device_description = 5;
+    int64 virus_db_updated_at = 6;  // Unix 秒；0 表示未知
+    string auth_status = 7;         // authorized / unauthorized / expired / failed
+}
+
+// CMD_UPLOAD_SYSTEM_UPGRADE（0x0502）—— 上传系统升级包，响应使用 RspCommon
+message CmdUploadSystemUpgrade {
+    string session_token = 1;
+    bytes upgrade_data = 2;         // .bin 升级包字节流
+    string target_version = 3;      // 目标版本号（升级包内声明）
+    string sha256_checksum = 4;     // upgrade_data 的 SHA-256 十六进制摘要，空串时跳过校验
+}
+
+// CMD_UPLOAD_VIRUSDB_UPGRADE（0x0503）—— 上传病毒库升级包，响应使用 RspCommon
+message CmdUploadVirusdbUpgrade {
+    string session_token = 1;
+    bytes upgrade_data = 2;         // .zip 升级包字节流
+    string target_version = 3;      // 版本递增逢数字 4 跳过
+    string sha256_checksum = 4;     // upgrade_data 的 SHA-256 十六进制摘要，空串时跳过校验
+}
+
+// CMD_UPDATE_DEVICE_DESC（0x0504）—— 修改设备描述，响应使用 RspCommon
+message CmdUpdateDeviceDesc {
+    string session_token = 1;
+    string description = 2;         // 最大 32 字符，仅字母/数字/下划线
+}
+
+// ============================================================
+// 7. 用户管理（0x0600 - 0x06FF）
+// ============================================================
+
+// 用户列表条目
+message UserItem {
+    string username = 1;
+    string role = 2;                // admin / operator / auditor
+    string status = 3;              // active / locked / deleted
+    bool is_builtin = 4;
+    int64 created_at = 5;           // Unix 秒；0 表示内置用户或无创建时间（由 UI 层映射展示「内置」）
+}
+
+// CMD_LIST_USERS（0x0600）—— 获取用户列表
+message CmdListUsers {
+    string session_token = 1;
+}
+
+// RSP_LIST_USERS（0x0601）
+message RspListUsers {
+    repeated UserItem users = 1;
+}
+
+// CMD_CREATE_USER（0x0602）—— 新建用户，响应使用 RspCommon
+message CmdCreateUser {
+    string session_token = 1;
+    string username = 2;
+    string role = 3;
+    string password = 4;
+    string confirm_password = 5;
+}
+
+// CMD_DELETE_USER（0x0603）—— 删除用户，响应使用 RspCommon
+message CmdDeleteUser {
+    string session_token = 1;
+    string username = 2;
+}
+
+// CMD_RESET_PASSWORD（0x0604）—— 重置密码，响应使用 RspCommon
+message CmdResetPassword {
+    string session_token = 1;
+    string username = 2;
+    string new_password = 3;
+    string confirm_password = 4;
+}
+
+// CMD_CHANGE_PASSWORD（0x0605）—— 修改本人密码，响应使用 RspCommon
+message CmdChangePassword {
+    string session_token = 1;
+    string old_password = 2;
+    string new_password = 3;
+    string confirm_password = 4;
+}
+
+// ============================================================
+// 8. 通用响应与心跳（0xFF00 - 0xFF02）
+// ============================================================
+
+// RSP_COMMON（0xFF00）—— 通用响应，所有无特定响应载荷的命令使用
+message RspCommon {
+    bool success = 1;
+    int32 result_code = 2;           // 失败时的结果码（见统一结果码表）
+    string error_message = 3;       // 失败时的提示文本（中文，直接展示给用户）
+}
+
+// CMD_HEARTBEAT（0xFF01）—— 心跳请求，管理端每 30 秒发送一次
+// 超过 3 次无响应视为连接断开
+message CmdHeartbeat {
+}
+
+// RSP_HEARTBEAT（0xFF02）—— 心跳响应，装置端收到后立即回复
+message RspHeartbeat {
+}
