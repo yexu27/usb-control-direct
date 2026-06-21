@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { join } from 'path'
 
 let mainWindow: BrowserWindow | null = null
 
