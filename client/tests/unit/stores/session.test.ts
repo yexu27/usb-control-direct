@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
+import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
+import { useWhitelistStore } from '../../../src/renderer/stores/whitelist'
 import { login, logout, queryAuthStatus } from '../../../src/renderer/services/auth-service'
 import { listWhitelist } from '../../../src/renderer/services/whitelist-service'
 import { getFilePolicy } from '../../../src/renderer/services/file-policy-service'
@@ -14,11 +16,17 @@ vi.mock('../../../src/renderer/services/auth-service', () => ({
 }))
 
 vi.mock('../../../src/renderer/services/whitelist-service', () => ({
+  addWhitelist: vi.fn(),
   listWhitelist: vi.fn(),
+  removeWhitelist: vi.fn(),
+  updateWhitelist: vi.fn(),
 }))
 
 vi.mock('../../../src/renderer/services/file-policy-service', () => ({
+  addBlacklistExtension: vi.fn(),
   getFilePolicy: vi.fn(),
+  removeBlacklistExtension: vi.fn(),
+  updateSwitch: vi.fn(),
 }))
 
 vi.mock('../../../src/renderer/services/system-service', () => ({
@@ -37,6 +45,27 @@ const getFilePolicyMock = vi.mocked(getFilePolicy)
 const connect = vi.fn().mockResolvedValue(undefined)
 const disconnect = vi.fn().mockResolvedValue(undefined)
 const applyStateEvent = vi.fn().mockResolvedValue(undefined)
+
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {
+    throw new Error('deferred 尚未初始化')
+  }
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    await Promise.resolve()
+  }
+}
 
 describe('useSessionStore', () => {
   beforeEach(() => {
@@ -181,6 +210,125 @@ describe('useSessionStore', () => {
       'LICENSE_AUTHORIZED',
       'CONFIG_LOADED',
     ])
+  })
+
+  it('操作员配置加载失败时清空会话并断开连接', async () => {
+    loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
+      success: true,
+      sessionToken: 'token',
+      username: 'operator',
+      role: 'operator',
+      authorized: true,
+      authStatus: 'authorized',
+    }))
+    listWhitelistMock.mockResolvedValue(usb_control.RspListWhitelist.fromObject({ devices: [] }))
+    getFilePolicyMock.mockRejectedValue(new Error('配置加载失败'))
+    const store = useSessionStore()
+
+    await expect(store.login('19.19.19.16', 'operator', 'operator@123')).rejects.toThrow(
+      '配置加载失败',
+    )
+
+    expect(store.token).toBe('')
+    expect(disconnect).toHaveBeenCalledWith(true)
+    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
+      'AUTH_SUCCESS',
+      'LICENSE_AUTHORIZED',
+      'CONFIG_FAILED',
+      'AUTH_FAIL',
+    ])
+  })
+
+  it.each([
+    ['文件策略快速失败', 'file-policy'],
+    ['白名单快速失败', 'whitelist'],
+  ] as const)('%s 时等待另一路加载结束再清理', async (_name, failedDomain) => {
+    const loadError = new Error(`${failedDomain} 加载失败`)
+    const filePolicyDeferred = createDeferred<usb_control.RspFilePolicy>()
+    const whitelistDeferred = createDeferred<usb_control.RspListWhitelist>()
+    loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
+      success: true,
+      sessionToken: 'token',
+      username: 'operator',
+      role: 'operator',
+      authorized: true,
+      authStatus: 'authorized',
+    }))
+    getFilePolicyMock.mockImplementation(() =>
+      failedDomain === 'file-policy'
+        ? Promise.reject(loadError)
+        : filePolicyDeferred.promise,
+    )
+    listWhitelistMock.mockImplementation(() =>
+      failedDomain === 'whitelist'
+        ? Promise.reject(loadError)
+        : whitelistDeferred.promise,
+    )
+    const store = useSessionStore()
+
+    const loginPromise = store.login('19.19.19.16', 'operator', 'operator@123')
+    let isLoginSettled = false
+    void loginPromise.then(
+      () => {
+        isLoginSettled = true
+      },
+      () => {
+        isLoginSettled = true
+      },
+    )
+    await flushMicrotasks()
+
+    expect(getFilePolicyMock).toHaveBeenCalledWith('token')
+    expect(listWhitelistMock).toHaveBeenCalledWith('token')
+    expect(isLoginSettled).toBe(false)
+    expect(disconnect).not.toHaveBeenCalled()
+
+    if (failedDomain === 'file-policy') {
+      whitelistDeferred.resolve(
+        usb_control.RspListWhitelist.fromObject({
+          devices: [usb_control.WhitelistDevice.fromObject({ serialNumber: 'SN-late' })],
+        }),
+      )
+    } else {
+      filePolicyDeferred.resolve(
+        usb_control.RspFilePolicy.fromObject({
+          execControlEnabled: true,
+        }),
+      )
+    }
+
+    await expect(loginPromise).rejects.toBe(loadError)
+
+    expect(useFilePolicyStore().policy).toBeNull()
+    expect(useWhitelistStore().devices).toEqual([])
+    expect(store.token).toBe('')
+    expect(disconnect).toHaveBeenCalledWith(true)
+    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
+      'AUTH_SUCCESS',
+      'LICENSE_AUTHORIZED',
+      'CONFIG_FAILED',
+      'AUTH_FAIL',
+    ])
+  })
+
+  it('操作员两路加载均失败时按文件策略优先级抛出原始错误', async () => {
+    const filePolicyError = new Error('文件策略加载失败')
+    const whitelistError = new Error('白名单加载失败')
+    loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
+      success: true,
+      sessionToken: 'token',
+      username: 'operator',
+      role: 'operator',
+      authorized: true,
+      authStatus: 'authorized',
+    }))
+    getFilePolicyMock.mockRejectedValue(filePolicyError)
+    listWhitelistMock.mockRejectedValue(whitelistError)
+    const store = useSessionStore()
+
+    await expect(
+      store.login('19.19.19.16', 'operator', 'operator@123'),
+    ).rejects.toBe(filePolicyError)
   })
 
   it('主动登出远端失败时仍清空本地状态并断开连接', async () => {
