@@ -32,7 +32,7 @@ function mountLayout() {
       stubs: {
         RouterView: true,
         ChangePasswordDialog: true,
-        ElDropdown: true,
+        ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
         ElDropdownMenu: true,
         ElDropdownItem: true,
         ElIcon: true,
@@ -48,7 +48,7 @@ describe('MainLayout', () => {
     currentRoute.path = '/file-access'
   })
 
-  it('展示品牌、系统名称、装置 IP 和当前用户', () => {
+  it('展示品牌与系统名称，不暴露装置 IP、用户名或角色', () => {
     setSession('operator')
     const connection = useConnectionStore()
     connection.deviceIp = '19.19.19.16'
@@ -58,8 +58,41 @@ describe('MainLayout', () => {
     expect(wrapper.get('[data-testid="brand-name"]').text()).toBe('安帝科技')
     expect(wrapper.get('[data-testid="brand-en-name"]').text()).toBe('ANDISEC')
     expect(wrapper.get('[data-testid="product-name"]').text()).toBe('USB安全管理系统')
-    expect(wrapper.get('[data-testid="device-ip"]').text()).toContain('19.19.19.16')
-    expect(wrapper.get('[data-testid="current-user"]').text()).toContain('operator')
+    expect(wrapper.find('[data-testid="device-ip"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('19.19.19.16')
+    expect(wrapper.text()).not.toContain('operator')
+    expect(wrapper.text()).not.toContain('操作员')
+    const trigger = wrapper.get('[data-testid="user-menu-trigger"]')
+    expect(trigger.element.tagName).toBe('BUTTON')
+    expect(trigger.attributes('aria-label')).toBe('用户菜单')
+    expect(trigger.text()).toBe('')
+    expect(trigger.attributes('title')).toBeUndefined()
+  })
+
+  it('用户菜单保留修改密码与登出操作', () => {
+    setSession('operator')
+    const wrapper = mountLayout()
+
+    expect(wrapper.text()).toContain('修改密码')
+    expect(wrapper.text()).toContain('登出')
+  })
+
+  it('用户菜单在同一头部控制容器中位于窗口按钮左侧', () => {
+    setSession('operator')
+    const wrapper = mountLayout()
+    const controls = wrapper.get('[data-testid="header-controls"]')
+    const userMenu = controls.get('[data-testid="user-menu-trigger"]').element
+    const windowControls = controls.get('[data-testid="window-controls"]').element
+    const minimize = controls.get('[data-testid="window-minimize"]').element
+    const maximize = controls.get('[data-testid="window-maximize"]').element
+    const close = controls.get('[data-testid="window-close"]').element
+
+    expect(userMenu.compareDocumentPosition(windowControls) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+    for (const button of [minimize, maximize, close]) {
+      expect(userMenu.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy()
+    }
   })
 
   it.each([

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ArrowDown, Minus, FullScreen, Close } from '@element-plus/icons-vue'
+import { User, Minus, FullScreen, Close } from '@element-plus/icons-vue'
 import { useSessionStore } from '@/stores/session'
 import { useConnectionStore } from '@/stores/connection'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
@@ -74,8 +74,20 @@ function handleClose(): void {
         <div class="brand-logo">
           <div class="shield-icon" aria-hidden="true">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="#0056b3" />
-              <text x="8" y="10" text-anchor="middle" font-size="6" font-weight="700" fill="#fff">
+              <path
+                class="shield-shape"
+                d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z"
+                fill="currentColor"
+              />
+              <text
+                class="shield-letter"
+                x="8"
+                y="10"
+                text-anchor="middle"
+                font-size="6"
+                font-weight="700"
+                fill="currentColor"
+              >
                 A
               </text>
             </svg>
@@ -92,15 +104,16 @@ function handleClose(): void {
         </div>
       </div>
 
-      <div class="header-right">
-        <span class="device-ip" data-testid="device-ip">
-          装置：{{ connection.deviceIp || '--' }}
-        </span>
+      <div class="header-right" data-testid="header-controls">
         <el-dropdown trigger="click" @command="handleUserCommand">
-          <span class="user-dropdown-trigger" data-testid="current-user">
-            {{ session.username }}
-            <el-icon><ArrowDown /></el-icon>
-          </span>
+          <button
+            type="button"
+            class="user-menu-trigger"
+            data-testid="user-menu-trigger"
+            aria-label="用户菜单"
+          >
+            <el-icon aria-hidden="true"><User /></el-icon>
+          </button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="change-password">修改密码</el-dropdown-item>
@@ -108,18 +121,32 @@ function handleClose(): void {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-      </div>
-
-      <div class="win-controls">
-        <button class="win-btn" title="最小化" @click="handleMinimize">
-          <el-icon><Minus /></el-icon>
-        </button>
-        <button class="win-btn" title="最大化" @click="handleMaximize">
-          <el-icon><FullScreen /></el-icon>
-        </button>
-        <button class="win-btn win-btn-close" title="关闭" @click="handleClose">
-          <el-icon><Close /></el-icon>
-        </button>
+        <div class="win-controls" data-testid="window-controls">
+          <button
+            class="win-btn"
+            title="最小化"
+            data-testid="window-minimize"
+            @click="handleMinimize"
+          >
+            <el-icon><Minus /></el-icon>
+          </button>
+          <button
+            class="win-btn"
+            title="最大化"
+            data-testid="window-maximize"
+            @click="handleMaximize"
+          >
+            <el-icon><FullScreen /></el-icon>
+          </button>
+          <button
+            class="win-btn win-btn-close"
+            title="关闭"
+            data-testid="window-close"
+            @click="handleClose"
+          >
+            <el-icon><Close /></el-icon>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -203,8 +230,17 @@ function handleClose(): void {
   justify-content: center;
   width: $brand-logo-size;
   height: $brand-logo-size;
+  color: $brand-primary;
   background: $brand-logo-shield-bg;
   border-radius: $brand-logo-radius;
+}
+
+.shield-shape {
+  color: $brand-primary;
+}
+
+.shield-letter {
+  color: $color-white;
 }
 
 .brand-text {
@@ -260,21 +296,24 @@ function handleClose(): void {
   -webkit-app-region: no-drag;
 }
 
-.device-ip {
-  padding: 2px 8px;
-  color: $device-ip-color;
-  font-size: $font-base;
-  background: $device-ip-bg;
-  border-radius: $border-radius;
-}
-
-.user-dropdown-trigger {
+.user-menu-trigger {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  padding: 0;
   color: $color-white;
-  font-size: $font-md;
+  font-size: $font-size-lg;
+  background: transparent;
+  border: none;
+  border-radius: $border-radius;
   cursor: pointer;
-  gap: 4px;
+
+  &:hover,
+  &:focus-visible {
+    background: $win-btn-hover-bg;
+  }
 }
 
 .win-controls {
