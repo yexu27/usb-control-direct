@@ -93,7 +93,7 @@ async fn main() {
 
     // ===== USB Gadget 统一初始化 =====
     let gadget_mgr = {
-        let mut mgr = GadgetManager::new();
+        let mgr = GadgetManager::new();
         let _ = mgr.unbind_udc();
         mgr.setup_gadget("USB Security Control Device")
             .expect("gadget 基础结构初始化失败");

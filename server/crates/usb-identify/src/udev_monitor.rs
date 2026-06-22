@@ -5,7 +5,7 @@
 
 use tokio::sync::mpsc;
 use tokio::task;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::descriptor::{classify_device, parse_hex_u8, read_sysfs_attr, UsbDeviceInfo};
 use crate::orchestrator::DeviceEvent;

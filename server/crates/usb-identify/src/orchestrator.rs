@@ -19,7 +19,7 @@ use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
 
 use common::time::now_unix;
 use log_audit::AuditService;
-use storage::model::{MalwareLogInsert, UsbAuditLogInsert};
+use storage::model::UsbAuditLogInsert;
 use whitelist::WhitelistManager;
 
 use crate::descriptor::UsbDeviceInfo;
@@ -30,7 +30,6 @@ use crate::monitor::DeviceManager;
 ///   DeviceManager: 设备属性，协议层可查询
 ///   ActiveSession: 运行时资源，仅 Orchestrator 内部
 struct ActiveSession {
-    parent_path: String,
     device_type: common::types::DeviceType,
     nbd_index: Option<u32>,
     mount_path: Option<PathBuf>,
@@ -224,7 +223,6 @@ impl DeviceOrchestrator {
         // 注册 ActiveSession
         let (cancel_tx, mut cancel_rx) = watch::channel(false);
         self.active_sessions.insert(parent_path.clone(), ActiveSession {
-            parent_path: parent_path.clone(),
             device_type: common::types::DeviceType::Storage,
             nbd_index: Some(nbd_index),
             mount_path: None,
@@ -325,7 +323,6 @@ impl DeviceOrchestrator {
         // 注册 ActiveSession
         let (cancel_tx, _cancel_rx) = watch::channel(false);
         self.active_sessions.insert(parent_path.clone(), ActiveSession {
-            parent_path,
             device_type: common::types::DeviceType::Keyboard,
             nbd_index: None,
             mount_path: None,
@@ -370,7 +367,6 @@ impl DeviceOrchestrator {
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
         self.active_sessions.insert(parent_path.clone(), ActiveSession {
-            parent_path,
             device_type: common::types::DeviceType::Mouse,
             nbd_index: None,
             mount_path: None,
@@ -526,21 +522,6 @@ impl DeviceOrchestrator {
         let _ = self.audit.log_usb_audit(&mut log);
     }
 
-    fn write_malware_scan_start(&self, info: &UsbDeviceInfo) {
-        let mut log = MalwareLogInsert {
-            scan_time: now_unix(),
-            device_sn: Some(info.serial_number.clone()),
-            device_name: Some(info.device_name.clone()),
-            file_path: None,
-            scan_result: 0,
-            virus_name: None,
-            virus_db_version: None,
-            process_result: Some(3),
-            fail_reason: None,
-            detail: None,
-        };
-        let _ = self.audit.log_malware(&mut log);
-    }
 }
 
 fn write_audit_storage_static(
