@@ -15,7 +15,7 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::{mpsc, watch};
 use tracing::{info, warn};
 
-use crate::mount::{MountOperations, RealMountOps};
+use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
 
 use common::time::now_unix;
 use log_audit::AuditService;
@@ -190,52 +190,118 @@ impl DeviceOrchestrator {
 
     /// 处理大容量存储设备。
     async fn handle_storage(&mut self, info: UsbDeviceInfo) {
+        // ===== Phase 1: Event Loop 同步判断 =====
+        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
 
-        // 白名单查询
-        if info.serial_number.is_empty() {
+        let serial = info.serial_number.clone();
+        if serial.is_empty() {
             self.write_audit_storage(&info, "whitelist_denied", "blocked",
-                Some("序列号为空，禁止添加"));
+                Some("序列号为空"));
             return;
         }
-
-        if !self.whitelist.is_whitelisted(&info.serial_number).is_some() {
-            info!(serial = %info.serial_number, "U 盘不在白名单中，禁止映射");
-            self.write_audit_storage(&info, "whitelist_denied", "blocked",
-                Some("不在白名单"));
-            return;
-        }
-
-        let whitelist_entry = match self.whitelist.is_whitelisted(&info.serial_number) {
+        let whitelist_entry = match self.whitelist.is_whitelisted(&serial) {
             Some(e) => e,
             None => {
                 self.write_audit_storage(&info, "whitelist_denied", "blocked",
-                    Some("白名单查询失败"));
+                    Some("不在白名单"));
                 return;
             }
         };
 
-        info!(serial = %info.serial_number, permission = whitelist_entry.permission,
-              "U 盘在白名单中，开始映射流程");
-
-        let _nbd_idx = match self.nbd_pool.acquire() {
+        let nbd_index = match self.nbd_pool.acquire() {
             Some(idx) => idx,
             None => {
-                warn!("NBD 设备号池已耗尽（{} 个），拒绝映射", NBD_POOL_SIZE);
+                warn!("NBD 设备号池耗尽，拒绝映射");
                 self.write_audit_storage(&info, "map_failed", "failed",
                     Some("NBD 设备号池耗尽"));
                 return;
             }
         };
 
-        self.write_audit_storage(&info, "device_insert", "allowed", None);
-        self.write_malware_scan_start(&info);
-        self.write_audit_storage(&info, "mapped", "mapped", None);
+        // 注册 ActiveSession
+        let (cancel_tx, mut cancel_rx) = watch::channel(false);
+        self.active_sessions.insert(parent_path.clone(), ActiveSession {
+            parent_path: parent_path.clone(),
+            device_type: common::types::DeviceType::Storage,
+            nbd_index: Some(nbd_index),
+            mount_path: None,
+            cancel_tx,
+        });
 
-        info!(serial = %info.serial_number, sys_path = %info.sys_path,
-              "U 盘映射流程完成日志记录");
+        info!(serial = %serial, nbd = nbd_index, "Storage 设备开始编排");
+
+        // 克隆 Arc 供 spawned task
+        let scan_service = Arc::clone(&self.scan_service);
+        let file_access_engine = Arc::clone(&self.file_access_engine);
+        let audit = Arc::clone(&self.audit);
+        let permission = whitelist_entry.permission;
+
+        // ===== Phase 2: spawn 独立 task =====
+        tokio::spawn(async move {
+            let dev_path = match &info.dev_path {
+                Some(p) if !p.is_empty() => p.clone(),
+                _ => {
+                    write_audit_fail(&audit, &info, "map_failed", "dev_path 为空");
+                    return;
+                }
+            };
+            let dev_name = dev_name_from_path(&dev_path);
+            let mount_point = crate::mount::mount_path_for(dev_name);
+            let mount_ops = RealMountOps;
+
+            // 1. Mount
+            if let Err(e) = mount_ops.mount(&dev_path, &mount_point.to_string_lossy(), "auto") {
+                write_audit_fail(&audit, &info, "scan_failed", &e.to_string());
+                return;
+            }
+            let mount_path_str = mount_point.to_string_lossy().to_string();
+
+            // 2. Scan（可取消）
+            let scan_result = tokio::select! {
+                r = scan_service.scan(&mount_point, &serial, &info.device_name) => r,
+                _ = cancel_rx.changed() => {
+                    info!(serial = %serial, "扫描被取消（设备拔出）");
+                    let _ = mount_ops.umount(&mount_path_str);
+                    return;
+                }
+            };
+            let scan_result = match scan_result {
+                Ok(r) => r,
+                Err(e) => {
+                    write_audit_fail(&audit, &info, "scan_failed", &e.to_string());
+                    let _ = mount_ops.umount(&mount_path_str);
+                    return;
+                }
+            };
+
+            // 3. Map（可取消）
+            let map_ctx = crate::traits::MapContext {
+                mount_path: mount_path_str.clone(),
+                scan_result: scan_result.clone(),
+                permission,
+            };
+            let map_result = tokio::select! {
+                r = file_access_engine.map_device(map_ctx) => r,
+                _ = cancel_rx.changed() => {
+                    info!(serial = %serial, "映射被取消（设备拔出）");
+                    let _ = mount_ops.umount(&mount_path_str);
+                    return;
+                }
+            };
+            match map_result {
+                Ok(_session) => {
+                    write_audit_storage_static(&audit, &info, "mapped", "mapped", None);
+                    info!(serial = %serial, "U 盘映射成功");
+                }
+                Err(e) => {
+                    write_audit_fail(&audit, &info, "map_failed", &e.to_string());
+                    let _ = mount_ops.umount(&mount_path_str);
+                }
+            }
+        });
     }
 
     /// 处理键盘设备。
@@ -475,6 +541,45 @@ impl DeviceOrchestrator {
         };
         let _ = self.audit.log_malware(&mut log);
     }
+}
+
+fn write_audit_storage_static(
+    audit: &log_audit::AuditService,
+    info: &UsbDeviceInfo,
+    event_type: &str,
+    result: &str,
+    fail_reason: Option<&str>,
+) {
+    let mut log = UsbAuditLogInsert {
+        event_time: now_unix(),
+        device_type: Some("storage".into()),
+        interface_type: Some("mass_storage".into()),
+        interface_class: Some(0x08),
+        interface_subclass: None,
+        interface_protocol: None,
+        device_name: Some(info.device_name.clone()),
+        device_sn: Some(info.serial_number.clone()),
+        vid: Some(info.vid.clone()),
+        pid: Some(info.pid.clone()),
+        event_type: event_type.to_string(),
+        permission: None,
+        capacity_bytes: info.capacity_bytes,
+        file_path: None,
+        matched_policy: None,
+        result: result.to_string(),
+        fail_reason: fail_reason.map(|s| s.to_string()),
+        detail: None,
+    };
+    let _ = audit.log_usb_audit(&mut log);
+}
+
+fn write_audit_fail(
+    audit: &log_audit::AuditService,
+    info: &UsbDeviceInfo,
+    event_type: &str,
+    reason: &str,
+) {
+    write_audit_storage_static(audit, info, event_type, "failed", Some(reason));
 }
 
 fn write_audit_generic_static(
