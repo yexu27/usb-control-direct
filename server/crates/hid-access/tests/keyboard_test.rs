@@ -1,5 +1,4 @@
-use common::types::KeyboardState;
-use hid_access::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardTransitionResult};
+use hid_access::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult};
 
 #[test]
 fn grab_success_transitions_to_waiting() {
@@ -29,12 +28,12 @@ fn correct_1234_transitions_to_mapped() {
     let mut kb = KeyboardChallenge::new();
     kb.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-    for &ch in b"123" {
+    for &ch in &[0x1E, 0x1F, 0x20] {
         let r = kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
         assert_eq!(r, KeyboardTransitionResult::Unchanged);
     }
 
-    let result = kb.transition(KeyboardEvent::KeyPress(b'4')).unwrap();
+    let result = kb.transition(KeyboardEvent::KeyPress(0x21)).unwrap();
     assert_eq!(
         result,
         KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
@@ -46,14 +45,13 @@ fn wrong_key_clears_buffer() {
     let mut kb = KeyboardChallenge::new();
     kb.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-    kb.transition(KeyboardEvent::KeyPress(b'1')).unwrap();
-    kb.transition(KeyboardEvent::KeyPress(b'2')).unwrap();
-    let r = kb.transition(KeyboardEvent::KeyPress(b'9')).unwrap();
+    kb.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
+    kb.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
+    let r = kb.transition(KeyboardEvent::KeyPress(0x26)).unwrap();
     assert_eq!(r, KeyboardTransitionResult::Unchanged);
     assert_eq!(kb.state(), KeyboardState::KbWaiting);
 
-    // 重新输入 1234 仍可成功
-    for &ch in b"1234" {
+    for &ch in &[0x1E, 0x1F, 0x20, 0x21] {
         kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
     }
     assert_eq!(kb.state(), KeyboardState::KbMapped);
@@ -64,11 +62,11 @@ fn modifier_key_ignored_during_challenge() {
     let mut kb = KeyboardChallenge::new();
     kb.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-    kb.transition(KeyboardEvent::KeyPress(b'1')).unwrap();
+    kb.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
     let r = kb.transition(KeyboardEvent::ModifierKey).unwrap();
     assert_eq!(r, KeyboardTransitionResult::Unchanged);
 
-    for &ch in b"234" {
+    for &ch in &[0x1F, 0x20, 0x21] {
         kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
     }
     assert_eq!(kb.state(), KeyboardState::KbMapped);
@@ -99,7 +97,7 @@ fn unplug_from_waiting() {
 fn unplug_from_mapped() {
     let mut kb = KeyboardChallenge::new();
     kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-    for &ch in b"1234" {
+    for &ch in &[0x1E, 0x1F, 0x20, 0x21] {
         kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
     }
     let result = kb.transition(KeyboardEvent::Unplug).unwrap();
@@ -123,5 +121,4 @@ fn no_timeout_stays_waiting() {
     let mut kb = KeyboardChallenge::new();
     kb.transition(KeyboardEvent::GrabSuccess).unwrap();
     assert_eq!(kb.state(), KeyboardState::KbWaiting);
-    // 没有超时事件，状态保持 KbWaiting
 }
