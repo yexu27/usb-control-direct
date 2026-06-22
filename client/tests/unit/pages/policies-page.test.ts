@@ -65,6 +65,7 @@ function mountPage() {
         ProgressDialog: ProgressDialogStub,
         ElCard: { template: '<section><slot /></section>' },
         ElButton: {
+          emits: ['click'],
           template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>',
         },
       },
@@ -126,6 +127,8 @@ describe('PoliciesPage', () => {
     expect(saveFile).not.toHaveBeenCalled()
     expect(openFile).not.toHaveBeenCalled()
     expect(ElMessage.warning).toHaveBeenCalledTimes(2)
+    expect(ElMessage.warning).toHaveBeenNthCalledWith(1, '装置已断开连接，无法传输策略')
+    expect(ElMessage.warning).toHaveBeenNthCalledWith(2, '装置已断开连接，无法传输策略')
   })
 
   it('导出取消不请求装置，并阻止重复操作', async () => {

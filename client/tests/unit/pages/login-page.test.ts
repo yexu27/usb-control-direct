@@ -20,6 +20,12 @@ const ElFormStub = defineComponent({
     return () => h('form', slots.default?.())
   },
 })
+const ElInputStub = defineComponent({
+  setup(_props, { expose }) {
+    expose({ focus: vi.fn() })
+  },
+  template: '<input />',
+})
 
 interface LoginPageVm {
   form: { ip: string; username: string; password: string }
@@ -44,7 +50,7 @@ function mountPage() {
       stubs: {
         ElForm: ElFormStub,
         ElFormItem: { template: '<label><slot /></label>' },
-        ElInput: true,
+        ElInput: ElInputStub,
         ElButton: true,
         ElAlert: true,
         ElIcon: true,

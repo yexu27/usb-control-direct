@@ -11,9 +11,9 @@ const DEFAULT_SCENARIO: MockScenario = {
 }
 
 async function login(page: Page): Promise<void> {
-  await page.locator('[data-testid="login-username"] input').fill('operator-user')
-  await page.locator('[data-testid="login-password"] input').fill('Password1!')
-  await page.locator('[data-testid="login-ip"] input').fill('127.0.0.1')
+  await page.locator('[data-testid="login-username"]').fill('operator-user')
+  await page.locator('[data-testid="login-password"]').fill('Password1!')
+  await page.locator('[data-testid="login-ip"]').fill('127.0.0.1')
   await page.getByTestId('login-submit').click()
   await expect(page).toHaveURL(/#\/file-access$/)
 }
@@ -25,6 +25,10 @@ async function openMenu(page: Page, name: string): Promise<void> {
 async function chooseCandidate(page: Page, serial: string): Promise<void> {
   await page.getByTestId('candidate-select').click()
   await page.getByRole('option', { name: new RegExp(serial) }).click()
+}
+
+async function expectLatestMessage(page: Page, text: string | RegExp): Promise<void> {
+  await expect(page.locator('.el-message__content').filter({ hasText: text }).last()).toBeVisible()
 }
 
 async function withOperator(
@@ -57,13 +61,13 @@ test.describe('操作员三页面业务闭环', () => {
     await withOperator(async (_device, _app, page) => {
       for (const testId of ['exec-control-switch', 'auto-read-control-switch', 'blacklist-control-switch']) {
         await page.getByTestId(testId).click()
-        await expect(page.getByText('修改成功，重新拔插或重新映射后生效', { exact: true })).toBeVisible()
-        await expect(page.getByTestId(testId)).toHaveAttribute('aria-checked', 'true')
+        await expectLatestMessage(page, '修改成功，重新拔插或重新映射后生效')
+        await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)
       }
       await openMenu(page, 'U盘设备控制')
       await openMenu(page, '文件访问控制')
       for (const testId of ['exec-control-switch', 'auto-read-control-switch', 'blacklist-control-switch']) {
-        await expect(page.getByTestId(testId)).toHaveAttribute('aria-checked', 'true')
+        await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)
       }
     })
   })
@@ -71,16 +75,16 @@ test.describe('操作员三页面业务闭环', () => {
   test('.PS1 规范化为 .ps1、重复提示且默认 .jse 可删除', async () => {
     await withOperator(async (_device, _app, page) => {
       await page.getByTestId('add-blacklist-trigger').click()
-      await page.locator('[data-testid="blacklist-extension-input"] input').fill('.PS1')
+      await page.locator('[data-testid="blacklist-extension-input"]').fill('.PS1')
       await page.getByTestId('blacklist-submit').click()
       await expect(page.getByText('.ps1', { exact: true })).toBeVisible()
       await page.getByTestId('add-blacklist-trigger').click()
-      await page.locator('[data-testid="blacklist-extension-input"] input').fill('.ps1')
+      await page.locator('[data-testid="blacklist-extension-input"]').fill('.ps1')
       await page.getByTestId('blacklist-submit').click()
-      await expect(page.getByText('该文件后缀已在黑名单中', { exact: true })).toBeVisible()
+      await expectLatestMessage(page, '该文件后缀已在黑名单中')
       await page.keyboard.press('Escape')
       await page.locator('button[data-extension=".jse"]').click()
-      await page.getByRole('button', { name: '删除', exact: true }).click()
+      await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
       await expect(page.getByText('.jse', { exact: true })).toHaveCount(0)
     })
   })
@@ -96,7 +100,7 @@ test.describe('操作员三页面业务闭环', () => {
       await chooseCandidate(page, 'DEVICE-REMOVED-002')
       device.removeConnectedDevice('DEVICE-REMOVED-002')
       await page.getByTestId('whitelist-add-submit').click()
-      await expect(page.getByText('设备已移除，请重新插入后再添加', { exact: true })).toBeVisible()
+      await expectLatestMessage(page, '设备已移除，请重新插入后再添加')
     })
   })
 
@@ -110,7 +114,7 @@ test.describe('操作员三页面业务闭环', () => {
       await page.getByRole('option', { name: /MANAGEMENT-USB-001/ }).click()
       await page.getByTestId('whitelist-add-submit').click()
       await expect(page.getByText('MANAGEMENT-USB-001', { exact: true })).toBeVisible()
-      await expect(page.getByText('管理端添加', { exact: true })).toBeVisible()
+      await expect(page.getByRole('row', { name: /MANAGEMENT-USB-001.*管理端添加/ })).toBeVisible()
     })
   })
 
@@ -118,12 +122,12 @@ test.describe('操作员三页面业务闭环', () => {
     await withOperator(async (_device, _app, page) => {
       await openMenu(page, 'U盘设备控制')
       await page.getByTestId('edit-WL-EXISTING-001').click()
-      await page.locator('[data-testid="whitelist-edit-description-input"] input').fill('已修改')
+      await page.locator('[data-testid="whitelist-edit-description-input"]').fill('已修改')
       await page.getByText('读写', { exact: true }).last().click()
       await page.getByTestId('whitelist-edit-submit').click()
       await expect(page.getByText('已修改', { exact: true })).toBeVisible()
       await page.getByTestId('remove-WL-EXISTING-001').click()
-      await page.getByRole('button', { name: '删除', exact: true }).click()
+      await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
       await expect(page.getByText('WL-EXISTING-001', { exact: true })).toHaveCount(0)
     })
   })
@@ -140,7 +144,7 @@ test.describe('操作员三页面业务闭环', () => {
           })
         }, directory)
         await page.getByTestId('export-policy').click()
-        await expect(page.getByText('策略导出成功', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '策略导出成功')
         exportedPath = (await readdir(directory)).map((name) => join(directory, name))[0]
         expect(basename(exportedPath)).toMatch(/^安全策略-\d{8}-\d{6}\.bin$/)
         const exported = await readFile(exportedPath)
@@ -177,14 +181,14 @@ test.describe('操作员三页面业务闭环', () => {
       }, IMPORT_FIXTURE)
       await page.getByTestId('import-policy').click()
       await page.getByRole('button', { name: '导入', exact: true }).click()
-      await expect(page.getByText('策略导入失败，原策略未变更', { exact: true })).toBeVisible()
+      await expectLatestMessage(page, '策略导入失败，原策略未变更')
       await openMenu(page, 'U盘设备控制')
       await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
       await expect(page.getByText('IMPORTED-USB-001', { exact: true })).toHaveCount(0)
       await openMenu(page, '策略管理')
       await page.getByTestId('import-policy').click()
       await page.getByRole('button', { name: '导入', exact: true }).click()
-      await expect(page.getByText(/策略已导入/)).toBeVisible()
+      await expectLatestMessage(page, /策略已导入/)
       await openMenu(page, 'U盘设备控制')
       await expect(page.getByText('IMPORTED-USB-001', { exact: true })).toBeVisible()
     })
@@ -226,18 +230,18 @@ test.describe('操作员三页面业务闭环', () => {
         await page.getByTestId('exec-control-switch').click()
         await openMenu(page, 'U盘设备控制')
         await page.getByTestId('remove-WL-EXISTING-001').click()
-        await page.getByRole('button', { name: '删除', exact: true }).click()
+        await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
         await openMenu(page, '策略管理')
         await app.evaluate(({ dialog }, path) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, policyPath)
         await page.getByTestId('import-policy').click()
         await page.getByRole('button', { name: '导入', exact: true }).click()
-        await expect(page.getByText(/策略已导入/)).toBeVisible()
+        await expectLatestMessage(page, /策略已导入/)
         await openMenu(page, 'U盘设备控制')
         await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
         await openMenu(page, '文件访问控制')
-        await expect(page.getByTestId('exec-control-switch')).toHaveAttribute('aria-checked', 'false')
+        await expect(page.getByTestId('exec-control-switch')).not.toHaveClass(/is-checked/)
       } finally {
         await rm(directory, { recursive: true, force: true })
       }
@@ -254,25 +258,25 @@ test.describe('操作员三页面业务闭环', () => {
         await expect(page.getByTestId('connection-status')).toContainText('未连接')
         await expect(page.getByText('.jse', { exact: true })).toBeVisible()
         await page.getByTestId('exec-control-switch').click()
-        await expect(page.getByText('装置已断开连接，无法修改策略', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '装置已断开连接，无法修改策略')
         await page.getByTestId('add-blacklist-trigger').click()
-        await page.locator('[data-testid="blacklist-extension-input"] input').fill('.bat')
+        await page.locator('[data-testid="blacklist-extension-input"]').fill('.bat')
         await page.getByTestId('blacklist-submit').click()
-        await expect(page.getByText('装置已断开连接，无法修改策略', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '装置已断开连接，无法修改策略')
         await page.keyboard.press('Escape')
         await openMenu(page, 'U盘设备控制')
         await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
         await page.getByTestId('remove-WL-EXISTING-001').click()
-        await expect(page.getByText('装置已断开连接，无法修改白名单', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '装置已断开连接，无法修改白名单')
         await openMenu(page, '策略管理')
         await app.evaluate(({ dialog }, path) => {
           dialog.showSaveDialog = async () => ({ canceled: false, filePath: `${path}.out` })
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, importPath)
         await page.getByTestId('export-policy').click()
-        await expect(page.getByText('装置已断开连接，无法传输策略', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '装置已断开连接，无法传输策略')
         await page.getByTestId('import-policy').click()
-        await expect(page.getByText('装置已断开连接，无法传输策略', { exact: true })).toBeVisible()
+        await expectLatestMessage(page, '装置已断开连接，无法传输策略')
       } finally {
         await rm(directory, { recursive: true, force: true })
       }

@@ -55,6 +55,7 @@ function mountPage() {
     AddWhitelistDialog: AddDialogStub, EditWhitelistDialog: EditDialogStub,
     ElButton: { template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot/></button>' },
     DataTable: {
+      name: 'DataTable',
       props: ['data', 'columns', 'error', 'total', 'page', 'pageSize'], emits: ['page-change', 'page-size-change'],
       template: `<div data-testid="table" :data-total="total" :data-page="page" :data-page-size="pageSize">
         <div v-if="error" data-testid="table-error">{{ error }}</div>
@@ -150,6 +151,27 @@ describe('UsbDevicesPage', () => {
     })
     await wrapper.get('[data-testid="add-management-trigger"]').trigger('click'); await flushPromises()
     expect(listManagementUsbStorageDevices).toHaveBeenCalledTimes(1)
+  })
+
+  it('装置候选缺少可选字符串字段时按不可添加设备处理', async () => {
+    vi.mocked(getConnectedDevices).mockResolvedValue({
+      devices: [{ deviceType: 'storage', admissionStatus: 'addable' }],
+    } as usb_control.RspConnectedDevices)
+    const wrapper = mountPage()
+
+    await wrapper.get('[data-testid="add-device-trigger"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.getComponent(AddDialogStub).props('candidates')).toEqual([{
+      serialNumber: '',
+      vid: '',
+      pid: '',
+      deviceName: '',
+      capacityBytes: 0,
+      deviceType: 'storage',
+      addable: false,
+      unavailableReason: '设备标识异常',
+    }])
   })
 
   it('关闭后切换来源创建新Dialog实例且management提交方法正确', async () => {

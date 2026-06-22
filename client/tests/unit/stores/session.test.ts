@@ -224,13 +224,17 @@ describe('useSessionStore', () => {
     listWhitelistMock.mockResolvedValue(usb_control.RspListWhitelist.fromObject({ devices: [] }))
     getFilePolicyMock.mockRejectedValue(new Error('配置加载失败'))
     const store = useSessionStore()
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
 
     await expect(store.login('19.19.19.16', 'operator', 'operator@123')).rejects.toThrow(
       '配置加载失败',
     )
 
     expect(store.token).toBe('')
-    expect(disconnect).toHaveBeenCalledWith(true)
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
     expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
       'AUTH_SUCCESS',
       'LICENSE_AUTHORIZED',
@@ -265,6 +269,8 @@ describe('useSessionStore', () => {
         : whitelistDeferred.promise,
     )
     const store = useSessionStore()
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
 
     const loginPromise = store.login('19.19.19.16', 'operator', 'operator@123')
     let isLoginSettled = false
@@ -302,7 +308,9 @@ describe('useSessionStore', () => {
     expect(useFilePolicyStore().policy).toBeNull()
     expect(useWhitelistStore().devices).toEqual([])
     expect(store.token).toBe('')
-    expect(disconnect).toHaveBeenCalledWith(true)
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
     expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
       'AUTH_SUCCESS',
       'LICENSE_AUTHORIZED',
@@ -341,14 +349,17 @@ describe('useSessionStore', () => {
       authExpireTime: 0,
       deviceDescription: '',
     })
-    useConnectionStore().updateStatus('CONNECTED')
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
     logoutMock.mockRejectedValue(new Error('network error'))
 
     await store.logout()
 
     expect(store.isLoggedIn).toBe(false)
-    expect(useConnectionStore().deviceIp).toBe('')
+    expect(connection.deviceIp).toBe('')
     expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
   })
 
   it('认证失败后重试密码时复用当前 TLS 连接', async () => {

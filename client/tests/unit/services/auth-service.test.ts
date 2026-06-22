@@ -65,7 +65,7 @@ describe('auth-service', () => {
     const result = await getMachineCode('temporary-token')
 
     expect(result.machineCode).toBe('USB-DEVICE-RK3568-001')
-    expect(result.qrcodePng).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
+    expect(new Uint8Array(result.qrcodePng)).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
     expect(tlsSend.mock.calls[0][0]).toBe(0x0005)
     const requestPayload = tlsSend.mock.calls[0][1] as Uint8Array
     expect(usb_control.CmdGetMachineCode.decode(requestPayload).sessionToken).toBe(
@@ -87,13 +87,12 @@ describe('auth-service', () => {
 
     const result = await uploadLicense('temporary-token', licenseData)
 
-    expect(result.expireTime).toBe(1_893_455_999)
+    expect(Number(result.expireTime)).toBe(1_893_455_999)
     expect(tlsSend.mock.calls[0][0]).toBe(0x0007)
     expect(tlsSend.mock.calls[0][2]).toBe(300_000)
     const requestPayload = tlsSend.mock.calls[0][1] as Uint8Array
-    expect(usb_control.CmdUploadLicense.decode(requestPayload)).toMatchObject({
-      sessionToken: 'temporary-token',
-      licenseData,
-    })
+    const request = usb_control.CmdUploadLicense.decode(requestPayload)
+    expect(request.sessionToken).toBe('temporary-token')
+    expect(new Uint8Array(request.licenseData)).toEqual(licenseData)
   })
 })

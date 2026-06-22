@@ -3,7 +3,7 @@ import type { DataTableColumn } from './data-table'
 
 interface Props {
   columns: DataTableColumn[]
-  data: unknown[]
+  data: object[]
   loading?: boolean
   error?: string
   total: number

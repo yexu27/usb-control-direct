@@ -24,8 +24,11 @@ if (!Array.isArray(usbDevices) || usbDevices.some((device) =>
 )) {
   throw new Error('E2E USB fixture 不符合 ManagementUsbDevice[]')
 }
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const result = spawnSync(npmCommand, ['run', 'build'], {
+const buildCommand =
+  process.platform === 'win32'
+    ? { command: 'cmd.exe', args: ['/d', '/s', '/c', 'npm run build'] }
+    : { command: 'npm', args: ['run', 'build'] }
+const result = spawnSync(buildCommand.command, buildCommand.args, {
   cwd: resolve(__dirname, '..'),
   env: {
     ...process.env,

@@ -178,17 +178,21 @@ async function openAddDialog(source: AddSource): Promise<void> {
     const loaded = source === 'device'
       ? (await getConnectedDevices(session.token)).devices
         .filter((device) => device.deviceType === 'storage')
-        .map<CandidateDevice>((device) => ({
-          serialNumber: device.serialNumber,
-          vid: device.vid,
-          pid: device.pid,
-          deviceName: device.deviceName,
-          capacityBytes: Number(device.capacityBytes),
-          deviceType: 'storage',
-          addable: device.admissionStatus === 'addable' && device.serialNumber.trim() !== '',
-          unavailableReason: device.serialNumber.trim() === ''
-            ? '设备标识异常' : device.failReason,
-        }))
+        .map<CandidateDevice>((device) => {
+          const serialNumber = device.serialNumber ?? ''
+          const capacityBytes = Number(device.capacityBytes ?? 0)
+          return {
+            serialNumber,
+            vid: device.vid ?? '',
+            pid: device.pid ?? '',
+            deviceName: device.deviceName ?? '',
+            capacityBytes: Number.isFinite(capacityBytes) && capacityBytes >= 0 ? capacityBytes : 0,
+            deviceType: 'storage',
+            addable: device.admissionStatus === 'addable' && serialNumber.trim() !== '',
+            unavailableReason: serialNumber.trim() === ''
+              ? '设备标识异常' : (device.failReason ?? ''),
+          }
+        })
       : mapManagementCandidates(await listManagementUsbStorageDevices())
     if (
       addVisible.value && addSource.value === source && addEpoch.value === dialogEpoch &&
@@ -428,7 +432,7 @@ function changePageSize(nextPageSize: number): void {
       <template #actions="{ row }">
         <el-button
           link type="primary" :data-testid="`edit-${row.serialNumber}`"
-          :disabled="editSubmitting" :loading="editSubmitting" @click="openEditDialog(row)"
+          :disabled="editSubmitting" :loading="editSubmitting" @click="openEditDialog(row as WhitelistRow)"
         >
           修改
         </el-button>

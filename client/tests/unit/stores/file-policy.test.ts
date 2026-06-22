@@ -72,7 +72,7 @@ describe('useFilePolicyStore', () => {
 
     await store.load('token')
 
-    expect(store.policy).toBe(policy)
+    expect(store.policy).toEqual(policy)
     expect(store.errorMessage).toBe('')
     expect(store.isLoading).toBe(false)
   })
@@ -96,7 +96,7 @@ describe('useFilePolicyStore', () => {
 
     await expect(store.load('token')).rejects.toBe('unknown')
 
-    expect(store.policy).toBe(oldPolicy)
+    expect(store.policy).toEqual(oldPolicy)
     expect(store.errorMessage).toBe('文件访问策略加载失败')
   })
 
@@ -202,7 +202,7 @@ describe('useFilePolicyStore', () => {
     await store.setSwitch('token', 'exec_control', true)
 
     expect(updateSwitchMock).toHaveBeenCalledWith('token', 'exec_control', true)
-    expect(store.policy).toBe(newPolicy)
+    expect(store.policy).toEqual(newPolicy)
     expect([...store.pendingKeys]).toEqual([])
   })
 
@@ -215,7 +215,7 @@ describe('useFilePolicyStore', () => {
 
     await expect(store.setSwitch('token', 'exec_control', true)).rejects.toThrow('保存失败')
 
-    expect(store.policy).toBe(oldPolicy)
+    expect(store.policy).toEqual(oldPolicy)
     expect(getFilePolicyMock).toHaveBeenCalledTimes(1)
     expect([...store.pendingKeys]).toEqual([])
   })
@@ -274,7 +274,7 @@ describe('useFilePolicyStore', () => {
     await store.addExtension('token', '.cmd', '命令脚本')
 
     expect(addBlacklistExtensionMock).toHaveBeenCalledWith('token', '.cmd', '命令脚本')
-    expect(store.policy).toBe(refreshedPolicy)
+    expect(store.policy).toEqual(refreshedPolicy)
   })
 
   it('删除扩展名成功后刷新策略', async () => {
@@ -286,7 +286,7 @@ describe('useFilePolicyStore', () => {
     await store.removeExtension('token', '.cmd')
 
     expect(removeBlacklistExtensionMock).toHaveBeenCalledWith('token', '.cmd')
-    expect(store.policy).toBe(refreshedPolicy)
+    expect(store.policy).toEqual(refreshedPolicy)
   })
 
   it('扩展名提交按扩展名去重且写失败保留旧策略', async () => {
@@ -308,7 +308,7 @@ describe('useFilePolicyStore', () => {
     expect(removeBlacklistExtensionMock).not.toHaveBeenCalled()
     failAdd(new Error('保存失败'))
     await expect(firstAdd).rejects.toThrow('保存失败')
-    expect(store.policy).toBe(oldPolicy)
+    expect(store.policy).toEqual(oldPolicy)
   })
 
   it('写入成功但刷新失败时保留旧策略并传播加载错误', async () => {
@@ -320,7 +320,7 @@ describe('useFilePolicyStore', () => {
 
     await expect(store.setSwitch('token', 'exec_control', true)).rejects.toThrow('刷新失败')
 
-    expect(store.policy).toBe(oldPolicy)
+    expect(store.policy).toEqual(oldPolicy)
     expect(store.errorMessage).toBe('刷新失败')
     expect([...store.pendingKeys]).toEqual([])
   })

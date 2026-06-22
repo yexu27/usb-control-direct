@@ -53,10 +53,19 @@ const ElInputStub = defineComponent({
   template: '<input :disabled="disabled" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)"/>',
 })
 const ElRadioGroupStub = defineComponent({
-  props: ['modelValue', 'disabled'], emits: ['update:modelValue'],
+  inheritAttrs: false,
+  props: ['modelValue', 'disabled'],
+  setup(_props, { attrs }) {
+    return {
+      updateValue: (value: 'readonly' | 'readwrite') => {
+        const listener = attrs['onUpdate:modelValue']
+        ;(listener as ((next: 'readonly' | 'readwrite') => void) | undefined)?.(value)
+      },
+    }
+  },
   template: `<div>
-    <button type="button" data-value="readonly" @click="$emit('update:modelValue', 'readonly')">只读</button>
-    <button type="button" data-value="readwrite" @click="$emit('update:modelValue', 'readwrite')">读写</button>
+    <button type="button" data-value="readonly" @click="updateValue('readonly')">只读</button>
+    <button type="button" data-value="readwrite" @click="updateValue('readwrite')">读写</button>
   </div>`,
 })
 const ElRadioStub = defineComponent({
@@ -112,16 +121,25 @@ describe('AddWhitelistDialog', () => {
   })
 
   it('关闭时清空选择和表单，异步验证迟到不会提交', async () => {
+    let resolveValidation: (valid: boolean) => void = () => {
+      throw new Error('验证 Promise 尚未初始化')
+    }
+    validateForm = () => new Promise((resolve) => { resolveValidation = resolve })
     const wrapper = mountDialog()
     await wrapper.get('[data-testid="candidate-select"]').setValue('SN-001')
     await wrapper.find('input').setValue('旧说明')
     const vm = wrapper.vm as unknown as { handleSubmit: () => Promise<void> }
     const pending = vm.handleSubmit()
+    await nextTick()
+    expect(wrapper.get('[data-testid="whitelist-add-submit"]').attributes('disabled'))
+      .toBeDefined()
     await wrapper.setProps({ visible: false })
+    resolveValidation(true)
     await pending
     await wrapper.setProps({ visible: true })
     await nextTick()
-    expect((wrapper.get('[data-testid="candidate-select"].element as HTMLSelectElement).value).toBe('')
+    expect((wrapper.get('[data-testid="candidate-select"]').element as HTMLSelectElement).value)
+      .toBe('')
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('')
     expect(wrapper.emitted('submit')).toBeUndefined()
   })
@@ -135,20 +153,23 @@ describe('AddWhitelistDialog', () => {
   })
 
   it('实例卸载使迟到验证失效，新来源实例表单为空', async () => {
-    let resolveValidation!: (valid: boolean) => void
-    validateForm = () => new Promise((resolve) => { resolveValidation = resolve })
+    let rejectValidation: (reason: unknown) => void = () => {
+      throw new Error('验证 Promise 尚未初始化')
+    }
+    validateForm = () => new Promise((_resolve, reject) => { rejectValidation = reject })
     const oldWrapper = mountDialog({ source: 'device' })
     await oldWrapper.get('[data-testid="candidate-select"]').setValue('SN-001')
-    oldWrapper.get('[data-testid="whitelist-add-submit"]').trigger('click')
+    const pending = (oldWrapper.vm as unknown as { handleSubmit: () => Promise<void> })
+      .handleSubmit()
     await nextTick()
     oldWrapper.unmount()
 
     const newWrapper = mountDialog({ source: 'management' })
-    resolveValidation(true)
-    await flushPromises()
+    rejectValidation(new Error('迟到验证失败'))
+    await expect(pending).resolves.toBeUndefined()
 
     expect(oldWrapper.emitted('submit')).toBeUndefined()
-    expect((newWrapper.get('[data-testid="candidate-select"].element as HTMLSelectElement).value)
+    expect((newWrapper.get('[data-testid="candidate-select"]').element as HTMLSelectElement).value)
       .toBe('')
   })
 })

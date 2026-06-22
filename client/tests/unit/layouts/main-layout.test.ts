@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { shallowMount } from '@vue/test-utils'
+import { defineComponent, nextTick } from 'vue'
 import MainLayout from '../../../src/renderer/layouts/MainLayout.vue'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
@@ -8,6 +9,26 @@ import type { UserRole } from '../../../src/shared/connection-state'
 
 const push = vi.fn()
 const currentRoute = { path: '/file-access' }
+
+const ElDropdownStub = defineComponent({
+  name: 'ElDropdown',
+  emits: ['command'],
+  template: '<div><slot /><slot name="dropdown" /></div>',
+})
+const ElDropdownMenuStub = defineComponent({
+  name: 'ElDropdownMenu',
+  template: '<div><slot /></div>',
+})
+const ElDropdownItemStub = defineComponent({
+  name: 'ElDropdownItem',
+  props: ['command', 'divided'],
+  template: '<button type="button" :data-command="command"><slot /></button>',
+})
+const ChangePasswordDialogStub = defineComponent({
+  name: 'ChangePasswordDialog',
+  props: ['visible'],
+  template: '<div />',
+})
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
@@ -31,10 +52,10 @@ function mountLayout() {
     global: {
       stubs: {
         RouterView: true,
-        ChangePasswordDialog: true,
-        ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
-        ElDropdownMenu: true,
-        ElDropdownItem: true,
+        ChangePasswordDialog: ChangePasswordDialogStub,
+        ElDropdown: ElDropdownStub,
+        ElDropdownMenu: ElDropdownMenuStub,
+        ElDropdownItem: ElDropdownItemStub,
         ElIcon: true,
       },
     },
@@ -69,12 +90,18 @@ describe('MainLayout', () => {
     expect(trigger.attributes('title')).toBeUndefined()
   })
 
-  it('用户菜单保留修改密码与登出操作', () => {
+  it('用户菜单保留修改密码与登出操作及 command 绑定', async () => {
     setSession('operator')
     const wrapper = mountLayout()
 
     expect(wrapper.text()).toContain('修改密码')
     expect(wrapper.text()).toContain('登出')
+    expect(wrapper.findAllComponents(ElDropdownItemStub).map((item) => item.props('command')))
+      .toEqual(['change-password', 'logout'])
+
+    wrapper.getComponent(ElDropdownStub).vm.$emit('command', 'change-password')
+    await nextTick()
+    expect(wrapper.getComponent(ChangePasswordDialogStub).props('visible')).toBe(true)
   })
 
   it('用户菜单在同一头部控制容器中位于窗口按钮左侧', () => {
