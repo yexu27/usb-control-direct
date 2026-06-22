@@ -8,6 +8,7 @@ use policy_import_export::format::{self, PolicyContent};
 use policy_import_export::key_provider::{PolicyKeyProvider, PolicyKeys, SM4_KEY_LEN};
 use policy_import_export::PolicyService;
 use storage::Storage;
+use whitelist::WhitelistManager;
 
 /// 测试用密钥提供者。
 ///
@@ -47,6 +48,11 @@ fn setup_storage() -> (Arc<Storage>, tempfile::TempDir) {
     let db_path = tmp_dir.path().join("test.db");
     let storage = Arc::new(Storage::open(&db_path).expect("打开数据库失败"));
     (storage, tmp_dir)
+}
+
+fn setup_whitelist_manager(tmp_dir: &tempfile::TempDir) -> Arc<WhitelistManager> {
+    let db_path = tmp_dir.path().join("test.db");
+    Arc::new(WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap())
 }
 
 /// 向数据库插入测试白名单数据。
@@ -104,7 +110,11 @@ fn export_import_roundtrip_preserves_data() {
         .policy_update("exec_control", true)
         .expect("更新策略失败");
 
-    let service = PolicyService::new(storage.clone(), key_provider.clone());
+    let service = PolicyService::new(
+        storage.clone(),
+        key_provider.clone(),
+        setup_whitelist_manager(&_tmp),
+    );
 
     // 导出
     let bin_data = service.export_policy().expect("导出失败");
@@ -116,7 +126,11 @@ fn export_import_roundtrip_preserves_data() {
 
     // 创建新数据库用于导入
     let (import_storage, _import_tmp) = setup_storage();
-    let import_service = PolicyService::new(import_storage.clone(), key_provider);
+    let import_service = PolicyService::new(
+        import_storage.clone(),
+        key_provider,
+        setup_whitelist_manager(&_import_tmp),
+    );
 
     // 导入
     import_service.import_policy(&bin_data).expect("导入失败");
@@ -160,7 +174,11 @@ fn import_rejects_tampered_ciphertext() {
 
     insert_test_whitelist(&storage);
 
-    let service = PolicyService::new(storage.clone(), key_provider.clone());
+    let service = PolicyService::new(
+        storage.clone(),
+        key_provider.clone(),
+        setup_whitelist_manager(&_tmp),
+    );
 
     // 导出
     let bin_data = service.export_policy().expect("导出失败");
@@ -176,7 +194,11 @@ fn import_rejects_tampered_ciphertext() {
 
     // 导入应失败（摘要校验失败或签名校验失败）
     let (import_storage, _import_tmp) = setup_storage();
-    let import_service = PolicyService::new(import_storage, key_provider);
+    let import_service = PolicyService::new(
+        import_storage,
+        key_provider,
+        setup_whitelist_manager(&_import_tmp),
+    );
     let result = import_service.import_policy(&tampered);
     assert!(result.is_err(), "篡改后导入应失败");
 }
@@ -188,7 +210,11 @@ fn import_rejects_tampered_signature() {
 
     insert_test_whitelist(&storage);
 
-    let service = PolicyService::new(storage.clone(), key_provider.clone());
+    let service = PolicyService::new(
+        storage.clone(),
+        key_provider.clone(),
+        setup_whitelist_manager(&_tmp),
+    );
 
     // 导出
     let bin_data = service.export_policy().expect("导出失败");
@@ -210,7 +236,11 @@ fn import_rejects_tampered_signature() {
     .expect("重新组装失败");
 
     let (import_storage, _import_tmp) = setup_storage();
-    let import_service = PolicyService::new(import_storage, key_provider);
+    let import_service = PolicyService::new(
+        import_storage,
+        key_provider,
+        setup_whitelist_manager(&_import_tmp),
+    );
     let result = import_service.import_policy(&tampered);
     assert!(result.is_err(), "篡改签名后导入应失败");
 }
@@ -219,7 +249,11 @@ fn import_rejects_tampered_signature() {
 fn import_rejects_bad_magic() {
     let key_provider = Arc::new(MockKeyProvider::new());
     let (import_storage, _import_tmp) = setup_storage();
-    let import_service = PolicyService::new(import_storage, key_provider);
+    let import_service = PolicyService::new(
+        import_storage,
+        key_provider,
+        setup_whitelist_manager(&_import_tmp),
+    );
 
     let bad_data = b"XXXX0000000000000000000000000000000000000000000000000000000000000000";
     let result = import_service.import_policy(bad_data);

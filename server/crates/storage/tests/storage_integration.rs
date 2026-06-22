@@ -83,10 +83,366 @@ fn t02_blacklist_default_38() {
 }
 
 #[test]
-fn t02_blacklist_delete_default_fails() {
+fn t02_blacklist_delete_default_succeeds() {
     let (s, _tmp) = setup();
-    let result = s.blacklist_delete(".ps1");
-    assert!(result.is_err());
+    s.blacklist_delete(".ps1").unwrap();
+    assert!(s.blacklist_query_by_ext(".ps1").unwrap().is_none());
+}
+
+fn imported_whitelist(serial_number: &str) -> UsbWhitelistInsert {
+    UsbWhitelistInsert {
+        serial_number: serial_number.into(),
+        vid: None,
+        pid: None,
+        device_name: None,
+        capacity_bytes: None,
+        device_type: "storage".into(),
+        description: None,
+        permission: 0,
+        add_method: 0,
+    }
+}
+
+fn complete_policy_updates() -> Vec<(String, i32)> {
+    vec![
+        ("exec_control".into(), 1),
+        ("auto_read_control".into(), 1),
+        ("file_type_blacklist_control".into(), 1),
+    ]
+}
+
+#[test]
+fn policy_import_replaces_entire_blacklist_including_local_defaults() {
+    let (s, _tmp) = setup();
+    let imported = vec![(".ONLY".into(), Some("导入项".into()), 1)];
+
+    s.policy_import_transaction(&[], &complete_policy_updates(), &imported)
+        .unwrap();
+
+    let blacklist = s.blacklist_query_all().unwrap();
+    assert_eq!(blacklist.len(), 1);
+    assert_eq!(blacklist[0].extension, ".only");
+    assert_eq!(blacklist[0].is_default, 1);
+}
+
+#[test]
+fn policy_import_rejects_invalid_or_normalized_duplicate_extensions_before_changes() {
+    for blacklist in [
+        vec![("exe".into(), None, 0)],
+        vec![(".EXE".into(), None, 1), (" .exe ".into(), None, 0)],
+    ] {
+        let (s, _tmp) = setup();
+        s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+        let original_blacklist_count = s.blacklist_count().unwrap();
+
+        let result = s.policy_import_transaction(
+            &[imported_whitelist("IMPORTED")],
+            &complete_policy_updates(),
+            &blacklist,
+        );
+
+        assert!(matches!(result, Err(StorageError::Validation(_))));
+        assert!(s.whitelist_query_by_sn("ORIGINAL").unwrap().is_some());
+        assert!(s.whitelist_query_by_sn("IMPORTED").unwrap().is_none());
+        assert_eq!(s.blacklist_count().unwrap(), original_blacklist_count);
+        assert_eq!(s.policy_query("exec_control").unwrap().unwrap().enabled, 0);
+    }
+}
+
+#[test]
+fn policy_import_rejects_duplicate_whitelist_serial_before_changes() {
+    let (s, _tmp) = setup();
+    s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+
+    let result = s.policy_import_transaction(
+        &[imported_whitelist("DUP"), imported_whitelist("DUP")],
+        &complete_policy_updates(),
+        &[],
+    );
+
+    assert!(matches!(result, Err(StorageError::Validation(_))));
+    assert!(s.whitelist_query_by_sn("ORIGINAL").unwrap().is_some());
+    assert_eq!(s.policy_query("exec_control").unwrap().unwrap().enabled, 0);
+    assert_eq!(s.blacklist_count().unwrap(), 38);
+}
+
+#[test]
+fn policy_import_rejects_blank_whitelist_serial_before_changes() {
+    let (s, _tmp) = setup();
+    s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+
+    let result = s.policy_import_transaction(
+        &[imported_whitelist("   ")],
+        &complete_policy_updates(),
+        &[],
+    );
+
+    assert!(matches!(result, Err(StorageError::Validation(_))));
+    assert!(s.whitelist_query_by_sn("ORIGINAL").unwrap().is_some());
+    assert_eq!(s.policy_query("exec_control").unwrap().unwrap().enabled, 0);
+    assert_eq!(s.blacklist_count().unwrap(), 38);
+}
+
+#[test]
+fn policy_import_rejects_invalid_field_values_before_changes() {
+    for field in [
+        "permission",
+        "add_method",
+        "device_type",
+        "capacity_bytes",
+        "enabled",
+        "is_default",
+    ] {
+        let (s, _tmp) = setup();
+        s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+        let original_whitelist: Vec<_> = s
+            .whitelist_query_all()
+            .unwrap()
+            .into_iter()
+            .map(|item| (item.serial_number, item.permission, item.add_method))
+            .collect();
+        let original_policies: Vec<_> = s
+            .policy_query_all()
+            .unwrap()
+            .into_iter()
+            .map(|item| (item.policy_key, item.enabled, item.updated_at))
+            .collect();
+        let original_blacklist: Vec<_> = s
+            .blacklist_query_all()
+            .unwrap()
+            .into_iter()
+            .map(|item| (item.extension, item.description, item.is_default))
+            .collect();
+        let mut whitelist = imported_whitelist("IMPORTED");
+        let mut policies = complete_policy_updates();
+        let mut blacklist = vec![(".imported".into(), None, 0)];
+        match field {
+            "permission" => whitelist.permission = 2,
+            "add_method" => whitelist.add_method = -1,
+            "device_type" => whitelist.device_type = "keyboard".into(),
+            "capacity_bytes" => whitelist.capacity_bytes = Some(-1),
+            "enabled" => policies[0].1 = 2,
+            "is_default" => blacklist[0].2 = 2,
+            _ => unreachable!(),
+        }
+
+        let result = s.policy_import_transaction(&[whitelist], &policies, &blacklist);
+
+        assert!(
+            matches!(result, Err(StorageError::Validation(_))),
+            "应拒绝非法字段: {field}"
+        );
+        assert_eq!(
+            s.whitelist_query_all()
+                .unwrap()
+                .into_iter()
+                .map(|item| (item.serial_number, item.permission, item.add_method))
+                .collect::<Vec<_>>(),
+            original_whitelist,
+            "非法字段 {field} 不得修改白名单"
+        );
+        assert_eq!(
+            s.policy_query_all()
+                .unwrap()
+                .into_iter()
+                .map(|item| (item.policy_key, item.enabled, item.updated_at))
+                .collect::<Vec<_>>(),
+            original_policies,
+            "非法字段 {field} 不得修改策略开关"
+        );
+        assert_eq!(
+            s.blacklist_query_all()
+                .unwrap()
+                .into_iter()
+                .map(|item| (item.extension, item.description, item.is_default))
+                .collect::<Vec<_>>(),
+            original_blacklist,
+            "非法字段 {field} 不得修改黑名单"
+        );
+    }
+}
+
+#[test]
+fn policy_import_rejects_missing_unknown_or_duplicate_policy_keys_before_changes() {
+    let invalid_policy_sets = [
+        vec![
+            ("exec_control".into(), 1),
+            ("auto_read_control".into(), 1),
+        ],
+        vec![
+            ("exec_control".into(), 1),
+            ("auto_read_control".into(), 1),
+            ("file_type_blacklist_control".into(), 1),
+            ("unknown".into(), 1),
+        ],
+        vec![
+            ("exec_control".into(), 1),
+            ("exec_control".into(), 0),
+            ("auto_read_control".into(), 1),
+            ("file_type_blacklist_control".into(), 1),
+        ],
+    ];
+
+    for policies in invalid_policy_sets {
+        let (s, _tmp) = setup();
+        s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+
+        let result = s.policy_import_transaction(
+            &[imported_whitelist("IMPORTED")],
+            &policies,
+            &[(".imported".into(), None, 0)],
+        );
+
+        assert!(matches!(result, Err(StorageError::Validation(_))));
+        assert!(s.whitelist_query_by_sn("ORIGINAL").unwrap().is_some());
+        assert!(s.whitelist_query_by_sn("IMPORTED").unwrap().is_none());
+        assert_eq!(s.policy_query("exec_control").unwrap().unwrap().enabled, 0);
+        assert_eq!(s.blacklist_count().unwrap(), 38);
+    }
+}
+
+#[test]
+fn policy_import_rejects_policy_update_that_affects_no_row() {
+    let (s, tmp) = setup();
+    s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+    let injector = rusqlite::Connection::open(tmp.path()).unwrap();
+    injector
+        .execute_batch(
+            "CREATE TRIGGER ignore_auto_read_policy_update \
+             BEFORE UPDATE ON file_access_policy \
+             WHEN NEW.policy_key = 'auto_read_control' \
+             BEGIN SELECT RAISE(IGNORE); END;",
+        )
+        .unwrap();
+
+    let result = s.policy_import_transaction(
+        &[imported_whitelist("IMPORTED")],
+        &complete_policy_updates(),
+        &[],
+    );
+
+    assert!(matches!(result, Err(StorageError::NotFound(_))));
+    assert!(s.whitelist_query_by_sn("ORIGINAL").unwrap().is_some());
+    assert!(s.whitelist_query_by_sn("IMPORTED").unwrap().is_none());
+    for policy_key in [
+        "exec_control",
+        "auto_read_control",
+        "file_type_blacklist_control",
+    ] {
+        assert_eq!(s.policy_query(policy_key).unwrap().unwrap().enabled, 0);
+    }
+    assert_eq!(s.blacklist_count().unwrap(), 38);
+}
+
+#[test]
+fn policy_import_rolls_back_all_tables_when_blacklist_insert_fails_after_clears() {
+    let (s, tmp) = setup();
+    s.whitelist_insert(&imported_whitelist("ORIGINAL")).unwrap();
+    s.policy_update("auto_read_control", true).unwrap();
+    let original_whitelist: Vec<_> = s
+        .whitelist_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| {
+            (
+                item.id,
+                item.serial_number,
+                item.vid,
+                item.pid,
+                item.device_name,
+                item.capacity_bytes,
+                item.device_type,
+                item.description,
+                item.permission,
+                item.add_method,
+                item.created_at,
+            )
+        })
+        .collect();
+    let original_policies: Vec<_> = s
+        .policy_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| (item.policy_key, item.enabled, item.updated_at))
+        .collect();
+    let original_blacklist: Vec<_> = s
+        .blacklist_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| {
+            (
+                item.id,
+                item.extension,
+                item.description,
+                item.is_default,
+                item.created_at,
+            )
+        })
+        .collect();
+    let injector = rusqlite::Connection::open(tmp.path()).unwrap();
+    injector
+        .execute_batch(
+            "CREATE TRIGGER fail_policy_import_blacklist \
+             BEFORE INSERT ON file_type_blacklist \
+             WHEN NEW.extension = '.trigger_fail' \
+             BEGIN SELECT RAISE(ABORT, 'injected blacklist insert failure'); END;",
+        )
+        .unwrap();
+
+    let result = s.policy_import_transaction(
+        &[imported_whitelist("IMPORTED")],
+        &[
+            ("exec_control".into(), 1),
+            ("auto_read_control".into(), 0),
+            ("file_type_blacklist_control".into(), 1),
+        ],
+        &[(".trigger_fail".into(), None, 0)],
+    );
+
+    assert!(matches!(result, Err(StorageError::Sqlite(_))));
+    let whitelist_after: Vec<_> = s
+        .whitelist_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| {
+            (
+                item.id,
+                item.serial_number,
+                item.vid,
+                item.pid,
+                item.device_name,
+                item.capacity_bytes,
+                item.device_type,
+                item.description,
+                item.permission,
+                item.add_method,
+                item.created_at,
+            )
+        })
+        .collect();
+    let policies_after: Vec<_> = s
+        .policy_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| (item.policy_key, item.enabled, item.updated_at))
+        .collect();
+    let blacklist_after: Vec<_> = s
+        .blacklist_query_all()
+        .unwrap()
+        .into_iter()
+        .map(|item| {
+            (
+                item.id,
+                item.extension,
+                item.description,
+                item.is_default,
+                item.created_at,
+            )
+        })
+        .collect();
+    assert_eq!(whitelist_after, original_whitelist);
+    assert_eq!(policies_after, original_policies);
+    assert_eq!(blacklist_after, original_blacklist);
 }
 
 // ========== T03 ==========

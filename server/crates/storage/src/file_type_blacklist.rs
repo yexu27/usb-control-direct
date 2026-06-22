@@ -71,29 +71,19 @@ impl Storage {
         })
     }
 
-    /// 按规范化后缀删除黑名单条目（is_default=1 的不可删除）。
+    /// 按规范化后缀删除黑名单条目。
     pub fn blacklist_delete(&self, extension: &str) -> Result<(), StorageError> {
         let normalized = normalize_extension(extension)?;
         self.pool().with_transaction(|tx| {
-            let is_default: i32 = tx
-                .query_row(
-                    "SELECT is_default FROM file_type_blacklist WHERE extension = ?1",
-                    params![normalized],
-                    |row| row.get(0),
-                )
-                .map_err(|error| match error {
-                    rusqlite::Error::QueryReturnedNoRows => {
-                        StorageError::NotFound(format!("blacklist extension={normalized}"))
-                    }
-                    other => StorageError::Sqlite(other),
-                })?;
-            if is_default == 1 {
-                return Err(StorageError::Validation("内置默认后缀不可删除".into()));
-            }
-            tx.execute(
+            let deleted = tx.execute(
                 "DELETE FROM file_type_blacklist WHERE extension = ?1",
                 params![normalized],
             )?;
+            if deleted == 0 {
+                return Err(StorageError::NotFound(format!(
+                    "blacklist extension={normalized}"
+                )));
+            }
             Ok(())
         })
     }
@@ -146,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_by_extension_normalizes_and_keeps_default_protection() {
+    fn delete_by_extension_normalizes_and_allows_default_entries() {
         let (storage, _file) = setup();
         storage.blacklist_insert(".custom", None).unwrap();
         storage.blacklist_delete("  .CUSTOM ").unwrap();
@@ -155,9 +145,10 @@ mod tests {
             .unwrap()
             .is_none());
 
-        assert!(matches!(
-            storage.blacklist_delete(".PS1"),
-            Err(StorageError::Validation(_))
-        ));
+        storage.blacklist_delete(".PS1").unwrap();
+        assert!(storage
+            .blacklist_query_by_ext(".ps1")
+            .unwrap()
+            .is_none());
     }
 }

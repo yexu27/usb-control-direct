@@ -72,6 +72,7 @@ async fn main() {
     let policy_service = Arc::new(PolicyService::new(
         Arc::clone(&storage_policy),
         key_provider,
+        Arc::clone(&whitelist_manager),
     ));
 
     let system_upgrade_mgr = Arc::new(SystemUpgradeManager::new(INSTALL_DIR, SERVICE_NAME));

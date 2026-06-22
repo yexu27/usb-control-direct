@@ -171,8 +171,8 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
         None => return error_response(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化"),
     };
 
-    let item = match storage.blacklist_query_by_ext(&extension) {
-        Ok(Some(item)) => item,
+    match storage.blacklist_query_by_ext(&extension) {
+        Ok(Some(_)) => {}
         Ok(None) => {
             return error_response(
                 ctx.seq_id,
@@ -181,14 +181,6 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
             );
         }
         Err(e) => return error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
-    };
-
-    if item.is_default == 1 {
-        return error_response(
-            ctx.seq_id,
-            ResultCode::DefaultExtensionNoDelete,
-            "内置默认后缀不可删除",
-        );
     }
 
     match storage.blacklist_delete(&extension) {
