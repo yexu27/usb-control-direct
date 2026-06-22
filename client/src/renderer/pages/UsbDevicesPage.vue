@@ -408,10 +408,12 @@ function changePageSize(nextPageSize: number): void {
 </script>
 
 <template>
-  <div class="usb-devices-page">
-    <header class="page-header">
-      <h1>U盘设备控制</h1>
-      <p>管理允许通过 USB 管控装置访问的 U 盘设备。</p>
+  <div class="usb-devices-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">U盘设备控制</h1>
+        <p class="app-page-desc">管理允许通过 USB 管控装置访问的 U 盘设备。</p>
+      </div>
     </header>
     <ConnectionAlert />
     <DataTable

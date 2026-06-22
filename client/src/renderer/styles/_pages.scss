@@ -1,0 +1,73 @@
+@use './tokens' as *;
+
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.app-page-title {
+  margin: 0;
+  color: var(--andi-text);
+  font-size: $font-size-page-title;
+  font-weight: $font-weight-medium;
+}
+
+.app-page-desc {
+  margin: 2px 0 0;
+  color: var(--andi-text-light);
+  font-size: $font-size-body;
+}
+
+.app-card {
+  overflow: hidden;
+  background: var(--andi-white);
+  border: 1px solid var(--andi-border);
+  border-radius: $radius-card;
+  box-shadow: $shadow-card;
+}
+
+.app-card-padded {
+  padding: 14px;
+}
+
+.app-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--andi-blue-bg);
+  border-bottom: 1px solid var(--andi-border);
+}
+
+.app-hint-block {
+  padding: 10px 14px;
+  color: var(--andi-text-secondary);
+  font-size: $font-size-hint;
+  background: var(--andi-blue-bg);
+  border: 1px solid var(--andi-border);
+  border-radius: $radius-card;
+}
+
+.app-danger-block {
+  padding: 12px;
+  color: var(--andi-text);
+  background: var(--andi-danger-bg);
+  border-radius: $radius-card;
+}
+
+.app-code {
+  padding: 1px 5px;
+  color: var(--andi-blue-dark);
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: $font-size-hint;
+  background: #f0f2f5;
+  border-radius: 3px;
+}

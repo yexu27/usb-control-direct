@@ -316,17 +316,19 @@ async function saveDeviceDescription(): Promise<void> {
 </script>
 
 <template>
-  <div class="system-page">
-    <header class="page-header">
-      <h1>系统管理</h1>
-      <p>系统升级、授权管理和设备配置</p>
+  <div class="system-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">系统管理</h1>
+        <p class="app-page-desc">系统升级、授权管理和设备配置</p>
+      </div>
     </header>
     <ConnectionAlert />
 
     <div v-loading="isLoadingInfo" class="system-grid">
-      <el-card shadow="never" class="system-card">
+      <el-card shadow="never" class="system-card app-card">
         <template #header>系统信息</template>
-        <dl class="info-list">
+        <dl class="info-list app-info-list">
           <dt>当前系统版本</dt><dd>{{ systemVersion }}</dd>
           <dt>病毒库版本</dt><dd>{{ virusDbVersion }}</dd>
           <dt>病毒库更新时间</dt><dd>{{ virusDbUpdatedAt }}</dd>
@@ -336,7 +338,7 @@ async function saveDeviceDescription(): Promise<void> {
         </dl>
       </el-card>
 
-      <el-card shadow="never" class="system-card">
+      <el-card shadow="never" class="system-card app-card">
         <template #header>系统升级</template>
         <p>当前版本：{{ systemVersion }}</p>
         <div class="action-row">
@@ -353,12 +355,12 @@ async function saveDeviceDescription(): Promise<void> {
             升级
           </el-button>
         </div>
-        <p v-if="systemPackagePath" class="selected-file">
+        <p v-if="systemPackagePath" class="selected-file app-hint-block">
           {{ selectedSystemPackageName }}，目标版本 {{ systemTargetVersion }}
         </p>
       </el-card>
 
-      <el-card shadow="never" class="system-card">
+      <el-card shadow="never" class="system-card app-card">
         <template #header>病毒库升级</template>
         <p>当前版本：{{ virusDbVersion }}，更新时间：{{ virusDbUpdatedAt }}</p>
         <div class="action-row">
@@ -375,12 +377,12 @@ async function saveDeviceDescription(): Promise<void> {
             升级
           </el-button>
         </div>
-        <p v-if="virusdbPackagePath" class="selected-file">
+        <p v-if="virusdbPackagePath" class="selected-file app-hint-block">
           {{ selectedVirusdbPackageName }}，目标版本 {{ virusdbTargetVersion }}
         </p>
       </el-card>
 
-      <el-card shadow="never" class="system-card">
+      <el-card shadow="never" class="system-card app-card">
         <template #header>授权信息管理</template>
         <p>状态：{{ authStatusText }}，截止时间：{{ authExpireTime }}</p>
         <div class="action-row">
@@ -393,7 +395,7 @@ async function saveDeviceDescription(): Promise<void> {
         </div>
       </el-card>
 
-      <el-card shadow="never" class="system-card">
+      <el-card shadow="never" class="system-card app-card">
         <template #header>自定义设备描述</template>
         <p>当前描述：{{ currentDeviceDescription }}</p>
         <div class="device-desc-row">
@@ -412,13 +414,13 @@ async function saveDeviceDescription(): Promise<void> {
             保存
           </el-button>
         </div>
-        <p class="hint">仅支持 1-32 位字母、数字或下划线，修改成功后重启设备生效。</p>
+        <p class="hint app-hint-block">仅支持 1-32 位字母、数字或下划线，修改成功后重启设备生效。</p>
       </el-card>
     </div>
 
     <el-dialog v-model="machineCodeDialogVisible" title="机器码" width="520px">
       <div v-loading="machineCodeLoading" class="machine-code-dialog">
-        <code data-testid="machine-code-text">{{ machineCode }}</code>
+        <code class="app-code" data-testid="machine-code-text">{{ machineCode }}</code>
         <img v-if="qrcodeUrl" :src="qrcodeUrl" alt="机器码二维码">
       </div>
       <template #footer>

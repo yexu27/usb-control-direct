@@ -161,10 +161,12 @@ function changePageSize(nextPageSize: number): void {
 </script>
 
 <template>
-  <div class="file-access-page">
-    <header class="page-header">
-      <h1>文件访问控制</h1>
-      <p>管理 USB 介质的可执行程序、自动读取与文件类型访问策略。</p>
+  <div class="file-access-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">文件访问控制</h1>
+        <p class="app-page-desc">管理 USB 介质的可执行程序、自动读取与文件类型访问策略。</p>
+      </div>
     </header>
     <ConnectionAlert />
 
@@ -174,7 +176,7 @@ function changePageSize(nextPageSize: number): void {
         data-testid="file-policy-section"
         data-policy="exec_control"
       >
-        <el-card shadow="never" class="policy-card" data-testid="file-policy-card">
+        <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
           <div class="card-heading">
             <div>
               <h2>可执行程序访问控制</h2>
@@ -206,7 +208,7 @@ function changePageSize(nextPageSize: number): void {
         data-testid="file-policy-section"
         data-policy="auto_read_control"
       >
-        <el-card shadow="never" class="policy-card" data-testid="file-policy-card">
+        <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
           <div class="card-heading">
             <div>
               <h2>介质自动读取</h2>
@@ -229,7 +231,7 @@ function changePageSize(nextPageSize: number): void {
         data-testid="file-policy-section"
         data-policy="file_type_blacklist_control"
       >
-        <el-card shadow="never" class="policy-card" data-testid="file-policy-card">
+        <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
           <div class="card-heading">
             <div>
               <h2>文件类型黑名单</h2>

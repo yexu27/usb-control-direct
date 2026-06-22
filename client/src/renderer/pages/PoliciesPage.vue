@@ -336,15 +336,17 @@ async function handleImport(): Promise<void> {
 </script>
 
 <template>
-  <div class="policies-page">
-    <header class="page-header">
-      <h1>策略管理</h1>
-      <p>导入或导出当前装置的 U 盘白名单与文件访问策略。</p>
+  <div class="policies-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">策略管理</h1>
+        <p class="app-page-desc">导入或导出当前装置的 U 盘白名单与文件访问策略。</p>
+      </div>
     </header>
     <ConnectionAlert />
 
     <div class="policy-actions">
-      <el-card shadow="never" class="policy-card">
+      <el-card shadow="never" class="policy-card app-card">
         <h2>导出策略</h2>
         <p>将当前装置策略备份为加密 .bin 文件。</p>
         <el-button
@@ -358,7 +360,7 @@ async function handleImport(): Promise<void> {
         </el-button>
       </el-card>
 
-      <el-card shadow="never" class="policy-card">
+      <el-card shadow="never" class="policy-card app-card">
         <h2>导入策略</h2>
         <p>整体覆盖当前白名单和文件访问策略，仅支持 .bin 文件。</p>
         <el-button

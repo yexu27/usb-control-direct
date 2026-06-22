@@ -297,14 +297,16 @@ function disabledClearDate(date: Date): boolean {
 </script>
 
 <template>
-  <div class="logs-page">
-    <header class="page-header">
-      <h1>日志管理</h1>
-      <p>USB操作和安全事件的审计追踪</p>
+  <div class="logs-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">日志管理</h1>
+        <p class="app-page-desc">USB操作和安全事件的审计追踪</p>
+      </div>
     </header>
     <ConnectionAlert />
 
-    <el-card shadow="never" class="logs-card">
+    <el-card shadow="never" class="logs-card app-card">
       <el-tabs
         :model-value="activeLogType"
         data-testid="log-tabs"
@@ -375,7 +377,7 @@ function disabledClearDate(date: Date): boolean {
                 :value="option.value"
               />
             </el-select>
-            <div class="filter-actions">
+            <div class="filter-actions app-filter-actions">
               <el-button type="primary" data-testid="log-search" @click="handleSearch">
                 搜索
               </el-button>

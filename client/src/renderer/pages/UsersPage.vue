@@ -270,14 +270,16 @@ async function submitResetPassword(): Promise<void> {
 </script>
 
 <template>
-  <div class="users-page">
-    <header class="page-header">
-      <h1>用户管理</h1>
-      <p>管理系统管理员、操作员和审计员账号</p>
+  <div class="users-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">用户管理</h1>
+        <p class="app-page-desc">管理系统管理员、操作员和审计员账号</p>
+      </div>
     </header>
     <ConnectionAlert />
 
-    <el-card shadow="never" class="users-card">
+    <el-card shadow="never" class="users-card app-card">
       <DataTable
         :columns="columns"
         :data="users"
@@ -289,7 +291,7 @@ async function submitResetPassword(): Promise<void> {
         empty-text="暂无用户"
       >
         <template #filters>
-          <div class="user-toolbar">
+          <div class="user-toolbar app-filter-actions">
             <el-button type="primary" data-testid="create-user-open" @click="openCreateDialog">
               新建用户
             </el-button>
@@ -307,7 +309,7 @@ async function submitResetPassword(): Promise<void> {
           {{ formatCreatedAt(row.createdAt) }}
         </template>
         <template #actions="{ row }">
-          <div class="row-actions">
+          <div class="row-actions app-row-actions">
             <el-button
               :data-testid="`reset-password-${row.username}`"
               plain
