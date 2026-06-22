@@ -50,7 +50,7 @@ pub struct PolicySnapshot {
     pub file_type_blacklist_enabled: bool,
     /// L4 自运行控制开关。
     pub auto_read_control_enabled: bool,
-    /// L3 黑名单后缀集合（小写，不含点号）。
+    /// L3 黑名单后缀集合（带单个前导点，ASCII 小写）。
     pub blacklist_extensions: HashSet<String>,
     /// 权限：0=只读，1=读写。
     pub permission: i32,

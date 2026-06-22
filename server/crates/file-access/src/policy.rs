@@ -35,14 +35,16 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
     }
 
     // L3: 文件类型黑名单
-    if snapshot.file_type_blacklist_enabled
-        && !entry.extension.is_empty()
-        && snapshot.blacklist_extensions.contains(&entry.extension)
-    {
-        return AccessDecision::Deny(format!(
-            "L3:文件类型黑名单({})",
-            entry.extension
-        ));
+    if snapshot.file_type_blacklist_enabled && !entry.extension.is_empty() {
+        let extension_with_dot = format!(".{}", entry.extension);
+        if let Ok(normalized) = storage::normalize_extension(&extension_with_dot) {
+            if snapshot.blacklist_extensions.contains(&normalized) {
+                return AccessDecision::Deny(format!(
+                    "L3:文件类型黑名单({})",
+                    normalized
+                ));
+            }
+        }
     }
 
     // L4: 自运行控制
@@ -96,7 +98,7 @@ pub fn load_policy_snapshot(storage: &storage::Storage, permission: i32) -> Poli
         .blacklist_query_all()
         .unwrap_or_default()
         .into_iter()
-        .map(|item| item.extension.to_lowercase())
+        .filter_map(|item| storage::normalize_extension(&item.extension).ok())
         .collect();
 
     PolicySnapshot {
@@ -105,5 +107,42 @@ pub fn load_policy_snapshot(storage: &storage::Storage, permission: i32) -> Poli
         auto_read_control_enabled,
         blacklist_extensions,
         permission,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn dotted_database_extension_matches_mixed_case_file_tree_extension() {
+        let snapshot = PolicySnapshot {
+            exec_control_enabled: false,
+            file_type_blacklist_enabled: true,
+            auto_read_control_enabled: false,
+            blacklist_extensions: HashSet::from([".ps1".to_string()]),
+            permission: 1,
+        };
+        let entry = ControlledEntry {
+            real_path: PathBuf::from("/mnt/usb_raw/script.PS1"),
+            virtual_name: "script.PS1".to_string(),
+            file_size: 1,
+            is_dir: false,
+            is_virus: false,
+            exec_type: None,
+            extension: "PS1".to_string(),
+            is_autorun_target: false,
+            is_autorun_inf: false,
+            is_root_shell_script: false,
+            children: vec![],
+        };
+
+        assert!(matches!(
+            evaluate_access(&entry, &snapshot),
+            AccessDecision::Deny(_)
+        ));
     }
 }

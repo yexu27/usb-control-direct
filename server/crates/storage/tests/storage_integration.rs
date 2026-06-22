@@ -69,9 +69,9 @@ fn t01_whitelist_update_and_delete() {
 #[test]
 fn t02_blacklist_insert_and_query() {
     let (s, _tmp) = setup();
-    let id = s.blacklist_insert(".py", Some("Python 脚本")).unwrap();
+    let id = s.blacklist_insert(".custom", Some("自定义后缀")).unwrap();
     assert!(id > 0);
-    let found = s.blacklist_query_by_ext(".py").unwrap().unwrap();
+    let found = s.blacklist_query_by_ext(".CUSTOM").unwrap().unwrap();
     assert_eq!(found.is_default, 0);
 }
 
@@ -85,8 +85,7 @@ fn t02_blacklist_default_38() {
 #[test]
 fn t02_blacklist_delete_default_fails() {
     let (s, _tmp) = setup();
-    let item = s.blacklist_query_by_ext(".mp3").unwrap().unwrap();
-    let result = s.blacklist_delete(item.id);
+    let result = s.blacklist_delete(".ps1");
     assert!(result.is_err());
 }
 

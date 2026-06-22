@@ -8,6 +8,7 @@ use common::proto::{
     CmdUpdateFilePolicySwitch, FileTypeBlacklistItem, RspCommon, RspFilePolicy,
 };
 use storage::model::OperationLogInsert;
+use storage::StorageError;
 
 use crate::codec;
 use crate::context::RequestContext;
@@ -112,14 +113,10 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
     };
 
-    let extension = cmd.extension.trim().to_lowercase();
-    if extension.is_empty() || extension.contains('.') || extension.contains(' ') {
-        return error_response(
-            ctx.seq_id,
-            ResultCode::ExtensionFormatError,
-            "后缀格式错误（不含点号，不含空格）",
-        );
-    }
+    let extension = match normalize_handler_extension(&cmd.extension) {
+        Ok(extension) => extension,
+        Err(code) => return error_response(ctx.seq_id, code, "文件后缀格式错误"),
+    };
 
     let storage = match ctx.storage() {
         Some(s) => s,
@@ -131,7 +128,7 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
             return error_response(
                 ctx.seq_id,
                 ResultCode::ExtensionExists,
-                &format!("后缀 {} 已存在", extension),
+                "该文件后缀已在黑名单中",
             );
         }
         Ok(None) => {}
@@ -149,7 +146,11 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
             write_audit_log(ctx, "file_blacklist", "add", Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+        Err(e) => error_response(
+            ctx.seq_id,
+            map_blacklist_insert_error(&e),
+            &e.to_string(),
+        ),
     }
 }
 
@@ -160,14 +161,10 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
     };
 
-    let extension = cmd.extension.trim().to_lowercase();
-    if extension.is_empty() {
-        return error_response(
-            ctx.seq_id,
-            ResultCode::ExtensionFormatError,
-            "后缀不能为空",
-        );
-    }
+    let extension = match normalize_handler_extension(&cmd.extension) {
+        Ok(extension) => extension,
+        Err(code) => return error_response(ctx.seq_id, code, "文件后缀格式错误"),
+    };
 
     let storage = match ctx.storage() {
         Some(s) => s,
@@ -180,7 +177,7 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
             return error_response(
                 ctx.seq_id,
                 ResultCode::ExtensionNotFound,
-                &format!("后缀 {} 不在黑名单中", extension),
+                "该文件后缀不在黑名单中",
             );
         }
         Err(e) => return error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
@@ -194,12 +191,24 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
         );
     }
 
-    match storage.blacklist_delete(item.id) {
+    match storage.blacklist_delete(&extension) {
         Ok(()) => {
             write_audit_log(ctx, "file_blacklist", "remove", Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+    }
+}
+
+fn normalize_handler_extension(extension: &str) -> Result<String, ResultCode> {
+    storage::normalize_extension(extension).map_err(|_| ResultCode::ExtensionFormatError)
+}
+
+fn map_blacklist_insert_error(error: &StorageError) -> ResultCode {
+    match error {
+        StorageError::AlreadyExists => ResultCode::ExtensionExists,
+        StorageError::Validation(_) => ResultCode::ExtensionFormatError,
+        _ => ResultCode::InternalError,
     }
 }
 
@@ -254,4 +263,30 @@ fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
         error_message: msg.to_string(),
     };
     codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handler_normalization_accepts_dotted_mixed_case_extension() {
+        assert_eq!(normalize_handler_extension("  .PS1 ").unwrap(), ".ps1");
+    }
+
+    #[test]
+    fn handler_normalization_maps_invalid_input_to_extension_format_error() {
+        assert_eq!(
+            normalize_handler_extension("ps1").unwrap_err(),
+            ResultCode::ExtensionFormatError
+        );
+    }
+
+    #[test]
+    fn duplicate_storage_error_maps_to_extension_exists() {
+        assert_eq!(
+            map_blacklist_insert_error(&storage::StorageError::AlreadyExists),
+            ResultCode::ExtensionExists
+        );
+    }
 }

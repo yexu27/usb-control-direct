@@ -78,7 +78,7 @@ fn l2_exec_control_disabled_allows_pe() {
 
 #[test]
 fn l3_blacklist_blocks_extension() {
-    let snapshot = make_snapshot(false, true, false, &["bat", "cmd"]);
+    let snapshot = make_snapshot(false, true, false, &[".bat", ".cmd"]);
     let entry = make_entry("script.bat");
 
     let decision = evaluate_access(&entry, &snapshot);
@@ -87,7 +87,7 @@ fn l3_blacklist_blocks_extension() {
 
 #[test]
 fn l3_blacklist_case_insensitive() {
-    let snapshot = make_snapshot(false, true, false, &["exe"]);
+    let snapshot = make_snapshot(false, true, false, &[".exe"]);
     let mut entry = make_entry("APP.EXE");
     entry.extension = "exe".to_string();
 
@@ -97,7 +97,7 @@ fn l3_blacklist_case_insensitive() {
 
 #[test]
 fn l3_blacklist_disabled_allows() {
-    let snapshot = make_snapshot(false, false, false, &["bat"]);
+    let snapshot = make_snapshot(false, false, false, &[".bat"]);
     let entry = make_entry("script.bat");
 
     let decision = evaluate_access(&entry, &snapshot);
@@ -146,7 +146,7 @@ fn l4_disabled_allows_autorun() {
 
 #[test]
 fn priority_l1_wins_over_l2() {
-    let snapshot = make_snapshot(true, true, true, &["exe"]);
+    let snapshot = make_snapshot(true, true, true, &[".exe"]);
     let mut entry = make_entry("virus.exe");
     entry.is_virus = true;
     entry.exec_type = Some(ExecFileType::Pe);
@@ -157,7 +157,7 @@ fn priority_l1_wins_over_l2() {
 
 #[test]
 fn priority_l2_wins_over_l3() {
-    let snapshot = make_snapshot(true, true, false, &["exe"]);
+    let snapshot = make_snapshot(true, true, false, &[".exe"]);
     let mut entry = make_entry("app.exe");
     entry.exec_type = Some(ExecFileType::Pe);
 
@@ -167,7 +167,7 @@ fn priority_l2_wins_over_l3() {
 
 #[test]
 fn normal_file_allowed() {
-    let snapshot = make_snapshot(true, true, true, &["bat", "cmd"]);
+    let snapshot = make_snapshot(true, true, true, &[".bat", ".cmd"]);
     let entry = make_entry("readme.txt");
 
     let decision = evaluate_access(&entry, &snapshot);
@@ -176,7 +176,7 @@ fn normal_file_allowed() {
 
 #[test]
 fn directory_always_allowed() {
-    let snapshot = make_snapshot(true, true, true, &["exe"]);
+    let snapshot = make_snapshot(true, true, true, &[".exe"]);
     let mut entry = make_entry("subdir");
     entry.is_dir = true;
     entry.extension = String::new();
