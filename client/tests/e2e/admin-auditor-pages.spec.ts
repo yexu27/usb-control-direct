@@ -117,6 +117,11 @@ test.describe('管理员与审计员页面业务闭环', () => {
       await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
 
       await page.getByTestId('create-user-open').click()
+      await page.getByTestId('create-username').fill('1')
+      await page.getByTestId('create-password').fill('1')
+      await page.getByTestId('create-confirm-password').fill('1')
+      await page.getByTestId('create-user-submit').click()
+      await expect(page.locator('.el-form-item__error').filter({ hasText: '密码长度不能少于8位' })).toBeVisible()
       await page.getByTestId('create-username').fill('new_operator')
       await page.getByTestId('create-role').click()
       await page.getByRole('option', { name: '操作员' }).click()

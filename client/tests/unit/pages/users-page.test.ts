@@ -66,6 +66,16 @@ const ElOptionStub = defineComponent({
   template: '<option :value="value">{{ label }}</option>',
 })
 
+const ElFormStub = defineComponent({
+  setup(_props, { expose, slots }) {
+    expose({
+      validate: () => Promise.resolve(true),
+      clearValidate: vi.fn(),
+    })
+    return () => h('form', slots.default?.())
+  },
+})
+
 function mountPage() {
   return mount(UsersPage, {
     global: {
@@ -76,7 +86,7 @@ function mountPage() {
         ElCard: { template: '<section><slot /></section>' },
         ElButton: { emits: ['click'], template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot /><slot name="footer" /></section>' },
-        ElForm: { template: '<form><slot /></form>' },
+        ElForm: ElFormStub,
         ElFormItem: { template: '<label><slot /></label>' },
         ElInput: ElInputStub,
         ElSelect: ElSelectStub,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
@@ -55,6 +55,8 @@ const createDialogVisible = ref(false)
 const resetDialogVisible = ref(false)
 const createSubmitting = ref(false)
 const resetSubmitting = ref(false)
+const createFormRef = ref<FormInstance | null>(null)
+const resetFormRef = ref<FormInstance | null>(null)
 
 const createForm = reactive<CreateUserForm>({
   username: '',
@@ -68,6 +70,45 @@ const resetForm = reactive<ResetPasswordForm>({
   password: '',
   confirmPassword: '',
 })
+
+const createRules: FormRules<CreateUserForm> = {
+  username: [{
+    validator: (_rule, value: string, callback) => {
+      const message = validateUsername(String(value ?? '').trim())
+      callback(message === '' ? undefined : new Error(message))
+    },
+    trigger: ['blur', 'change'],
+  }],
+  password: [{
+    validator: (_rule, value: string, callback) => {
+      const result = validatePasswordComplexity(String(value ?? ''))
+      callback(result.valid ? undefined : new Error(result.message))
+    },
+    trigger: ['blur', 'change'],
+  }],
+  confirmPassword: [{
+    validator: (_rule, value: string, callback) => {
+      callback(value === createForm.password ? undefined : new Error('两次输入的密码不一致，请再次确认'))
+    },
+    trigger: ['blur', 'change'],
+  }],
+}
+
+const resetRules: FormRules<ResetPasswordForm> = {
+  password: [{
+    validator: (_rule, value: string, callback) => {
+      const result = validatePasswordComplexity(String(value ?? ''))
+      callback(result.valid ? undefined : new Error(result.message))
+    },
+    trigger: ['blur', 'change'],
+  }],
+  confirmPassword: [{
+    validator: (_rule, value: string, callback) => {
+      callback(value === resetForm.password ? undefined : new Error('两次输入的密码不一致，请再次确认'))
+    },
+    trigger: ['blur', 'change'],
+  }],
+}
 
 const columns = computed<DataTableColumn[]>(() => [
   { prop: 'username', label: '用户名', minWidth: 160 },
@@ -125,11 +166,13 @@ function resetCreateForm(): void {
   createForm.role = 'operator'
   createForm.password = ''
   createForm.confirmPassword = ''
+  createFormRef.value?.clearValidate()
 }
 
 function openCreateDialog(): void {
   resetCreateForm()
   createDialogVisible.value = true
+  void nextTick(() => createFormRef.value?.clearValidate())
 }
 
 function openResetDialog(username: string): void {
@@ -137,6 +180,7 @@ function openResetDialog(username: string): void {
   resetForm.password = ''
   resetForm.confirmPassword = ''
   resetDialogVisible.value = true
+  void nextTick(() => resetFormRef.value?.clearValidate())
 }
 
 function validateUsername(username: string): string {
@@ -146,36 +190,15 @@ function validateUsername(username: string): string {
   return ''
 }
 
-function validatePasswordPair(password: string, confirmPassword: string): string {
-  const passwordResult = validatePasswordComplexity(password)
-  if (!passwordResult.valid) {
-    return passwordResult.message
-  }
-  if (password !== confirmPassword) {
-    return '两次输入的密码不一致，请再次确认'
-  }
-  return ''
-}
-
-function showValidationError(message: string): boolean {
-  if (message === '') {
-    return false
-  }
-  ElMessage.error(message)
-  return true
-}
-
 async function submitCreateUser(): Promise<void> {
-  if (createSubmitting.value || !canOperate()) {
+  if (createFormRef.value == null || createSubmitting.value || !canOperate()) {
+    return
+  }
+  const valid = await createFormRef.value.validate().catch(() => false)
+  if (!valid) {
     return
   }
   const username = createForm.username.trim()
-  if (showValidationError(validateUsername(username))) {
-    return
-  }
-  if (showValidationError(validatePasswordPair(createForm.password, createForm.confirmPassword))) {
-    return
-  }
   createSubmitting.value = true
   try {
     await createUser(
@@ -218,10 +241,11 @@ async function handleDeleteUser(username: string): Promise<void> {
 }
 
 async function submitResetPassword(): Promise<void> {
-  if (resetSubmitting.value || !canOperate()) {
+  if (resetFormRef.value == null || resetSubmitting.value || !canOperate()) {
     return
   }
-  if (showValidationError(validatePasswordPair(resetForm.password, resetForm.confirmPassword))) {
+  const valid = await resetFormRef.value.validate().catch(() => false)
+  if (!valid) {
     return
   }
   resetSubmitting.value = true
@@ -304,11 +328,16 @@ async function submitResetPassword(): Promise<void> {
     </el-card>
 
     <el-dialog v-model="createDialogVisible" title="新建用户" width="520px">
-      <el-form label-position="top">
-        <el-form-item label="用户名">
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createRules"
+        label-position="top"
+      >
+        <el-form-item label="用户名" prop="username">
           <el-input v-model="createForm.username" data-testid="create-username" maxlength="32" />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item label="角色" prop="role">
           <el-select v-model="createForm.role" data-testid="create-role">
             <el-option
               v-for="option in USER_ROLE_OPTIONS"
@@ -318,7 +347,7 @@ async function submitResetPassword(): Promise<void> {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item label="密码" prop="password">
           <el-input
             v-model="createForm.password"
             data-testid="create-password"
@@ -326,7 +355,7 @@ async function submitResetPassword(): Promise<void> {
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码">
+        <el-form-item label="确认密码" prop="confirmPassword">
           <el-input
             v-model="createForm.confirmPassword"
             data-testid="create-confirm-password"
@@ -349,11 +378,16 @@ async function submitResetPassword(): Promise<void> {
     </el-dialog>
 
     <el-dialog v-model="resetDialogVisible" title="重置密码" width="520px">
-      <el-form label-position="top">
+      <el-form
+        ref="resetFormRef"
+        :model="resetForm"
+        :rules="resetRules"
+        label-position="top"
+      >
         <el-form-item label="用户名">
           <el-input :model-value="resetForm.username" readonly />
         </el-form-item>
-        <el-form-item label="新密码">
+        <el-form-item label="新密码" prop="password">
           <el-input
             v-model="resetForm.password"
             data-testid="reset-password"
@@ -361,7 +395,7 @@ async function submitResetPassword(): Promise<void> {
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码">
+        <el-form-item label="确认密码" prop="confirmPassword">
           <el-input
             v-model="resetForm.confirmPassword"
             data-testid="reset-confirm-password"
