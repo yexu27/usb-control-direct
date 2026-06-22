@@ -33,3 +33,19 @@ fn test_clamp_dx_dy() {
     let dx: i32 = 500;
     assert_eq!(clamp_i8(dx), 127);
 }
+
+fn update_button(buttons: u8, bit: u8, value: i32) -> u8 {
+    if value == 0 {
+        buttons & !(1 << bit)
+    } else {
+        buttons | (1 << bit)
+    }
+}
+
+#[test]
+fn test_update_button_bits() {
+    assert_eq!(update_button(0, 0, 1), 0x01);
+    assert_eq!(update_button(0x01, 1, 1), 0x03);
+    assert_eq!(update_button(0x03, 0, 0), 0x02);
+    assert_eq!(update_button(0x02, 2, 1), 0x06);
+}

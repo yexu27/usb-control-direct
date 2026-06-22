@@ -113,16 +113,3 @@ fn write_mouse_report(path: &Path, report: &MouseReport) -> Result<(), HidAccess
         HidAccessError::Internal(format!("写 hidg report 失败: {}", e))
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_update_button_bits() {
-        assert_eq!(update_button(0, 0, 1), 0x01);
-        assert_eq!(update_button(0x01, 1, 1), 0x03);
-        assert_eq!(update_button(0x03, 0, 0), 0x02);
-        assert_eq!(update_button(0x02, 2, 1), 0x06);
-    }
-}
