@@ -75,6 +75,7 @@ interface StoredUser {
 const POLICY_MAGIC = Buffer.from('USBPOLICY\n', 'ascii')
 const POLICY_VERSION = Buffer.from('VERSION:1\n', 'ascii')
 const POLICY_HEADER = Buffer.concat([POLICY_MAGIC, POLICY_VERSION])
+const POLICY_HEADER_CRLF = Buffer.from('USBPOLICY\r\nVERSION:1\r\n', 'ascii')
 const CREATED_AT = 1_767_225_600
 
 function initialPolicy(): StoredPolicy {
@@ -663,12 +664,12 @@ export class MockDevice {
       return this.commonErrorResponse(0x0407, '策略导入失败，原策略未变更')
     }
     const bytes = Buffer.from(command.policyData)
-    if (!bytes.subarray(0, POLICY_MAGIC.length).equals(POLICY_MAGIC) ||
-      !bytes.subarray(POLICY_MAGIC.length, POLICY_HEADER.length).equals(POLICY_VERSION)) {
+    const headerLength = policyHeaderLength(bytes)
+    if (headerLength == null) {
       return this.commonErrorResponse(0x0402, '策略文件格式错误')
     }
     try {
-      const parsed = JSON.parse(bytes.subarray(POLICY_HEADER.length).toString('utf8')) as unknown
+      const parsed = JSON.parse(bytes.subarray(headerLength).toString('utf8')) as unknown
       if (!isStoredPolicy(parsed)) throw new Error('invalid')
       this.policy = structuredClone(parsed)
       return this.commonSuccessResponse()
@@ -726,4 +727,14 @@ function isStoredPolicy(value: unknown): value is StoredPolicy {
     /^\.[a-z0-9]{1,10}$/.test(item.extension) && typeof item.description === 'string' &&
     typeof item.isDefault === 'boolean' && Number.isFinite(item.createdAt),
   )
+}
+
+function policyHeaderLength(bytes: Buffer): number | null {
+  if (bytes.subarray(0, POLICY_HEADER.length).equals(POLICY_HEADER)) {
+    return POLICY_HEADER.length
+  }
+  if (bytes.subarray(0, POLICY_HEADER_CRLF.length).equals(POLICY_HEADER_CRLF)) {
+    return POLICY_HEADER_CRLF.length
+  }
+  return null
 }
