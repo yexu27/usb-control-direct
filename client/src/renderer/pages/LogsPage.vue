@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
@@ -22,6 +22,7 @@ import { deleteLogs, exportLogs, queryLogs, type LogQueryInput } from '@/service
 import { ServiceError } from '@/services/send-command'
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
+import { confirmAction } from '@/utils/confirm-action'
 import type { usb_control } from '../../shared/proto/usb_control'
 
 const PAGE_SIZE = 20
@@ -271,15 +272,12 @@ async function confirmClear(): Promise<void> {
   const startText = formatUnixSeconds(startSeconds)
   const endText = formatUnixSeconds(endSeconds)
   try {
-    await ElMessageBox.confirm(
-      `请确认是否清除 ${startText} - ${endText} 的${activeTabLabel.value}？`,
-      '清理日志',
-      {
-        type: 'warning',
-        confirmButtonText: '确认清理',
-        cancelButtonText: '取消',
-      },
-    )
+    await confirmAction({
+      message: `请确认是否清除 ${startText} - ${endText} 的${activeTabLabel.value}？`,
+      title: '清理日志',
+      confirmButtonText: '确认清理',
+      type: 'warning',
+    })
   } catch {
     return
   }

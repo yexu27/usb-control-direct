@@ -130,6 +130,22 @@ test.describe('管理员与审计员页面业务闭环', () => {
       await page.getByTestId('create-user-submit').click()
       await expectLatestMessage(page, '用户创建成功')
       await expect(page.getByText('new_operator', { exact: true })).toBeVisible()
+      await page.getByTestId('delete-user-new_operator').click()
+      const confirmBox = page.locator('.app-confirm-message-box')
+      await expect(confirmBox).toContainText('是否要删除 new_operator 用户？')
+      const confirmBounds = await confirmBox.boundingBox()
+      const viewport = await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }))
+      expect(confirmBounds).not.toBeNull()
+      if (confirmBounds != null) {
+        expect(confirmBounds.x).toBeGreaterThan(viewport.width * 0.25)
+        expect(confirmBounds.x + confirmBounds.width).toBeLessThan(viewport.width * 0.75)
+        expect(confirmBounds.y).toBeGreaterThan(viewport.height * 0.25)
+        expect(confirmBounds.y + confirmBounds.height).toBeLessThan(viewport.height * 0.75)
+      }
+      await page.getByRole('button', { name: '取消' }).click()
 
       await page.getByTestId('user-menu-trigger').click()
       await page.getByText('登出', { exact: true }).click()

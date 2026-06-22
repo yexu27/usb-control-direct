@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
@@ -13,6 +13,7 @@ import {
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { validatePasswordComplexity } from '@/utils/password-validator'
+import { confirmAction } from '@/utils/confirm-action'
 import {
   USER_ROLE_OPTIONS,
   formatCreatedAt,
@@ -223,9 +224,10 @@ async function handleDeleteUser(username: string): Promise<void> {
     return
   }
   try {
-    await ElMessageBox.confirm(`是否要删除 ${username} 用户？`, '确认删除用户', {
+    await confirmAction({
+      message: `是否要删除 ${username} 用户？`,
+      title: '确认删除用户',
       confirmButtonText: '删除',
-      cancelButtonText: '取消',
       type: 'warning',
     })
   } catch {

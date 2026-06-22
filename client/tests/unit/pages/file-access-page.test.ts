@@ -265,7 +265,7 @@ describe('FileAccessPage', () => {
     expect(deleteButton.attributes('loading')).toBeDefined()
 
     confirmDeferred.resolve('confirm')
-    await nextTick()
+    await flushPromises()
     expect(remove).toHaveBeenCalledTimes(1)
     expect(deleteButton.attributes('disabled')).toBeDefined()
     expect(deleteButton.attributes('loading')).toBeDefined()

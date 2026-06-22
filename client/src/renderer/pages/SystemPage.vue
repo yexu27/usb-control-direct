@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
 import { getMachineCode, uploadLicense } from '@/services/auth-service'
@@ -18,6 +18,7 @@ import {
   parseSystemUpgradeVersion,
   parseVirusdbUpgradeVersion,
 } from '@/utils/upgrade-package'
+import { confirmAction } from '@/utils/confirm-action'
 import type { usb_control } from '../../shared/proto/usb_control'
 
 const session = useSessionStore()
@@ -292,11 +293,12 @@ async function saveDeviceDescription(): Promise<void> {
     return
   }
   try {
-    await ElMessageBox.confirm(
-      '修改设备描述前，请确认当前装置未连接移动存储设备、键盘、鼠标等 USB 设备。修改完成后需重启 USB 管控装置才能生效。',
-      '确认修改设备描述',
-      { confirmButtonText: '确认修改', cancelButtonText: '取消', type: 'warning' },
-    )
+    await confirmAction({
+      message: '修改设备描述前，请确认当前装置未连接移动存储设备、键盘、鼠标等 USB 设备。修改完成后需重启 USB 管控装置才能生效。',
+      title: '确认修改设备描述',
+      confirmButtonText: '确认修改',
+      type: 'warning',
+    })
   } catch {
     return
   }

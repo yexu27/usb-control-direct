@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import AddWhitelistDialog from '@/components/whitelist/AddWhitelistDialog.vue'
 import EditWhitelistDialog from '@/components/whitelist/EditWhitelistDialog.vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
@@ -12,6 +12,7 @@ import { ServiceError } from '@/services/send-command'
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
+import { confirmAction } from '@/utils/confirm-action'
 
 const PAGE_SIZE = 20
 const DISCONNECTED_MESSAGE = '装置已断开连接，无法修改白名单'
@@ -373,8 +374,11 @@ async function handleRemove(serialNumber: string): Promise<void> {
   removeOwnership.value.add(serialNumber)
   try {
     try {
-      await ElMessageBox.confirm(`确定删除白名单设备 ${serialNumber} 吗？`, '删除确认', {
-        type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
+      await confirmAction({
+        message: `确定删除白名单设备 ${serialNumber} 吗？`,
+        title: '删除确认',
+        confirmButtonText: '删除',
+        type: 'warning',
       })
     } catch {
       return

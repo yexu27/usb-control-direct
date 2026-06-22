@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
 import { exportPolicy, importPolicy } from '@/services/policy-service'
@@ -9,6 +9,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
+import { confirmAction } from '@/utils/confirm-action'
 
 const connection = useConnectionStore()
 const session = useSessionStore()
@@ -256,11 +257,12 @@ async function handleImport(): Promise<void> {
     }
 
     try {
-      await ElMessageBox.confirm(
-        '导入将整体覆盖当前装置的 U 盘白名单和文件访问策略，是否继续？',
-        '导入策略确认',
-        { type: 'warning', confirmButtonText: '导入', cancelButtonText: '取消' },
-      )
+      await confirmAction({
+        message: '导入将整体覆盖当前装置的 U 盘白名单和文件访问策略，是否继续？',
+        title: '导入策略确认',
+        confirmButtonText: '导入',
+        type: 'warning',
+      })
     } catch {
       return
     }

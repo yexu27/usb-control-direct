@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import AddBlacklistDialog from '@/components/file-policy/AddBlacklistDialog.vue'
@@ -8,6 +8,7 @@ import type { DataTableColumn } from '@/components/data-table'
 import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore, type FilePolicyKey } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
+import { confirmAction } from '@/utils/confirm-action'
 
 const SUCCESS_MESSAGE = '修改成功，重新拔插或重新映射后生效'
 const PAGE_SIZE = 20
@@ -107,15 +108,12 @@ async function handleRemove(extension: string): Promise<void> {
       return
     }
     try {
-      await ElMessageBox.confirm(
-        `确定删除黑名单条目 ${normalizedExtension} 吗？`,
-        '删除确认',
-        {
-          type: 'warning',
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
-        },
-      )
+      await confirmAction({
+        message: `确定删除黑名单条目 ${normalizedExtension} 吗？`,
+        title: '删除确认',
+        confirmButtonText: '删除',
+        type: 'warning',
+      })
     } catch {
       return
     }

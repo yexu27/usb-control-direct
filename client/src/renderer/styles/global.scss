@@ -1,0 +1,27 @@
+@use './variables' as *;
+
+:root {
+  font-family: $font-family-base;
+}
+
+.app-confirm-message-box-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-confirm-message-box {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  margin: 0;
+  border-radius: $border-radius-lg;
+}
+
+.app-confirm-message-box .el-message-box__content {
+  line-height: $line-height-base;
+  word-break: break-word;
+}
+
+.app-confirm-message-box .el-message-box__btns {
+  padding-top: $spacing-6;
+}
