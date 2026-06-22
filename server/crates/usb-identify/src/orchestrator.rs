@@ -8,12 +8,14 @@
 //!
 //! 使用 NBD 设备号池（/dev/nbd0—/dev/nbd3）支持多 U 盘同时映射。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tracing::{info, warn};
+
+use crate::mount::RealMountOps;
 
 use common::time::now_unix;
 use log_audit::AuditService;
@@ -22,6 +24,18 @@ use whitelist::WhitelistManager;
 
 use crate::descriptor::UsbDeviceInfo;
 use crate::monitor::DeviceManager;
+
+/// 活动设备会话——追踪后台 task 和运行时资源。
+/// 与 DeviceManager 同键（parent device path），不同职责：
+///   DeviceManager: 设备属性，协议层可查询
+///   ActiveSession: 运行时资源，仅 Orchestrator 内部
+struct ActiveSession {
+    parent_path: String,
+    device_type: common::types::DeviceType,
+    nbd_index: Option<u32>,
+    mount_path: Option<PathBuf>,
+    cancel_tx: watch::Sender<bool>,
+}
 
 /// NBD 设备号池容量。
 const NBD_POOL_SIZE: u32 = 4;
@@ -72,6 +86,44 @@ impl NbdPool {
     }
 }
 
+/// 从 USB 接口 sysfs 路径查找对应的 evdev 设备节点。
+///
+/// 内核为 USB HID 设备创建 input 子设备：
+///   /sys/devices/.../2-1.1:1.0/0003:.../input/input3/event3
+fn find_evdev_path(usb_iface_syspath: &str) -> Option<std::path::PathBuf> {
+    use std::fs;
+
+    let iface_dir = std::path::Path::new(usb_iface_syspath);
+    if !iface_dir.is_dir() {
+        return None;
+    }
+
+    let entries = fs::read_dir(iface_dir).ok()?;
+    for entry in entries.flatten() {
+        let input_dir = entry.path().join("input");
+        if !input_dir.is_dir() {
+            continue;
+        }
+        let input_entries = fs::read_dir(&input_dir).ok()?;
+        for input_entry in input_entries.flatten() {
+            let name = input_entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("input") {
+                let event_entries = fs::read_dir(input_entry.path()).ok()?;
+                for event_entry in event_entries.flatten() {
+                    let event_name = event_entry.file_name().to_string_lossy().to_string();
+                    if event_name.starts_with("event") {
+                        let dev_path = std::path::PathBuf::from("/dev/input").join(&event_name);
+                        if dev_path.exists() {
+                            return Some(dev_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// 主编排器。
 ///
 /// 持有所有服务引用，接收 udev 事件并按类型路由。
@@ -81,7 +133,18 @@ pub struct DeviceOrchestrator {
     whitelist: Arc<WhitelistManager>,
     audit: Arc<AuditService>,
     device_manager: Arc<RwLock<DeviceManager>>,
+
+    // 新增: 下游服务
+    scan_service: Arc<dyn crate::traits::Scanner>,
+    file_access_engine: Arc<dyn crate::traits::DeviceMapper>,
+
+    // 新增: I/O 资源
+    mount_ops: RealMountOps,
     nbd_pool: NbdPool,
+    hidg_nodes: hid_access::hid_gadget::HidgNodes,
+
+    // 新增: 运行时追踪
+    active_sessions: HashMap<String, ActiveSession>,
 }
 
 impl DeviceOrchestrator {
@@ -91,13 +154,21 @@ impl DeviceOrchestrator {
         whitelist: Arc<WhitelistManager>,
         audit: Arc<AuditService>,
         device_manager: Arc<RwLock<DeviceManager>>,
+        scan_service: Arc<dyn crate::traits::Scanner>,
+        file_access_engine: Arc<dyn crate::traits::DeviceMapper>,
+        hidg_nodes: hid_access::hid_gadget::HidgNodes,
     ) -> Self {
         Self {
             rx,
             whitelist,
             audit,
             device_manager,
+            scan_service,
+            file_access_engine,
+            mount_ops: RealMountOps,
             nbd_pool: NbdPool::new(),
+            hidg_nodes,
+            active_sessions: HashMap::new(),
         }
     }
 
