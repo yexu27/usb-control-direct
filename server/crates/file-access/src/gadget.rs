@@ -12,7 +12,7 @@ use tracing::{error, info};
 const GADGET_BASE: &str = "/sys/kernel/config/usb_gadget";
 
 /// 默认 gadget 名称。
-const GADGET_NAME: &str = "usb_ctrl";
+const GADGET_NAME: &str = "rockchip";
 
 /// 默认 UDC 名称（RK3568）。
 const DEFAULT_UDC: &str = "fcc00000.dwc3";
@@ -106,7 +106,7 @@ impl GadgetManager {
         write_file(&strings.join("manufacturer"), "USB Security")?;
         write_file(&strings.join("product"), device_description)?;
 
-        let config = gadget.join("configs/c.1");
+        let config = gadget.join("configs/b.1");
         if !config.exists() {
             fs::create_dir_all(&config)?;
         }
@@ -141,7 +141,7 @@ impl GadgetManager {
         write_file(&lun.join("removable"), "1")?;
         write_file(&lun.join("nofua"), "1")?;
         write_file(&lun.join("ro"), if readonly { "1" } else { "0" })?;
-        write_file(&lun.join("file"), &nbd_device.to_string_lossy())?;
+        write_file(&lun.join("file"), "")?;
 
         Ok(())
     }
@@ -149,7 +149,7 @@ impl GadgetManager {
     /// 将 function 通过 symlink 链接到 config。
     pub fn link_function(&self, function_name: &str) -> Result<(), std::io::Error> {
         let function = self.gadget_path.join("functions").join(function_name);
-        let link_target = self.gadget_path.join("configs/c.1").join(function_name);
+        let link_target = self.gadget_path.join("configs/b.1").join(function_name);
         if !link_target.exists() {
             std::os::unix::fs::symlink(&function, &link_target)?;
         }
@@ -164,6 +164,21 @@ impl GadgetManager {
     /// 解绑 UDC。
     pub fn unbind_udc(&self) -> Result<(), std::io::Error> {
         write_file(&self.gadget_path.join("UDC"), "")
+    }
+
+    /// 移除 config 目录下的旧 symlink（如 ffs.adb）。
+    pub fn remove_config_links(&self) -> Result<(), std::io::Error> {
+        let config_dir = self.gadget_path.join("configs/b.1");
+        if !config_dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(&config_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_symlink() {
+                fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(())
     }
 }
 

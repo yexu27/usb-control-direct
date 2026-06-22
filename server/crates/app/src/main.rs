@@ -95,18 +95,23 @@ async fn main() {
     let gadget_mgr = {
         let mgr = GadgetManager::new();
         let _ = mgr.unbind_udc();
-        mgr.setup_gadget("USB Security Control Device")
-            .expect("gadget 基础结构初始化失败");
+        let _ = mgr.remove_config_links();
+
+        // 先创建 functions（必须在写 config 属性之前）
         mgr.configure_mass_storage(&PathBuf::from("/dev/nbd0"), true)
             .expect("mass_storage function 配置失败");
+
+        let functions_base = PathBuf::from("/sys/kernel/config/usb_gadget/rockchip/functions");
+        configure_hid_function(&functions_base.join(KEYBOARD_FUNCTION), 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)
+            .expect("HID keyboard function 配置失败");
+        configure_hid_function(&functions_base.join(MOUSE_FUNCTION), 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)
+            .expect("HID mouse function 配置失败");
+
+        // 再写 gadget 属性（idVendor/strings/MaxPower）
+        mgr.setup_gadget("USB Security Control Device")
+            .expect("gadget 基础结构初始化失败");
         mgr
     };
-
-    let functions_base = PathBuf::from("/sys/kernel/config/usb_gadget/usb_ctrl/functions");
-    configure_hid_function(&functions_base.join(KEYBOARD_FUNCTION), 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)
-        .expect("HID keyboard function 配置失败");
-    configure_hid_function(&functions_base.join(MOUSE_FUNCTION), 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)
-        .expect("HID mouse function 配置失败");
 
     gadget_mgr.link_function("mass_storage.usb0").expect("链接 mass_storage 失败");
     gadget_mgr.link_function(KEYBOARD_FUNCTION).expect("链接 keyboard 失败");
