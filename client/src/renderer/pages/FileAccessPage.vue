@@ -131,19 +131,8 @@ async function handleRemove(extension: string): Promise<void> {
   }
 }
 
-function changeExecControl(): Promise<boolean> {
-  return changeSwitch('exec_control', !(filePolicy.policy?.execControlEnabled ?? false))
-}
-
-function changeAutoReadControl(): Promise<boolean> {
-  return changeSwitch('auto_read_control', !(filePolicy.policy?.autoReadControlEnabled ?? false))
-}
-
-function changeBlacklistControl(): Promise<boolean> {
-  return changeSwitch(
-    'file_type_blacklist_control',
-    !(filePolicy.policy?.fileTypeBlacklistEnabled ?? false),
-  )
+function handlePolicyCheckboxChange(key: FilePolicyKey, enabled: boolean): void {
+  void changeSwitch(key, enabled)
 }
 
 function openAddDialog(): void {
@@ -177,20 +166,19 @@ function changePageSize(nextPageSize: number): void {
         data-policy="exec_control"
       >
         <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
-          <div class="card-heading">
-            <div>
-              <h2>可执行程序访问控制</h2>
-              <p>禁止 USB 介质中的可执行程序被读取或运行。</p>
-            </div>
-            <el-switch
+          <label class="app-checkbox-row">
+            <el-checkbox
               data-testid="exec-control-switch"
               aria-label="可执行程序访问控制"
               :model-value="filePolicy.policy?.execControlEnabled ?? false"
               :disabled="isPending('exec_control')"
-              :loading="isPending('exec_control')"
-              :before-change="changeExecControl"
+              @change="(enabled: boolean) => handlePolicyCheckboxChange('exec_control', enabled)"
             />
-          </div>
+            <span class="app-checkbox-copy">
+              <span class="app-checkbox-title">可执行程序访问控制</span>
+              <span class="app-checkbox-desc">禁止 USB 介质中的可执行程序被读取或运行。</span>
+            </span>
+          </label>
           <div class="type-list" aria-label="可执行文件类型">
             <span
               v-for="type in ['dll', 'exe', 'PE', 'ELF']"
@@ -209,20 +197,19 @@ function changePageSize(nextPageSize: number): void {
         data-policy="auto_read_control"
       >
         <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
-          <div class="card-heading">
-            <div>
-              <h2>介质自动读取</h2>
-              <p>控制 USB 介质插入后是否允许系统自动读取。</p>
-            </div>
-            <el-switch
+          <label class="app-checkbox-row">
+            <el-checkbox
               data-testid="auto-read-control-switch"
               aria-label="介质自动读取控制"
               :model-value="filePolicy.policy?.autoReadControlEnabled ?? false"
               :disabled="isPending('auto_read_control')"
-              :loading="isPending('auto_read_control')"
-              :before-change="changeAutoReadControl"
+              @change="(enabled: boolean) => handlePolicyCheckboxChange('auto_read_control', enabled)"
             />
-          </div>
+            <span class="app-checkbox-copy">
+              <span class="app-checkbox-title">介质自动读取</span>
+              <span class="app-checkbox-desc">控制 USB 介质插入后是否允许系统自动读取。</span>
+            </span>
+          </label>
         </el-card>
       </section>
 
@@ -232,20 +219,19 @@ function changePageSize(nextPageSize: number): void {
         data-policy="file_type_blacklist_control"
       >
         <el-card shadow="never" class="policy-card app-card" data-testid="file-policy-card">
-          <div class="card-heading">
-            <div>
-              <h2>文件类型黑名单</h2>
-              <p>禁止访问指定后缀名的文件。</p>
-            </div>
-            <el-switch
+          <label class="app-checkbox-row">
+            <el-checkbox
               data-testid="blacklist-control-switch"
               aria-label="文件类型黑名单控制"
               :model-value="filePolicy.policy?.fileTypeBlacklistEnabled ?? false"
               :disabled="isPending('file_type_blacklist_control')"
-              :loading="isPending('file_type_blacklist_control')"
-              :before-change="changeBlacklistControl"
+              @change="(enabled: boolean) => handlePolicyCheckboxChange('file_type_blacklist_control', enabled)"
             />
-          </div>
+            <span class="app-checkbox-copy">
+              <span class="app-checkbox-title">文件类型黑名单</span>
+              <span class="app-checkbox-desc">禁止访问指定后缀名的文件。</span>
+            </span>
+          </label>
           <DataTable
             :columns="columns"
             :data="pageRows"

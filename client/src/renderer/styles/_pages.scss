@@ -86,3 +86,41 @@
   font-size: 17px;
   font-weight: $font-weight-bold;
 }
+
+.app-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: $radius-card;
+  cursor: pointer;
+  gap: 10px;
+  transition:
+    background-color $transition-base,
+    border-color $transition-base;
+}
+
+.app-checkbox-row:hover {
+  background: var(--andi-blue-bg);
+  border-color: var(--andi-border);
+}
+
+.app-checkbox-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-checkbox-title {
+  color: var(--andi-text);
+  font-size: $font-size-card-title;
+  font-weight: $font-weight-medium;
+}
+
+.app-checkbox-desc {
+  color: var(--andi-text-secondary);
+  font-size: $font-size-hint;
+  line-height: 1.45;
+}

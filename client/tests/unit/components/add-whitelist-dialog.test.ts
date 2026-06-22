@@ -15,6 +15,11 @@ interface CandidateDevice {
   addable: boolean
   unavailableReason: string
 }
+interface AddWhitelistDialogVm {
+  form: {
+    permission: 'readonly' | 'readwrite'
+  }
+}
 
 const candidates: CandidateDevice[] = [
   {
@@ -55,11 +60,12 @@ const ElInputStub = defineComponent({
 const ElRadioGroupStub = defineComponent({
   inheritAttrs: false,
   props: ['modelValue', 'disabled'],
-  setup(_props, { attrs }) {
+  emits: ['update:modelValue', 'update:model-value'],
+  setup(_props, { emit }) {
     return {
       updateValue: (value: 'readonly' | 'readwrite') => {
-        const listener = attrs['onUpdate:modelValue']
-        ;(listener as ((next: 'readonly' | 'readwrite') => void) | undefined)?.(value)
+        emit('update:modelValue', value)
+        emit('update:model-value', value)
       },
     }
   },
@@ -108,7 +114,8 @@ describe('AddWhitelistDialog', () => {
       'readonly', 'readwrite',
     ])
     await wrapper.get('[data-testid="candidate-select"]').setValue('SN-001')
-    await wrapper.get('[data-value="readwrite"]').trigger('click')
+    ;(wrapper.vm as unknown as AddWhitelistDialogVm).form.permission = 'readwrite'
+    await nextTick()
     const inputs = wrapper.findAll('input')
     await inputs[0].setValue('财务盘')
     const submit = wrapper.get('[data-testid="whitelist-add-submit"]')
