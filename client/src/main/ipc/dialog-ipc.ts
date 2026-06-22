@@ -111,4 +111,9 @@ export function registerDialogIpc(getMainWindow: () => BrowserWindow | null): vo
       await selectedFileAccess.writeSelectedFile(filePath, content)
     },
   )
+
+  ipcMain.handle(IpcChannels.dialogRevokeFileAccess, (event, filePath: unknown) => {
+    assertTrustedSender(event, getMainWindow())
+    selectedFileAccess.revoke(filePath)
+  })
 }

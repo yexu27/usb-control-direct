@@ -42,7 +42,13 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
       'onStateChanged',
       'send',
     ])
-    expect(apiShape.dialogMethods).toEqual(['openFile', 'readFile', 'saveFile', 'writeFile'])
+    expect(apiShape.dialogMethods).toEqual([
+      'openFile',
+      'readFile',
+      'revokeFileAccess',
+      'saveFile',
+      'writeFile',
+    ])
     expect(apiShape.usbMethods).toEqual(['listStorageDevices'])
     expect(apiShape.windowMethods).toEqual(['close', 'maximize', 'minimize'])
   } finally {

@@ -52,6 +52,9 @@ const desktopApi = {
 
     writeFile: (filePath: string, content: Uint8Array): Promise<void> =>
       ipcRenderer.invoke(IpcChannels.dialogWriteFile, filePath, content),
+
+    revokeFileAccess: (filePath: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannels.dialogRevokeFileAccess, filePath),
   },
 
   usb: {
