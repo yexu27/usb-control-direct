@@ -1,0 +1,55 @@
+$app-window-max-width: 1120px;
+$app-window-min-height: 680px;
+$app-header-height: 48px;
+$app-sidebar-width: 190px;
+$app-content-padding-y: 20px;
+$app-content-padding-x: 24px;
+
+$brand-primary: #0056b3;
+$brand-primary-dark: #003d82;
+$brand-primary-light: #e8f0fe;
+$brand-page-bg: #e8ecf1;
+$brand-panel-bg: #f0f4fa;
+$brand-sidebar-bg: #f5f7fa;
+$brand-active-bg: #e3edfc;
+$brand-border: #dce0e6;
+$brand-header-start: #004b9a;
+$brand-header-end: #0066cc;
+
+$white: #fff;
+$text-primary: #333;
+$text-secondary: #666;
+$text-muted: #999;
+$danger: #c62828;
+$danger-bg: #ffebee;
+$success: #2e7d32;
+$success-bg: #e8f5e9;
+$warning: #e65100;
+$warning-bg: #fff8e1;
+$purple: #7b1fa2;
+$purple-bg: #f3e5f5;
+
+$font-size-brand-cn: 12px;
+$font-size-brand-en: 9px;
+$font-size-page-title: 16px;
+$font-size-card-title: 13px;
+$font-size-body: 12px;
+$font-size-control: 12px;
+$font-size-hint: 11px;
+$font-size-table-head: 11px;
+$line-height-base: 1.5;
+
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+$font-weight-bold: 700;
+
+$radius-control: 4px;
+$radius-card: 6px;
+$radius-window: 8px;
+$radius-dialog: 8px;
+$shadow-control-focus: 0 0 0 2px rgb(0 86 179 / 12%);
+$shadow-card: 0 1px 3px rgb(0 0 0 / 4%);
+$shadow-window: 0 2px 8px rgb(0 0 0 / 7%);
+$shadow-dialog: 0 8px 30px rgb(0 0 0 / 18%);
+$transition-fast: 120ms ease;
+$transition-base: 160ms ease;

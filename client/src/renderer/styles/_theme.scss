@@ -1,0 +1,38 @@
+@use './fonts' as fonts;
+@use './tokens' as *;
+
+:root {
+  --andi-blue: #{$brand-primary};
+  --andi-blue-dark: #{$brand-primary-dark};
+  --andi-blue-light: #{$brand-primary-light};
+  --andi-blue-bg: #{$brand-panel-bg};
+  --andi-page-bg: #{$brand-page-bg};
+  --andi-sidebar: #{$brand-sidebar-bg};
+  --andi-header-start: #{$brand-header-start};
+  --andi-header-end: #{$brand-header-end};
+  --andi-white: #{$white};
+  --andi-text: #{$text-primary};
+  --andi-text-secondary: #{$text-secondary};
+  --andi-text-light: #{$text-muted};
+  --andi-border: #{$brand-border};
+  --andi-active-bg: #{$brand-active-bg};
+  --andi-danger: #{$danger};
+  --andi-danger-bg: #{$danger-bg};
+  --andi-success: #{$success};
+  --andi-success-bg: #{$success-bg};
+  --andi-warning: #{$warning};
+  --andi-warning-bg: #{$warning-bg};
+  --andi-purple: #{$purple};
+  --andi-purple-bg: #{$purple-bg};
+  --andi-font-family: #{fonts.$font-family-base};
+  --andi-radius-control: #{$radius-control};
+  --andi-radius-card: #{$radius-card};
+  --andi-radius-window: #{$radius-window};
+  --andi-radius-dialog: #{$radius-dialog};
+  --andi-shadow-control-focus: #{$shadow-control-focus};
+  --andi-shadow-card: #{$shadow-card};
+  --andi-shadow-window: #{$shadow-window};
+  --andi-shadow-dialog: #{$shadow-dialog};
+  --andi-transition-fast: #{$transition-fast};
+  --andi-transition-base: #{$transition-base};
+}
