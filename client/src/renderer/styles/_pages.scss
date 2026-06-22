@@ -71,3 +71,18 @@
   background: #f0f2f5;
   border-radius: 3px;
 }
+
+.auth-page {
+  background: linear-gradient(135deg, var(--andi-page-bg), #f5f7fa);
+}
+
+.auth-card {
+  border-radius: $radius-window;
+  box-shadow: $shadow-window;
+}
+
+.auth-title {
+  color: var(--andi-text);
+  font-size: 17px;
+  font-weight: $font-weight-bold;
+}

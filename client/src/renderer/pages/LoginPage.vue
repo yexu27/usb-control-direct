@@ -128,7 +128,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="login-page">
+  <div class="login-page auth-page">
     <div class="win-controls">
       <button class="win-btn" title="最小化" @click="handleMinimize">
         <el-icon><Minus /></el-icon>
@@ -141,7 +141,7 @@ onMounted(() => {
       </button>
     </div>
 
-    <section class="login-card" aria-labelledby="login-title">
+    <section class="login-card auth-card app-card" aria-labelledby="login-title">
       <div class="login-header">
         <div class="login-logo" aria-hidden="true">
           <svg viewBox="0 0 16 16" role="img">
@@ -149,7 +149,7 @@ onMounted(() => {
             <path class="login-logo-inner" d="M8 3 5 5v3.5c0 2.2 1.3 4 3 4.6 1.7-.6 3-2.4 3-4.6V5L8 3Z" />
           </svg>
         </div>
-        <h1 id="login-title">USB安全管理系统</h1>
+        <h1 id="login-title" class="auth-title">USB安全管理系统</h1>
         <p>北京安帝科技有限公司</p>
       </div>
 
@@ -232,9 +232,9 @@ onMounted(() => {
   justify-content: center;
   height: 100vh;
   overflow: hidden;
-  color: $text-primary;
-  font-family: $font-family-base;
-  background: linear-gradient(135deg, $bg-app, $bg-page);
+  color: var(--andi-text);
+  font-family: var(--andi-font-family);
+  background: linear-gradient(135deg, var(--andi-page-bg), #f5f7fa);
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -273,9 +273,9 @@ onMounted(() => {
 .login-card {
   width: 420px;
   padding: 36px 32px;
-  background: $bg-white;
-  border-radius: $border-radius-card;
-  box-shadow: $box-shadow;
+  background: var(--andi-white);
+  border-radius: var(--andi-radius-window);
+  box-shadow: var(--andi-shadow-window);
   user-select: text;
   -webkit-app-region: no-drag;
 }
@@ -286,15 +286,15 @@ onMounted(() => {
 
   h1 {
     margin: 0;
-    color: $text-primary;
-    font-size: $font-xl;
-    font-weight: $font-weight-semibold;
+    color: var(--andi-text);
+    font-size: 17px;
+    font-weight: 700;
   }
 
   p {
     margin: $spacing-1 0 0;
-    color: $text-secondary;
-    font-size: $font-base;
+    color: var(--andi-text-secondary);
+    font-size: 12px;
   }
 }
 
@@ -306,7 +306,7 @@ onMounted(() => {
   height: 56px;
   margin: 0 auto $spacing-5;
   color: $color-white;
-  background: linear-gradient(135deg, $brand-header-start, $brand-header-end);
+  background: linear-gradient(135deg, var(--andi-header-start), var(--andi-header-end));
   border-radius: 10px;
 
   svg {
@@ -316,12 +316,13 @@ onMounted(() => {
   }
 
   .login-logo-inner {
-    fill: $brand-primary;
+    fill: var(--andi-blue);
   }
 }
 
 .login-error {
   margin-bottom: $spacing-5;
+  color: var(--andi-danger);
 }
 
 .login-button {
