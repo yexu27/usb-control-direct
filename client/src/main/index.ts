@@ -5,6 +5,7 @@ import { registerTlsIpc } from './ipc/tls-ipc'
 import { registerDialogIpc } from './ipc/dialog-ipc'
 import { registerWindowIpc } from './ipc/window-ipc'
 import { registerUsbIpc } from './ipc/usb-ipc'
+import { listWindowsUsbStorageDevices } from './usb/windows-usb-storage'
 
 const tlsClient = new TlsClient()
 
@@ -14,7 +15,11 @@ app.whenReady().then(() => {
   registerTlsIpc(tlsClient, getMainWindow)
   registerDialogIpc(getMainWindow)
   registerWindowIpc(getMainWindow)
-  registerUsbIpc(getMainWindow)
+  const e2eUsbDevices = __USB_CONTROL_E2E_USB_DEVICES__
+  const usbProvider = e2eUsbDevices == null
+    ? listWindowsUsbStorageDevices
+    : async () => structuredClone(e2eUsbDevices)
+  registerUsbIpc(getMainWindow, usbProvider)
   createMainWindow()
 
   app.on('activate', () => {

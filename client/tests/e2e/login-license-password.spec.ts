@@ -62,7 +62,8 @@ test.describe('登录、授权与修改密码闭环', () => {
       await withScenario({ role }, async (_app, page) => {
         await fillAndSubmitLogin(page, `${role}-user`)
         await expect(page).toHaveURL(new RegExp(`#${route}$`))
-        await expect(page.getByTestId('current-user')).toContainText(`${role}-user`)
+        await expect(page.getByTestId('user-menu-trigger')).toBeVisible()
+        await expect(page.getByTestId('user-menu-trigger')).toHaveText('')
       })
     })
   }
@@ -137,7 +138,7 @@ test.describe('登录、授权与修改密码闭环', () => {
       await fillAndSubmitLogin(page, 'admin-user')
       await expect(page).toHaveURL(/#\/users$/)
 
-      await page.getByTestId('current-user').click()
+      await page.getByTestId('user-menu-trigger').click()
       await page.getByText('修改密码', { exact: true }).click()
       await page.getByPlaceholder('请输入旧密码').fill('Password1!')
       await page.getByPlaceholder('请输入新密码').fill('NewPassword2!')

@@ -30,6 +30,8 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
         tlsMethods: Object.keys(desktopApi.tls).sort(),
         dialogMethods: Object.keys(desktopApi.dialog).sort(),
         usbMethods: Object.keys(desktopApi.usb).sort(),
+        revokeFileAccessType: typeof desktopApi.dialog.revokeFileAccess,
+        listStorageDevicesType: typeof desktopApi.usb.listStorageDevices,
         windowMethods: Object.keys(desktopApi.window).sort(),
       }
     })
@@ -50,6 +52,8 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
       'writeFile',
     ])
     expect(apiShape.usbMethods).toEqual(['listStorageDevices'])
+    expect(apiShape.revokeFileAccessType).toBe('function')
+    expect(apiShape.listStorageDevicesType).toBe('function')
     expect(apiShape.windowMethods).toEqual(['close', 'maximize', 'minimize'])
   } finally {
     await electronApp.close()

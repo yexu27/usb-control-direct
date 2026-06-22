@@ -1,0 +1,3 @@
+USBPOLICY
+VERSION:1
+{"whitelist":[{"serialNumber":"IMPORTED-USB-001","vid":"0781","pid":"5583","deviceName":"Imported USB","capacityBytes":128000000000,"permission":"readwrite","description":"确定性导入策略","addMethod":"management","createdAt":1767225600,"deviceType":"storage"}],"filePolicy":{"execControlEnabled":true,"autoReadControlEnabled":false,"fileTypeBlacklistEnabled":true,"blacklist":[{"extension":".jse","description":"JScript Encoded Script","isDefault":true,"createdAt":1767225600},{"extension":".ps1","description":"PowerShell","isDefault":false,"createdAt":1767225600}]}}
