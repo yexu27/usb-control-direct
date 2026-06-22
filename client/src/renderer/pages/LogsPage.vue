@@ -401,7 +401,10 @@ function disabledClearDate(date: Date): boolean {
 
     <el-dialog v-model="clearDialogVisible" title="清理日志" width="520px">
       <div class="clear-dialog-body">
-        <p>当前日志类型：{{ activeTabLabel }}</p>
+        <div class="app-danger-block">
+          <p>当前日志类型：{{ activeTabLabel }}</p>
+          <p>清理后该时间范围内的日志将不可恢复，请确认后继续。</p>
+        </div>
         <el-date-picker
           v-model="clearRange"
           class="clear-range"

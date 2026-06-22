@@ -298,10 +298,21 @@ async function submitResetPassword(): Promise<void> {
           </div>
         </template>
         <template #role="{ row }">
-          {{ formatUserRole(row.role) }}
+          <el-tag
+            class="app-role-badge"
+            :class="`app-role-${row.role}`"
+            size="small"
+          >
+            {{ formatUserRole(row.role) }}
+          </el-tag>
         </template>
         <template #status="{ row }">
-          <el-tag :type="row.status === 'locked' ? 'danger' : 'success'" size="small">
+          <el-tag
+            class="app-status-badge"
+            :class="row.status === 'locked' ? 'app-status-locked' : 'app-status-active'"
+            :type="row.status === 'locked' ? 'danger' : 'success'"
+            size="small"
+          >
             {{ formatUserStatus(row.status) }}
           </el-tag>
         </template>

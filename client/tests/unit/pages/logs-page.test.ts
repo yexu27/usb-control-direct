@@ -175,6 +175,7 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-clear"]').trigger('click')
+    expect(wrapper.find('.app-danger-block').exists()).toBe(true)
     await wrapper.get('[data-testid="log-clear-confirm"]').trigger('click')
     await flushPromises()
 

@@ -91,7 +91,7 @@ function mountPage() {
         ElInput: ElInputStub,
         ElSelect: ElSelectStub,
         ElOption: ElOptionStub,
-        ElTag: { template: '<span><slot /></span>' },
+        ElTag: { template: '<span v-bind="$attrs"><slot /></span>' },
       },
     },
   })
@@ -134,6 +134,9 @@ describe('UsersPage', () => {
     expect(wrapper.text()).toContain('zhang_wei')
     expect(wrapper.text()).toContain('内置')
     expect(wrapper.text()).toContain('锁定')
+    expect(wrapper.findAll('.app-role-badge')).toHaveLength(2)
+    expect(wrapper.find('.app-role-admin').exists()).toBe(true)
+    expect(wrapper.find('.app-role-operator').exists()).toBe(true)
     expect(wrapper.find('[data-testid="delete-user-admin"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="delete-user-zhang_wei"]').exists()).toBe(true)
   })

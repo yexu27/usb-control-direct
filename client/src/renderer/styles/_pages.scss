@@ -124,3 +124,38 @@
   font-size: $font-size-hint;
   line-height: 1.45;
 }
+
+.app-role-badge,
+.app-status-badge {
+  border-radius: $radius-control;
+}
+
+.app-role-admin {
+  color: var(--andi-warning);
+  background: var(--andi-warning-bg);
+  border-color: #ffcc80;
+}
+
+.app-role-operator {
+  color: var(--andi-blue-dark);
+  background: var(--andi-blue-light);
+  border-color: #bbdefb;
+}
+
+.app-role-auditor {
+  color: var(--andi-purple);
+  background: var(--andi-purple-bg);
+  border-color: #ce93d8;
+}
+
+.app-status-active {
+  color: var(--andi-success);
+  background: var(--andi-success-bg);
+  border-color: #a5d6a7;
+}
+
+.app-status-locked {
+  color: var(--andi-danger);
+  background: var(--andi-danger-bg);
+  border-color: #ef9a9a;
+}
