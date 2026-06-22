@@ -4,6 +4,7 @@ import { TlsClient } from './tls-client'
 import { registerTlsIpc } from './ipc/tls-ipc'
 import { registerDialogIpc } from './ipc/dialog-ipc'
 import { registerWindowIpc } from './ipc/window-ipc'
+import { registerUsbIpc } from './ipc/usb-ipc'
 
 const tlsClient = new TlsClient()
 
@@ -13,6 +14,7 @@ app.whenReady().then(() => {
   registerTlsIpc(tlsClient, getMainWindow)
   registerDialogIpc(getMainWindow)
   registerWindowIpc(getMainWindow)
+  registerUsbIpc(getMainWindow)
   createMainWindow()
 
   app.on('activate', () => {

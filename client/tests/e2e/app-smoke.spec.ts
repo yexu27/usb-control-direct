@@ -20,6 +20,7 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
           desktopApi: {
             tls: Record<string, unknown>
             dialog: Record<string, unknown>
+            usb: Record<string, unknown>
             window: Record<string, unknown>
           }
         }
@@ -28,11 +29,12 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
         namespaces: Object.keys(desktopApi).sort(),
         tlsMethods: Object.keys(desktopApi.tls).sort(),
         dialogMethods: Object.keys(desktopApi.dialog).sort(),
+        usbMethods: Object.keys(desktopApi.usb).sort(),
         windowMethods: Object.keys(desktopApi.window).sort(),
       }
     })
 
-    expect(apiShape.namespaces).toEqual(['dialog', 'tls', 'window'])
+    expect(apiShape.namespaces).toEqual(['dialog', 'tls', 'usb', 'window'])
     expect(apiShape.tlsMethods).toEqual([
       'applyStateEvent',
       'connect',
@@ -41,6 +43,7 @@ test('启动 Electron 并暴露最小 desktopApi', async () => {
       'send',
     ])
     expect(apiShape.dialogMethods).toEqual(['openFile', 'readFile', 'saveFile', 'writeFile'])
+    expect(apiShape.usbMethods).toEqual(['listStorageDevices'])
     expect(apiShape.windowMethods).toEqual(['close', 'maximize', 'minimize'])
   } finally {
     await electronApp.close()

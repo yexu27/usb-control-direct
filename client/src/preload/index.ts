@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { ConnectionEvent, ConnectionStatus } from '../shared/connection-state'
 import type { TlsResponse } from '../shared/tls-response'
+import type { ManagementUsbDevice } from '../shared/management-usb-device'
 import { IpcChannels } from '../shared/ipc-channels'
 
 export interface OpenFileOptions {
@@ -51,6 +52,11 @@ const desktopApi = {
 
     writeFile: (filePath: string, content: Uint8Array): Promise<void> =>
       ipcRenderer.invoke(IpcChannels.dialogWriteFile, filePath, content),
+  },
+
+  usb: {
+    listStorageDevices: (): Promise<ManagementUsbDevice[]> =>
+      ipcRenderer.invoke(IpcChannels.usbListStorageDevices),
   },
 
   window: {
