@@ -51,7 +51,7 @@ describe('MainLayout visual contract', () => {
     currentRoute.path = '/file-access'
   })
 
-  it('wraps pages in a fixed prototype window shell with internal content scrolling', () => {
+  it('uses the BrowserWindow content area as the app shell with internal content scrolling', () => {
     const wrapper = mountLayout()
 
     expect(wrapper.find('.app-desktop').exists()).toBe(true)

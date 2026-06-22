@@ -21,26 +21,26 @@ body,
 .app-desktop {
   display: flex;
   align-items: stretch;
-  justify-content: center;
+  justify-content: stretch;
   width: 100vw;
   height: 100vh;
-  padding: 16px 20px;
+  padding: 0;
   overflow: hidden;
-  background: var(--andi-page-bg);
+  background: var(--andi-white);
 }
 
 .app-window-shell {
   display: flex;
   flex-direction: column;
-  width: min(100%, $app-window-max-width);
-  min-width: 960px;
+  width: 100%;
+  min-width: 0;
   height: 100%;
-  min-height: $app-window-min-height;
+  min-height: 0;
   overflow: hidden;
   background: var(--andi-white);
-  border: 1px solid var(--andi-border);
-  border-radius: $radius-window;
-  box-shadow: $shadow-window;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .main-header {
@@ -292,7 +292,6 @@ body,
 
 @media (width < 1000px) {
   .app-desktop {
-    justify-content: flex-start;
     overflow-x: auto;
   }
 }

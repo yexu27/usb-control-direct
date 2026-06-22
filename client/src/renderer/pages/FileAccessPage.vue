@@ -172,7 +172,7 @@ function changePageSize(nextPageSize: number): void {
               aria-label="可执行程序访问控制"
               :model-value="filePolicy.policy?.execControlEnabled ?? false"
               :disabled="isPending('exec_control')"
-              @change="(enabled: boolean) => handlePolicyCheckboxChange('exec_control', enabled)"
+              @change="(enabled) => handlePolicyCheckboxChange('exec_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">可执行程序访问控制</span>
@@ -203,7 +203,7 @@ function changePageSize(nextPageSize: number): void {
               aria-label="介质自动读取控制"
               :model-value="filePolicy.policy?.autoReadControlEnabled ?? false"
               :disabled="isPending('auto_read_control')"
-              @change="(enabled: boolean) => handlePolicyCheckboxChange('auto_read_control', enabled)"
+              @change="(enabled) => handlePolicyCheckboxChange('auto_read_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">介质自动读取</span>
@@ -225,7 +225,7 @@ function changePageSize(nextPageSize: number): void {
               aria-label="文件类型黑名单控制"
               :model-value="filePolicy.policy?.fileTypeBlacklistEnabled ?? false"
               :disabled="isPending('file_type_blacklist_control')"
-              @change="(enabled: boolean) => handlePolicyCheckboxChange('file_type_blacklist_control', enabled)"
+              @change="(enabled) => handlePolicyCheckboxChange('file_type_blacklist_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">文件类型黑名单</span>

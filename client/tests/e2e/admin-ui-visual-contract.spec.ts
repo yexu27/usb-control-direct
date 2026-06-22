@@ -75,7 +75,7 @@ test.describe('管理端 UI 视觉契约', () => {
       expect(shellBox).not.toBeNull()
       expect(headerBox).not.toBeNull()
       expect(sidebarBox).not.toBeNull()
-      expect(Math.round(shellBox?.width ?? 0)).toBeLessThanOrEqual(1120)
+      expect(Math.round(shellBox?.width ?? 0)).toBe(before.width)
       expect(Math.round(headerBox?.height ?? 0)).toBe(48)
       expect(Math.round(sidebarBox?.width ?? 0)).toBe(190)
 
