@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
@@ -22,6 +23,7 @@ use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use usb_identify::monitor::DeviceManager;
+use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
 /// 数据库路径。
@@ -94,12 +96,32 @@ async fn main() {
         virusdb_upgrade_mgr,
     });
 
-    // 启动 udev 监听
+    // 启动 udev 监听与主编排器
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-    let udev_dm = Arc::clone(&state.device_manager);
+    let (event_tx, event_rx) = mpsc::unbounded_channel::<DeviceEvent>();
+
+    let orchestrator = DeviceOrchestrator::new(
+        event_rx,
+        Arc::clone(&state.whitelist_manager),
+        Arc::clone(&state.audit_service),
+    );
+
+    // 启动编排器
+    tokio::spawn(async move {
+        orchestrator.run().await;
+    });
+
+    // 启动 udev 实时监听
+    let udev_tx = event_tx.clone();
     let udev_shutdown = shutdown_tx.subscribe();
     tokio::spawn(async move {
-        usb_identify::udev_monitor::start_udev_monitor(udev_dm, udev_shutdown).await;
+        usb_identify::udev_monitor::start_udev_monitor(udev_tx, udev_shutdown).await;
+    });
+
+    // 启动时枚举存量设备
+    let enum_tx = event_tx;
+    tokio::task::spawn_blocking(move || {
+        usb_identify::udev_monitor::enumerate_and_send(enum_tx);
     });
 
     let mut router = Router::new();
