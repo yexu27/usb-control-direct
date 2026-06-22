@@ -104,6 +104,7 @@ async fn main() {
         event_rx,
         Arc::clone(&state.whitelist_manager),
         Arc::clone(&state.audit_service),
+        Arc::clone(&state.device_manager),
     );
 
     // 启动编排器

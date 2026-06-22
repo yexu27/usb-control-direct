@@ -39,10 +39,10 @@ pub fn handle_get_connected_devices(ctx: &RequestContext, payload: &[u8]) -> Vec
     let wl_mgr = ctx.whitelist_manager.as_ref();
 
     let devices: Vec<ConnectedDevice> = dm_guard
-        .connected_devices()
+        .list_all()
         .iter()
-        .map(|session| {
-            let info = &session.info;
+        .map(|record| {
+            let info = &record.info;
             let is_spoof = detect_spoof(info);
             let is_in_whitelist = wl_mgr
                 .map(|m| m.is_whitelisted(&info.serial_number).is_some())

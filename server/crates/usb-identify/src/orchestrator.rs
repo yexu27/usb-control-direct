@@ -8,9 +8,9 @@
 //!
 //! 使用 NBD 设备号池（/dev/nbd0—/dev/nbd3）支持多 U 盘同时映射。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -21,6 +21,7 @@ use storage::model::{MalwareLogInsert, UsbAuditLogInsert};
 use whitelist::WhitelistManager;
 
 use crate::descriptor::UsbDeviceInfo;
+use crate::monitor::DeviceManager;
 
 /// NBD 设备号池容量。
 const NBD_POOL_SIZE: u32 = 4;
@@ -74,15 +75,13 @@ impl NbdPool {
 /// 主编排器。
 ///
 /// 持有所有服务引用，接收 udev 事件并按类型路由。
+/// 设备状态管理委托给 `DeviceManager`。
 pub struct DeviceOrchestrator {
     rx: mpsc::UnboundedReceiver<DeviceEvent>,
     whitelist: Arc<WhitelistManager>,
     audit: Arc<AuditService>,
+    device_manager: Arc<RwLock<DeviceManager>>,
     nbd_pool: NbdPool,
-    /// 当前已映射设备: sys_path → NBD 索引
-    mapped_storage: HashMap<String, u32>,
-    /// 已连接的设备信息: sys_path → 设备信息（用于移除事件时查询）
-    connected_devices: HashMap<String, UsbDeviceInfo>,
 }
 
 impl DeviceOrchestrator {
@@ -91,14 +90,14 @@ impl DeviceOrchestrator {
         rx: mpsc::UnboundedReceiver<DeviceEvent>,
         whitelist: Arc<WhitelistManager>,
         audit: Arc<AuditService>,
+        device_manager: Arc<RwLock<DeviceManager>>,
     ) -> Self {
         Self {
             rx,
             whitelist,
             audit,
+            device_manager,
             nbd_pool: NbdPool::new(),
-            mapped_storage: HashMap::new(),
-            connected_devices: HashMap::new(),
         }
     }
 
@@ -120,8 +119,9 @@ impl DeviceOrchestrator {
 
     /// 处理大容量存储设备。
     async fn handle_storage(&mut self, info: UsbDeviceInfo) {
-        let sys_path = info.sys_path.clone();
-        self.connected_devices.insert(sys_path, info.clone());
+        if let Ok(mut dm) = self.device_manager.write() {
+            dm.add(info.clone());
+        }
 
         // 白名单查询
         if info.serial_number.is_empty() {
@@ -149,8 +149,7 @@ impl DeviceOrchestrator {
         info!(serial = %info.serial_number, permission = whitelist_entry.permission,
               "U 盘在白名单中，开始映射流程");
 
-        // 分配 NBD 设备号
-        let nbd_idx = match self.nbd_pool.acquire() {
+        let _nbd_idx = match self.nbd_pool.acquire() {
             Some(idx) => idx,
             None => {
                 warn!("NBD 设备号池已耗尽（{} 个），拒绝映射", NBD_POOL_SIZE);
@@ -164,18 +163,16 @@ impl DeviceOrchestrator {
         self.write_malware_scan_start(&info);
         self.write_audit_storage(&info, "mapped", "mapped", None);
 
-        self.mapped_storage.insert(info.sys_path.clone(), nbd_idx);
-        info!(serial = %info.serial_number, nbd = nbd_idx, sys_path = %info.sys_path,
+        info!(serial = %info.serial_number, sys_path = %info.sys_path,
               "U 盘映射流程完成日志记录");
     }
 
     /// 处理键盘设备。
     async fn handle_keyboard(&mut self, info: UsbDeviceInfo) {
         info!(dev = %info.device_name, "检测到键盘设备");
-
-        let sys_path = info.sys_path.clone();
-        self.connected_devices.insert(sys_path, info.clone());
-
+        if let Ok(mut dm) = self.device_manager.write() {
+            dm.add(info.clone());
+        }
         self.write_audit_generic(&info, "device_insert", "allowed", "keyboard",
             "hid_keyboard", 0x03, 0x01, 0x01);
     }
@@ -183,19 +180,19 @@ impl DeviceOrchestrator {
     /// 处理鼠标设备。
     async fn handle_mouse(&mut self, info: UsbDeviceInfo) {
         info!(dev = %info.device_name, "检测到鼠标设备");
-
-        let sys_path = info.sys_path.clone();
-        self.connected_devices.insert(sys_path, info.clone());
-
+        if let Ok(mut dm) = self.device_manager.write() {
+            dm.add(info.clone());
+        }
         self.write_audit_generic(&info, "device_insert", "allowed", "mouse",
             "hid_mouse", 0x03, 0x01, 0x02);
     }
 
     /// 处理不支持的设备。
     fn handle_unsupported(&mut self, info: UsbDeviceInfo, reason: String) {
-        let sys_path = info.sys_path.clone();
         warn!(dev = %info.device_name, reason = %reason, "不支持的 USB 设备");
-        self.connected_devices.insert(sys_path, info.clone());
+        if let Ok(mut dm) = self.device_manager.write() {
+            dm.add(info.clone());
+        }
 
         let mut log = UsbAuditLogInsert {
             event_time: now_unix(),
@@ -222,17 +219,17 @@ impl DeviceOrchestrator {
 
     /// 处理设备移除。
     async fn handle_removed(&mut self, sys_path: String) {
-        if let Some(info) = self.connected_devices.remove(&sys_path) {
-            info!(sys_path = %sys_path, dev = %info.device_name,
-                  type = ?info.device_type, serial = %info.serial_number,
-                  "设备移除: {}", info.device_name);
+        let removed = if let Ok(mut dm) = self.device_manager.write() {
+            dm.remove_interface(&sys_path)
         } else {
-            info!(sys_path = %sys_path, "设备移除（无记录）");
-        }
+            None
+        };
 
-        if let Some(nbd_idx) = self.mapped_storage.remove(&sys_path) {
-            self.nbd_pool.release(nbd_idx);
-            info!(sys_path = %sys_path, nbd = nbd_idx, "释放 NBD 设备号");
+        if let Some(record) = removed {
+            info!(dev = %record.info.device_name,
+                  type = ?record.info.device_type,
+                  serial = %record.info.serial_number,
+                  "设备完全移除");
         }
     }
 
