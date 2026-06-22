@@ -1,6 +1,7 @@
 @use './variables' as *;
 @use './fonts';
 @use './theme';
+@use './layout';
 
 :root {
   font-family: var(--andi-font-family);
