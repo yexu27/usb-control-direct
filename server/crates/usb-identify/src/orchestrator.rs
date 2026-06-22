@@ -240,22 +240,94 @@ impl DeviceOrchestrator {
 
     /// 处理键盘设备。
     async fn handle_keyboard(&mut self, info: UsbDeviceInfo) {
-        info!(dev = %info.device_name, "检测到键盘设备");
+        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
+
+        // DeviceManager 登记
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
-        self.write_audit_generic(&info, "device_insert", "allowed", "keyboard",
-            "hid_keyboard", 0x03, 0x01, 0x01);
+
+        // 发现 evdev 设备节点
+        let evdev_path = match find_evdev_path(&info.sys_path) {
+            Some(p) => p,
+            None => {
+                warn!(dev = %info.device_name, "键盘: 找不到对应 evdev 设备");
+                return;
+            }
+        };
+
+        // 注册 ActiveSession
+        let (cancel_tx, _cancel_rx) = watch::channel(false);
+        self.active_sessions.insert(parent_path.clone(), ActiveSession {
+            parent_path,
+            device_type: common::types::DeviceType::Keyboard,
+            nbd_index: None,
+            mount_path: None,
+            cancel_tx,
+        });
+
+        let hidg_kb = self.hidg_nodes.keyboard.clone();
+        let device_name = info.device_name.clone();
+        let info4audit = info.clone();
+        let audit = Arc::clone(&self.audit);
+
+        info!(dev = %device_name, evdev = %evdev_path.display(), "键盘: 启动拦截器");
+
+        // spawn_blocking: evdev IO 是阻塞的，拔出时 read 报错自然退出
+        tokio::task::spawn_blocking(move || {
+            use hid_access::evdev_interceptor::KeyboardInterceptor;
+            let mut interceptor = KeyboardInterceptor::new(hidg_kb);
+            match interceptor.run(&evdev_path) {
+                Ok(()) => info!(dev = %device_name, "键盘拦截器正常退出"),
+                Err(e) => warn!(dev = %device_name, error = %e, "键盘拦截器异常退出"),
+            }
+            write_audit_generic_static(&audit, &info4audit, "device_removed",
+                "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+        });
     }
 
     /// 处理鼠标设备。
     async fn handle_mouse(&mut self, info: UsbDeviceInfo) {
-        info!(dev = %info.device_name, "检测到鼠标设备");
+        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
+
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
-        self.write_audit_generic(&info, "device_insert", "allowed", "mouse",
-            "hid_mouse", 0x03, 0x01, 0x02);
+
+        let evdev_path = match find_evdev_path(&info.sys_path) {
+            Some(p) => p,
+            None => {
+                warn!(dev = %info.device_name, "鼠标: 找不到对应 evdev 设备");
+                return;
+            }
+        };
+
+        let (cancel_tx, _cancel_rx) = watch::channel(false);
+        self.active_sessions.insert(parent_path.clone(), ActiveSession {
+            parent_path,
+            device_type: common::types::DeviceType::Mouse,
+            nbd_index: None,
+            mount_path: None,
+            cancel_tx,
+        });
+
+        let hidg_mouse = self.hidg_nodes.mouse.clone();
+        let device_name = info.device_name.clone();
+        let info4audit = info.clone();
+        let audit = Arc::clone(&self.audit);
+
+        info!(dev = %device_name, evdev = %evdev_path.display(), "鼠标: 启动转发器");
+
+        tokio::task::spawn_blocking(move || {
+            use hid_access::mouse_forwarder::MouseForwarder;
+            let mut forwarder = MouseForwarder::new(hidg_mouse);
+            match forwarder.run(&evdev_path) {
+                Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
+                Err(e) => warn!(dev = %device_name, error = %e, "鼠标转发器异常退出"),
+            }
+            write_audit_generic_static(&audit, &info4audit, "device_removed",
+                "success", "mouse", "hid_mouse", 0x03, 0x01, 0x02);
+        });
     }
 
     /// 处理不支持的设备。
@@ -372,6 +444,40 @@ impl DeviceOrchestrator {
         };
         let _ = self.audit.log_malware(&mut log);
     }
+}
+
+fn write_audit_generic_static(
+    audit: &log_audit::AuditService,
+    info: &crate::descriptor::UsbDeviceInfo,
+    event_type: &str,
+    result: &str,
+    device_type: &str,
+    interface_type: &str,
+    iface_class: i32,
+    iface_subclass: i32,
+    iface_proto: i32,
+) {
+    let mut log = UsbAuditLogInsert {
+        event_time: now_unix(),
+        device_type: Some(device_type.into()),
+        interface_type: Some(interface_type.into()),
+        interface_class: Some(iface_class),
+        interface_subclass: Some(iface_subclass),
+        interface_protocol: Some(iface_proto),
+        device_name: Some(info.device_name.clone()),
+        device_sn: Some(info.serial_number.clone()),
+        vid: Some(info.vid.clone()),
+        pid: Some(info.pid.clone()),
+        event_type: event_type.to_string(),
+        permission: None,
+        capacity_bytes: None,
+        file_path: None,
+        matched_policy: None,
+        result: result.to_string(),
+        fail_reason: None,
+        detail: None,
+    };
+    let _ = audit.log_usb_audit(&mut log);
 }
 
 /// 为设备生成挂载路径。
