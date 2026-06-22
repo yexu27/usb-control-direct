@@ -1,0 +1,161 @@
+@use './tokens' as *;
+
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.app-page-title {
+  margin: 0;
+  color: var(--andi-text);
+  font-size: $font-size-page-title;
+  font-weight: $font-weight-medium;
+}
+
+.app-page-desc {
+  margin: 2px 0 0;
+  color: var(--andi-text-light);
+  font-size: $font-size-body;
+}
+
+.app-card {
+  overflow: hidden;
+  background: var(--andi-white);
+  border: 1px solid var(--andi-border);
+  border-radius: $radius-card;
+  box-shadow: $shadow-card;
+}
+
+.app-card-padded {
+  padding: 14px;
+}
+
+.app-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--andi-blue-bg);
+  border-bottom: 1px solid var(--andi-border);
+}
+
+.app-hint-block {
+  padding: 10px 14px;
+  color: var(--andi-text-secondary);
+  font-size: $font-size-hint;
+  background: var(--andi-blue-bg);
+  border: 1px solid var(--andi-border);
+  border-radius: $radius-card;
+}
+
+.app-danger-block {
+  padding: 12px;
+  color: var(--andi-text);
+  background: var(--andi-danger-bg);
+  border-radius: $radius-card;
+}
+
+.app-code {
+  padding: 1px 5px;
+  color: var(--andi-blue-dark);
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: $font-size-hint;
+  background: #f0f2f5;
+  border-radius: 3px;
+}
+
+.auth-page {
+  background: linear-gradient(135deg, var(--andi-page-bg), #f5f7fa);
+}
+
+.auth-card {
+  border-radius: $radius-window;
+  box-shadow: $shadow-window;
+}
+
+.auth-title {
+  color: var(--andi-text);
+  font-size: 17px;
+  font-weight: $font-weight-bold;
+}
+
+.app-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: $radius-card;
+  cursor: pointer;
+  gap: 10px;
+  transition:
+    background-color $transition-base,
+    border-color $transition-base;
+}
+
+.app-checkbox-row:hover {
+  background: var(--andi-blue-bg);
+  border-color: var(--andi-border);
+}
+
+.app-checkbox-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-checkbox-title {
+  color: var(--andi-text);
+  font-size: $font-size-card-title;
+  font-weight: $font-weight-medium;
+}
+
+.app-checkbox-desc {
+  color: var(--andi-text-secondary);
+  font-size: $font-size-hint;
+  line-height: 1.45;
+}
+
+.app-role-badge,
+.app-status-badge {
+  border-radius: $radius-control;
+}
+
+.app-role-admin {
+  color: var(--andi-warning);
+  background: var(--andi-warning-bg);
+  border-color: #ffcc80;
+}
+
+.app-role-operator {
+  color: var(--andi-blue-dark);
+  background: var(--andi-blue-light);
+  border-color: #bbdefb;
+}
+
+.app-role-auditor {
+  color: var(--andi-purple);
+  background: var(--andi-purple-bg);
+  border-color: #ce93d8;
+}
+
+.app-status-active {
+  color: var(--andi-success);
+  background: var(--andi-success-bg);
+  border-color: #a5d6a7;
+}
+
+.app-status-locked {
+  color: var(--andi-danger);
+  background: var(--andi-danger-bg);
+  border-color: #ef9a9a;
+}

@@ -6,6 +6,9 @@ import { useConnectionStore } from './stores/connection'
 import { useSessionStore } from './stores/session'
 import { useBootstrapStore } from './stores/bootstrap'
 import { onServiceError } from './services/service-events'
+import 'element-plus/theme-chalk/el-message-box.css'
+import 'element-plus/theme-chalk/el-overlay.css'
+import './styles/global.scss'
 
 const app = createApp(App)
 const pinia = createPinia()

@@ -71,6 +71,9 @@ function mountPage() {
         ElAlert: true,
         ElIcon: true,
       },
+      directives: {
+        loading: {},
+      },
     },
   })
 }
@@ -104,6 +107,9 @@ describe('LicensePage', () => {
     setTemporarySession('expired')
     const wrapper = mountPage()
 
+    expect(wrapper.get('.license-page').classes()).toContain('auth-page')
+    expect(wrapper.get('.license-card').classes()).toContain('auth-card')
+    expect(wrapper.get('#license-title').classes()).toContain('auth-title')
     expect(wrapper.text()).toContain('授权已到期')
     expect(wrapper.text()).not.toContain('操作员')
     expect(wrapper.text()).not.toContain('审计员')

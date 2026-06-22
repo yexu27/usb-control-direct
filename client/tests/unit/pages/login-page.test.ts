@@ -77,6 +77,9 @@ describe('LoginPage', () => {
     const wrapper = mountPage()
     const component = wrapper.vm as unknown as LoginPageVm
 
+    expect(wrapper.get('.login-page').classes()).toContain('auth-page')
+    expect(wrapper.get('.login-card').classes()).toContain('auth-card')
+    expect(wrapper.get('#login-title').classes()).toContain('auth-title')
     expect(component.form).toEqual({ ip: '', username: '', password: '' })
     expect(wrapper.text()).not.toContain('19.19.19.16')
     expect(wrapper.text()).not.toContain('admin@123')

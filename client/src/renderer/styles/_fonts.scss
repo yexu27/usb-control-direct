@@ -1,0 +1,25 @@
+@font-face {
+  font-family: 'Source Han Sans CN';
+  src: url('../assets/fonts/SourceHanSansCN-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Han Sans CN';
+  src: url('../assets/fonts/SourceHanSansCN-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Han Sans CN';
+  src: url('../assets/fonts/SourceHanSansCN-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+$font-family-base: 'Source Han Sans CN', 'Microsoft YaHei', 'Segoe UI', sans-serif;

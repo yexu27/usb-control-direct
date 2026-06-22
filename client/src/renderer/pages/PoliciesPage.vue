@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
 import { exportPolicy, importPolicy } from '@/services/policy-service'
@@ -9,6 +9,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
+import { confirmAction } from '@/utils/confirm-action'
 
 const connection = useConnectionStore()
 const session = useSessionStore()
@@ -256,11 +257,12 @@ async function handleImport(): Promise<void> {
     }
 
     try {
-      await ElMessageBox.confirm(
-        '导入将整体覆盖当前装置的 U 盘白名单和文件访问策略，是否继续？',
-        '导入策略确认',
-        { type: 'warning', confirmButtonText: '导入', cancelButtonText: '取消' },
-      )
+      await confirmAction({
+        message: '导入将整体覆盖当前装置的 U 盘白名单和文件访问策略，是否继续？',
+        title: '导入策略确认',
+        confirmButtonText: '导入',
+        type: 'warning',
+      })
     } catch {
       return
     }
@@ -334,15 +336,17 @@ async function handleImport(): Promise<void> {
 </script>
 
 <template>
-  <div class="policies-page">
-    <header class="page-header">
-      <h1>策略管理</h1>
-      <p>导入或导出当前装置的 U 盘白名单与文件访问策略。</p>
+  <div class="policies-page app-page">
+    <header class="page-header app-page-header">
+      <div>
+        <h1 class="app-page-title">策略管理</h1>
+        <p class="app-page-desc">导入或导出当前装置的 U 盘白名单与文件访问策略。</p>
+      </div>
     </header>
     <ConnectionAlert />
 
     <div class="policy-actions">
-      <el-card shadow="never" class="policy-card">
+      <el-card shadow="never" class="policy-card app-card">
         <h2>导出策略</h2>
         <p>将当前装置策略备份为加密 .bin 文件。</p>
         <el-button
@@ -356,7 +360,7 @@ async function handleImport(): Promise<void> {
         </el-button>
       </el-card>
 
-      <el-card shadow="never" class="policy-card">
+      <el-card shadow="never" class="policy-card app-card">
         <h2>导入策略</h2>
         <p>整体覆盖当前白名单和文件访问策略，仅支持 .bin 文件。</p>
         <el-button

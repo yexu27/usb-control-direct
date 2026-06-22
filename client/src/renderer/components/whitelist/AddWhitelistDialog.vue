@@ -134,11 +134,11 @@ defineExpose({ handleSubmit })
       <el-form-item label="U盘设备" prop="serialNumber">
         <el-select
           v-model="form.serialNumber"
+          class="candidate-select"
           data-testid="candidate-select"
           placeholder="请选择U盘设备"
           :loading="props.loading"
           :disabled="isBusy"
-          style="width: 100%"
         >
           <el-option
             v-for="candidate in props.candidates"
@@ -183,5 +183,9 @@ defineExpose({ handleSubmit })
 .reason {
   margin-left: $spacing-3;
   color: $color-danger;
+}
+
+.candidate-select {
+  width: 100%;
 }
 </style>

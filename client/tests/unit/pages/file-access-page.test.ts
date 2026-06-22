@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, nextTick, type PropType } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { usb_control } from '../../../src/shared/proto/usb_control'
 import FileAccessPage from '../../../src/renderer/pages/FileAccessPage.vue'
@@ -31,20 +31,17 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-const ElSwitchStub = defineComponent({
+const ElCheckboxStub = defineComponent({
   inheritAttrs: false,
   props: {
     modelValue: { type: Boolean, required: true },
-    beforeChange: {
-      type: Function as PropType<() => Promise<boolean>>,
-      required: true,
-    },
   },
-  setup(props, { attrs }) {
+  emits: ['change'],
+  setup(props, { attrs, emit }) {
     return () => h('button', {
       ...attrs,
       'data-checked': String(props.modelValue),
-      onClick: () => props.beforeChange(),
+      onClick: () => emit('change', !props.modelValue),
     })
   },
 })
@@ -97,7 +94,7 @@ function mountPage() {
         ConnectionAlert: { template: '<aside data-testid="connection-alert" />' },
         AddBlacklistDialog: AddBlacklistDialogStub,
         ElCard: { template: '<section><slot /></section>' },
-        ElSwitch: ElSwitchStub,
+        ElCheckbox: ElCheckboxStub,
         ElButton: { template: '<button><slot /></button>' },
         DataTable: {
           name: 'DataTable',
@@ -145,6 +142,7 @@ describe('FileAccessPage', () => {
     const cards = wrapper.findAll('[data-testid="file-policy-card"]')
     expect(cards).toHaveLength(3)
     expect(cards.every((card) => card.classes().includes('policy-card'))).toBe(true)
+    expect(wrapper.findAll('.app-checkbox-row')).toHaveLength(3)
     expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
       'dll', 'exe', 'PE', 'ELF',
     ])
@@ -265,7 +263,7 @@ describe('FileAccessPage', () => {
     expect(deleteButton.attributes('loading')).toBeDefined()
 
     confirmDeferred.resolve('confirm')
-    await nextTick()
+    await flushPromises()
     expect(remove).toHaveBeenCalledTimes(1)
     expect(deleteButton.attributes('disabled')).toBeDefined()
     expect(deleteButton.attributes('loading')).toBeDefined()
