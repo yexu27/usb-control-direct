@@ -16,6 +16,9 @@ storage = { workspace = true }
 auth-session = { path = "../auth-session" }
 log-audit = { path = "../log-audit" }
 whitelist = { path = "../whitelist" }
+file-access = { path = "../file-access" }
+hid-access = { path = "../hid-access" }
+malware-scan = { path = "../malware-scan" }
 usb-identify = { path = "../usb-identify" }
 policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }

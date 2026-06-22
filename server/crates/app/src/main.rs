@@ -22,6 +22,12 @@ use protocol_gateway::handlers::register::{
 use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
+use file_access::engine::FileAccessEngine;
+use file_access::gadget::GadgetManager;
+use hid_access::hid_gadget::{configure_hid_function, discover_hidg_nodes, KEYBOARD_FUNCTION, MOUSE_FUNCTION};
+use hid_access::hid_report::{KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN};
+use malware_scan::clam_scanner::ClamScanner;
+use malware_scan::scan_service::ScanService;
 use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
@@ -61,6 +67,7 @@ async fn main() {
     let storage_audit = Storage::open(&db_path).expect("数据库初始化失败（audit）");
     let storage_whitelist = Storage::open(&db_path).expect("数据库初始化失败（whitelist）");
     let storage_policy = Arc::new(Storage::open(&db_path).expect("数据库初始化失败（policy）"));
+    let storage_file_access = Storage::open(&db_path).expect("数据库初始化失败（file_access）");
 
     let auth_service = Arc::new(AuthService::new(storage_auth, SessionManager::new()));
     let audit_service = Arc::new(AuditService::new(storage_audit, &db_path));
@@ -84,6 +91,44 @@ async fn main() {
             .expect("授权公钥加载失败"),
     );
 
+    // ===== USB Gadget 统一初始化 =====
+    let gadget_mgr = {
+        let mut mgr = GadgetManager::new();
+        let _ = mgr.unbind_udc();
+        mgr.setup_gadget("USB Security Control Device")
+            .expect("gadget 基础结构初始化失败");
+        mgr.configure_mass_storage(&PathBuf::from("/dev/nbd0"), true)
+            .expect("mass_storage function 配置失败");
+        mgr
+    };
+
+    let functions_base = PathBuf::from("/sys/kernel/config/usb_gadget/usb_ctrl/functions");
+    configure_hid_function(&functions_base.join(KEYBOARD_FUNCTION), 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)
+        .expect("HID keyboard function 配置失败");
+    configure_hid_function(&functions_base.join(MOUSE_FUNCTION), 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)
+        .expect("HID mouse function 配置失败");
+
+    gadget_mgr.link_function("mass_storage.usb0").expect("链接 mass_storage 失败");
+    gadget_mgr.link_function(KEYBOARD_FUNCTION).expect("链接 keyboard 失败");
+    gadget_mgr.link_function(MOUSE_FUNCTION).expect("链接 mouse 失败");
+    gadget_mgr.bind_udc().expect("UDC 绑定失败");
+
+    let hidg_nodes = discover_hidg_nodes().expect("hidg 节点发现失败");
+    info!("HID gadget: keyboard={}, mouse={}", hidg_nodes.keyboard.display(), hidg_nodes.mouse.display());
+
+    // ===== 实例化下游服务 =====
+    let scan_service = Arc::new(ScanService::new(
+        ClamScanner::new("/usr/bin/clamdscan"),
+        Arc::clone(&audit_service),
+        &PathBuf::from("/var/log/usb-control/scan"),
+    ));
+
+    let file_access_engine = Arc::new(FileAccessEngine::new(
+        storage_file_access,
+        Arc::clone(&audit_service),
+        "/dev/nbd0",
+    ));
+
     let state = Arc::new(AppState {
         auth_service,
         audit_service,
@@ -105,6 +150,9 @@ async fn main() {
         Arc::clone(&state.whitelist_manager),
         Arc::clone(&state.audit_service),
         Arc::clone(&state.device_manager),
+        scan_service,
+        file_access_engine,
+        hidg_nodes,
     );
 
     // 启动编排器
