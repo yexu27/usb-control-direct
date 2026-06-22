@@ -2,6 +2,7 @@
 @use './fonts';
 @use './theme';
 @use './layout';
+@use './element-plus';
 
 :root {
   font-family: var(--andi-font-family);

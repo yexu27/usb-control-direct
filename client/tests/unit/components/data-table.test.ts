@@ -9,6 +9,9 @@ const stubs = {
     template: '<button class="page" @click="$emit(\'current-change\', 2)">下一页</button>',
   },
 }
+const directives = {
+  loading: {},
+}
 
 describe('DataTable', () => {
   it('展示筛选插槽和空状态文案', () => {
@@ -22,7 +25,7 @@ describe('DataTable', () => {
         emptyText: '没有记录',
       },
       slots: { filters: '<input aria-label="筛选" />' },
-      global: { stubs },
+      global: { stubs, directives },
     })
 
     expect(wrapper.get('[aria-label="筛选"]').exists()).toBe(true)
@@ -38,7 +41,7 @@ describe('DataTable', () => {
         page: 1,
         pageSize: 20,
       },
-      global: { stubs },
+      global: { stubs, directives },
     })
 
     await wrapper.get('.page').trigger('click')
@@ -56,7 +59,7 @@ describe('DataTable', () => {
         page: 1,
         pageSize: 20,
       },
-      global: { stubs },
+      global: { stubs, directives },
     })
 
     expect(wrapper.get('[role="alert"]').text()).toBe('查询失败')

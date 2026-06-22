@@ -26,11 +26,11 @@ const emit = defineEmits<{
 
 <template>
   <div class="data-table-wrapper">
-    <div v-if="$slots.filters" class="table-filters">
+    <div v-if="$slots.filters" class="app-filter-bar" data-testid="table-filters">
       <slot name="filters" />
     </div>
 
-    <div v-if="props.error" class="table-error" role="alert">
+    <div v-if="props.error" class="app-table-error" role="alert">
       {{ props.error }}
     </div>
 
@@ -64,7 +64,8 @@ const emit = defineEmits<{
 
     <el-pagination
       v-if="!props.error && props.total > 0"
-      class="table-pagination"
+      class="app-table-pagination"
+      data-testid="table-pagination"
       :current-page="props.page"
       :page-size="props.pageSize"
       :total="props.total"
@@ -75,32 +76,3 @@ const emit = defineEmits<{
     />
   </div>
 </template>
-
-<style scoped lang="scss">
-.data-table-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-5;
-}
-
-.data-table {
-  width: 100%;
-}
-
-.table-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-3;
-  align-items: center;
-}
-
-.table-error {
-  padding: $spacing-7;
-  color: $color-danger;
-  text-align: center;
-}
-
-.table-pagination {
-  align-self: flex-end;
-}
-</style>
