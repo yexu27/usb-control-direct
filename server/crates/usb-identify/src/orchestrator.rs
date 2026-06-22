@@ -15,7 +15,7 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::{mpsc, watch};
 use tracing::{info, warn};
 
-use crate::mount::RealMountOps;
+use crate::mount::{MountOperations, RealMountOps};
 
 use common::time::now_unix;
 use log_audit::AuditService;
@@ -362,18 +362,49 @@ impl DeviceOrchestrator {
 
     /// 处理设备移除。
     async fn handle_removed(&mut self, sys_path: String) {
+        let parent_path = crate::monitor::parent_device_path(&sys_path);
+
+        // DeviceManager: 移除接口。只有最后一个接口移除才返回 Some
         let removed = if let Ok(mut dm) = self.device_manager.write() {
             dm.remove_interface(&sys_path)
         } else {
             None
         };
 
-        if let Some(record) = removed {
-            info!(dev = %record.info.device_name,
-                  type = ?record.info.device_type,
-                  serial = %record.info.serial_number,
-                  "设备完全移除");
+        let Some(device_record) = removed else {
+            return; // 还有其他接口，物理设备未完全拔出
+        };
+
+        info!(dev = %device_record.info.device_name, type = ?device_record.info.device_type, "设备完全拔出");
+
+        // ActiveSession: 发取消信号 + 兜底清理
+        if let Some(session) = self.active_sessions.remove(&parent_path) {
+            let _ = session.cancel_tx.send(true); // 幂等
+
+            // Storage 兜底清理
+            if session.device_type == common::types::DeviceType::Storage {
+                if let Some(mount_path) = &session.mount_path {
+                    let _ = self.mount_ops.umount(&mount_path.to_string_lossy());
+                }
+                if let Some(idx) = session.nbd_index {
+                    self.nbd_pool.release(idx);
+                }
+            }
         }
+
+        // 记移除日志
+        let (dev_type_str, iface_str) = match device_record.info.device_type {
+            common::types::DeviceType::Storage => ("storage", "mass_storage"),
+            common::types::DeviceType::Keyboard => ("keyboard", "hid_keyboard"),
+            common::types::DeviceType::Mouse => ("mouse", "hid_mouse"),
+            _ => ("unsupported", "unsupported"),
+        };
+        self.write_audit_generic(&device_record.info, "device_removed", "success",
+            dev_type_str, iface_str,
+            device_record.info.interface_class as i32,
+            device_record.info.interface_subclass as i32,
+            device_record.info.interface_protocol as i32,
+        );
     }
 
     // ===== 审计日志写入辅助方法 =====
