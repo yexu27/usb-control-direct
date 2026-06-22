@@ -81,6 +81,8 @@ pub struct DeviceOrchestrator {
     nbd_pool: NbdPool,
     /// 当前已映射设备: sys_path → NBD 索引
     mapped_storage: HashMap<String, u32>,
+    /// 已连接的设备信息: sys_path → 设备信息（用于移除事件时查询）
+    connected_devices: HashMap<String, UsbDeviceInfo>,
 }
 
 impl DeviceOrchestrator {
@@ -96,6 +98,7 @@ impl DeviceOrchestrator {
             audit,
             nbd_pool: NbdPool::new(),
             mapped_storage: HashMap::new(),
+            connected_devices: HashMap::new(),
         }
     }
 
@@ -117,6 +120,9 @@ impl DeviceOrchestrator {
 
     /// 处理大容量存储设备。
     async fn handle_storage(&mut self, info: UsbDeviceInfo) {
+        let sys_path = info.sys_path.clone();
+        self.connected_devices.insert(sys_path, info.clone());
+
         // 白名单查询
         if info.serial_number.is_empty() {
             self.write_audit_storage(&info, "whitelist_denied", "blocked",
@@ -164,24 +170,32 @@ impl DeviceOrchestrator {
     }
 
     /// 处理键盘设备。
-    async fn handle_keyboard(&self, info: UsbDeviceInfo) {
+    async fn handle_keyboard(&mut self, info: UsbDeviceInfo) {
         info!(dev = %info.device_name, "检测到键盘设备");
+
+        let sys_path = info.sys_path.clone();
+        self.connected_devices.insert(sys_path, info.clone());
 
         self.write_audit_generic(&info, "device_insert", "allowed", "keyboard",
             "hid_keyboard", 0x03, 0x01, 0x01);
     }
 
     /// 处理鼠标设备。
-    async fn handle_mouse(&self, info: UsbDeviceInfo) {
+    async fn handle_mouse(&mut self, info: UsbDeviceInfo) {
         info!(dev = %info.device_name, "检测到鼠标设备");
+
+        let sys_path = info.sys_path.clone();
+        self.connected_devices.insert(sys_path, info.clone());
 
         self.write_audit_generic(&info, "device_insert", "allowed", "mouse",
             "hid_mouse", 0x03, 0x01, 0x02);
     }
 
     /// 处理不支持的设备。
-    fn handle_unsupported(&self, info: UsbDeviceInfo, reason: String) {
+    fn handle_unsupported(&mut self, info: UsbDeviceInfo, reason: String) {
+        let sys_path = info.sys_path.clone();
         warn!(dev = %info.device_name, reason = %reason, "不支持的 USB 设备");
+        self.connected_devices.insert(sys_path, info.clone());
 
         let mut log = UsbAuditLogInsert {
             event_time: now_unix(),
@@ -208,7 +222,13 @@ impl DeviceOrchestrator {
 
     /// 处理设备移除。
     async fn handle_removed(&mut self, sys_path: String) {
-        info!(sys_path = %sys_path, "设备移除");
+        if let Some(info) = self.connected_devices.remove(&sys_path) {
+            info!(sys_path = %sys_path, dev = %info.device_name,
+                  type = ?info.device_type, serial = %info.serial_number,
+                  "设备移除: {}", info.device_name);
+        } else {
+            info!(sys_path = %sys_path, "设备移除（无记录）");
+        }
 
         if let Some(nbd_idx) = self.mapped_storage.remove(&sys_path) {
             self.nbd_pool.release(nbd_idx);
