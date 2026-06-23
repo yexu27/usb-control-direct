@@ -16,6 +16,7 @@ import {
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { parseSystemUpgradeVersion, parseVirusdbUpgradeVersion } from '../../../src/renderer/utils/upgrade-package'
+import { showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('../../../src/renderer/services/system-service', () => ({
   getSystemInfo: vi.fn(),
@@ -42,6 +43,16 @@ vi.mock('element-plus', () => ({
     confirm: vi.fn(() => Promise.resolve()),
   },
 }))
+
+vi.mock('../../../src/renderer/utils/operation-feedback', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/renderer/utils/operation-feedback')>(
+    '../../../src/renderer/utils/operation-feedback',
+  )
+  return {
+    ...actual,
+    showSuccessToast: vi.fn(),
+  }
+})
 
 const openFile = vi.fn()
 const readFile = vi.fn()
@@ -189,15 +200,7 @@ describe('SystemPage', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="progress"]').attributes('data-visible')).toBe('false')
-    expect(ElMessageBox.alert).toHaveBeenCalledWith(
-      '升级完成，请重新连接',
-      '系统升级完成',
-      expect.objectContaining({
-        customClass: 'app-confirm-message-box',
-        modalClass: 'app-confirm-message-box-overlay',
-        type: 'success',
-      }),
-    )
+    expect(showSuccessToast).toHaveBeenCalledWith('升级完成，请重新连接')
   })
 
   it('uploads virusdb package immediately after selecting a valid file and refreshes system info', async () => {
@@ -245,15 +248,7 @@ describe('SystemPage', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="progress"]').attributes('data-visible')).toBe('false')
-    expect(ElMessageBox.alert).toHaveBeenCalledWith(
-      '病毒库升级成功',
-      '病毒库升级完成',
-      expect.objectContaining({
-        customClass: 'app-confirm-message-box',
-        modalClass: 'app-confirm-message-box-overlay',
-        type: 'success',
-      }),
-    )
+    expect(showSuccessToast).toHaveBeenCalledWith('病毒库升级成功')
   })
 
   it('does not upload when upgrade file selection is canceled', async () => {
@@ -346,7 +341,7 @@ describe('SystemPage', () => {
     expect(uploadLicense).toHaveBeenCalledWith('token', new Uint8Array([97, 98, 99]))
   })
 
-  it('keeps license upload progress visible for at least 3 seconds and shows centered result', async () => {
+  it('keeps license upload progress visible for at least 3 seconds and shows success toast', async () => {
     vi.useFakeTimers()
     vi.mocked(uploadLicense).mockResolvedValue({
       success: true,
@@ -372,15 +367,7 @@ describe('SystemPage', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="progress"]').attributes('data-visible')).toBe('false')
-    expect(ElMessageBox.alert).toHaveBeenCalledWith(
-      '授权文件上传成功',
-      '授权文件上传完成',
-      expect.objectContaining({
-        customClass: 'app-confirm-message-box',
-        modalClass: 'app-confirm-message-box-overlay',
-        type: 'success',
-      }),
-    )
+    expect(showSuccessToast).toHaveBeenCalledWith('授权文件上传成功')
     expect(vi.mocked(getSystemInfo).mock.calls.length).toBeGreaterThan(initialInfoCallCount)
   })
 

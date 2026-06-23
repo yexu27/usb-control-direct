@@ -19,6 +19,7 @@ import {
   parseVirusdbUpgradeVersion,
 } from '@/utils/upgrade-package'
 import { alertAction, confirmAction } from '@/utils/confirm-action'
+import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 import type { usb_control } from '../../shared/proto/usb_control'
 
 const session = useSessionStore()
@@ -91,12 +92,8 @@ function formatAuthStatus(status: string, authorized: boolean): string {
   return authorized ? '已授权' : '未授权'
 }
 
-function showError(error: unknown, fallback: string): void {
-  ElMessage.error(error instanceof Error ? error.message : fallback)
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
+async function showError(error: unknown, fallback: string): Promise<void> {
+  await showErrorDialog(fallback, errorMessage(error, fallback))
 }
 
 function blurActiveElement(): void {
@@ -105,15 +102,20 @@ function blurActiveElement(): void {
   }
 }
 
+function releaseActiveElementFocus(): void {
+  blurActiveElement()
+  window.setTimeout(blurActiveElement, 0)
+}
+
 async function showUploadResult(title: string, message: string, type: 'success' | 'error' | 'warning'): Promise<void> {
   try {
-    await alertAction({
-      title,
-      message,
-      type,
-    })
+    if (type === 'success') {
+      showSuccessToast(message)
+    } else {
+      await showErrorDialog(title, message)
+    }
   } finally {
-    blurActiveElement()
+    releaseActiveElementFocus()
   }
 }
 
@@ -135,7 +137,7 @@ async function loadSystemInfo(): Promise<void> {
     systemInfo.value = response
     deviceDescription.value = response.deviceDescription
   } catch (error: unknown) {
-    showError(error, '系统信息加载失败')
+    await showError(error, '系统信息加载失败')
   } finally {
     isLoadingInfo.value = false
   }
@@ -255,7 +257,7 @@ async function openMachineCode(): Promise<void> {
     replaceQrcodeUrl(qrcodePng.value)
   } catch (error: unknown) {
     machineCodeDialogVisible.value = false
-    showError(error, '获取机器码失败')
+    await showError(error, '获取机器码失败')
   } finally {
     machineCodeLoading.value = false
   }
@@ -275,9 +277,9 @@ async function saveQrcode(): Promise<void> {
   }
   try {
     await window.desktopApi.dialog.writeFile(result.filePath, qrcodePng.value)
-    ElMessage.success('机器码二维码已保存')
+    showSuccessToast('机器码二维码已保存')
   } catch (error: unknown) {
-    showError(error, '机器码二维码保存失败')
+    await showError(error, '机器码二维码保存失败')
   }
 }
 
@@ -343,7 +345,7 @@ async function saveDeviceDescription(): Promise<void> {
   const nextDescription = deviceDescription.value.trim()
   const validationMessage = validateDeviceDescription(nextDescription)
   if (validationMessage !== '') {
-    ElMessage.error(validationMessage)
+    await showErrorDialog('设备描述格式错误', validationMessage)
     return
   }
   try {
@@ -359,11 +361,11 @@ async function saveDeviceDescription(): Promise<void> {
   deviceDescriptionSaving.value = true
   try {
     await updateDeviceDescription(session.token, nextDescription)
-    ElMessage.success('修改成功，重启设备后生效')
+    showSuccessToast('修改成功，重启设备后生效')
     deviceDescriptionDialogVisible.value = false
     await loadSystemInfo()
   } catch (error: unknown) {
-    showError(error, '设备描述修改失败')
+    await showError(error, '设备描述修改失败')
   } finally {
     deviceDescriptionSaving.value = false
   }
