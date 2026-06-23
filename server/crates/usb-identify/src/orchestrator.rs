@@ -251,7 +251,8 @@ impl DeviceOrchestrator {
             let mount_ops = RealMountOps;
 
             // 1. Mount
-            if let Err(e) = mount_ops.mount(&dev_path, &mount_point.to_string_lossy(), "auto") {
+            let read_only = permission == 0;
+            if let Err(e) = crate::mount::mount_partition(&dev_path, &mount_point.to_string_lossy(), read_only) {
                 write_audit_fail(&audit, &info, "scan_failed", &e.to_string());
                 return;
             }

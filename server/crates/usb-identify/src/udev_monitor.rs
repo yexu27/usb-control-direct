@@ -137,6 +137,87 @@ pub fn enumerate_and_send(tx: mpsc::UnboundedSender<DeviceEvent>) {
     }
 }
 
+/// 从 USB 父设备 sysfs 目录查找块设备路径和容量。
+///
+/// 遍历 parent_path 下所有 host*/target*/block/sd* 子路径，
+/// 提取 /dev/sdX 和扇区数 × 512 = 字节容量。
+fn find_block_device(parent_path: &std::path::Path) -> Option<(String, i64)> {
+    let entries = std::fs::read_dir(parent_path).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("host") {
+            continue;
+        }
+        if let Some(result) = find_block_in_host(&path) {
+            return Some(result);
+        }
+    }
+    None
+}
+
+/// 在 host 目录下递归查找 block/sd* 设备。
+fn find_block_in_host(host_path: &std::path::Path) -> Option<(String, i64)> {
+    let entries = std::fs::read_dir(host_path).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == "block" {
+            return find_sd_device(&path);
+        }
+        if let Some(result) = find_block_in_host(&path) {
+            return Some(result);
+        }
+    }
+    None
+}
+
+/// 在 block/ 目录下找到 sd* 设备分区。
+///
+/// 整盘 sdX 是子目录（内含 sdX1/sdX2），分区 sdXN 有 size 和 dev 文件。
+/// 递归扫描，取第一个分区。
+fn find_sd_device(block_path: &std::path::Path) -> Option<(String, i64)> {
+    let entries = std::fs::read_dir(block_path).ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("sd") {
+            continue;
+        }
+        let path = entry.path();
+
+        // 分区 sdXN: 直接读 size + dev
+        if path.join("dev").exists() {
+            let size = std::fs::read_to_string(path.join("size"))
+                .ok()
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .unwrap_or(0);
+            let dev = format!("/dev/{}", name);
+            // 读 partition 文件判断: 0=整盘, 非0=分区
+            let is_partition = std::fs::read_to_string(path.join("partition"))
+                .ok()
+                .map(|s| s.trim() != "0")
+                .unwrap_or_else(|| name.chars().any(|c| c.is_ascii_digit() && c != '0'));
+            if is_partition {
+                return Some((dev, size as i64 * 512));
+            }
+        }
+
+        // 整盘子目录: 递归查找分区 sdX1/sdX2
+        if path.is_dir() {
+            if let Some(result) = find_sd_device(&path) {
+                return Some(result);
+            }
+        }
+    }
+    None
+}
+
 /// 从 udev 事件解析设备信息。
 fn parse_device_info(event: &udev::Event) -> Option<UsbDeviceInfo> {
     let syspath = event.syspath();
@@ -159,9 +240,17 @@ fn parse_device_info(event: &udev::Event) -> Option<UsbDeviceInfo> {
     let serial = read_sysfs_attr(parent, "serial").unwrap_or_default();
     let product = read_sysfs_attr(parent, "product").unwrap_or_default();
 
+    let (dev_path, capacity_bytes) = if device_type == common::types::DeviceType::Storage {
+        find_block_device(syspath)
+            .map(|(dev, cap)| (Some(dev), Some(cap)))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+
     Some(UsbDeviceInfo {
         sys_path: syspath.to_string_lossy().to_string(),
-        dev_path: event.devnode().map(|p| p.to_string_lossy().to_string()),
+        dev_path,
         serial_number: serial,
         vid,
         pid,
@@ -170,7 +259,7 @@ fn parse_device_info(event: &udev::Event) -> Option<UsbDeviceInfo> {
         interface_class,
         interface_subclass,
         interface_protocol,
-        capacity_bytes: None,
+        capacity_bytes,
     })
 }
 
@@ -196,9 +285,17 @@ fn parse_device_info_from_device(device: &udev::Device) -> Option<UsbDeviceInfo>
     let serial = read_sysfs_attr(parent, "serial").unwrap_or_default();
     let product = read_sysfs_attr(parent, "product").unwrap_or_default();
 
+    let (dev_path, capacity_bytes) = if device_type == common::types::DeviceType::Storage {
+        find_block_device(syspath)
+            .map(|(dev, cap)| (Some(dev), Some(cap)))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+
     Some(UsbDeviceInfo {
         sys_path: syspath.to_string_lossy().to_string(),
-        dev_path: device.devnode().map(|p| p.to_string_lossy().to_string()),
+        dev_path,
         serial_number: serial,
         vid,
         pid,
@@ -207,6 +304,6 @@ fn parse_device_info_from_device(device: &udev::Device) -> Option<UsbDeviceInfo>
         interface_class,
         interface_subclass,
         interface_protocol,
-        capacity_bytes: None,
+        capacity_bytes,
     })
 }
