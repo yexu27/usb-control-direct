@@ -32,6 +32,23 @@ async function expectLatestMessage(page: Page, text: string | RegExp): Promise<v
   await expect(page.locator('.el-message__content').filter({ hasText: text }).last()).toBeVisible()
 }
 
+async function expectAppDialog(page: Page, title: string | RegExp, message: string | RegExp): Promise<void> {
+  const dialog = page.locator('.app-confirm-message-box')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(title)
+  await expect(dialog).toContainText(message)
+}
+
+async function closeAppDialog(page: Page): Promise<void> {
+  const dialog = page.locator('.app-confirm-message-box')
+  await dialog.getByRole('button', { name: '确定' }).click()
+  await expect(dialog).toBeHidden()
+}
+
+function progressDialog(page: Page) {
+  return page.getByTestId('progress-dialog')
+}
+
 async function withDevice(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -90,19 +107,154 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await app.evaluate(({ dialog }, path) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, failedPackage)
-        await page.getByTestId('system-upgrade-select').click()
-        await page.getByTestId('system-upgrade-submit').click()
-        await expectLatestMessage(page, '系统升级失败，已回滚至原版本')
+        await page.getByTestId('system-upgrade-upload').click()
+        await expect(progressDialog(page)).toBeVisible()
+        await expect(progressDialog(page)).toBeHidden()
+        await expectAppDialog(page, '系统升级失败', '系统升级失败，已回滚至原版本')
+        await closeAppDialog(page)
         await expect(page.getByTestId('connection-status')).toContainText('已连接')
-        await expect(page.getByText('v1.0.0', { exact: true })).toBeVisible()
+        await expect(page.getByText(/当前版本: v1\.0\.0/)).toBeVisible()
+
+        const systemButton = page.getByTestId('system-upgrade-upload')
+        await expect(systemButton).not.toHaveClass(/is-loading/)
+        await expect(systemButton).not.toBeFocused()
 
         await app.evaluate(({ dialog }, path) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, successPackage)
-        await page.getByTestId('system-upgrade-select').click()
-        await page.getByTestId('system-upgrade-submit').click()
-        await expectLatestMessage(page, '升级完成，请重新连接')
+        await systemButton.click()
+        await expect(progressDialog(page)).toBeVisible()
+        await expect(progressDialog(page)).toBeHidden()
+        await expectAppDialog(page, '系统升级完成', '升级完成，请重新连接')
+        await closeAppDialog(page)
+        await expect(systemButton).not.toHaveClass(/is-loading/)
+        await expect(systemButton).not.toBeFocused()
         await expect(page.getByTestId('connection-status')).toContainText('未连接')
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    })
+  })
+
+  test('病毒库升级选择文件后显示居中进度弹窗且至少保持 3 秒', async () => {
+    await withDevice(async (_device, app, page) => {
+      const directory = await mkdtemp(join(tmpdir(), 'virusdb-upgrade-'))
+      const packagePath = join(directory, 'usb-control-virusdb-v3.0.5.zip')
+      try {
+        await writeFile(packagePath, Buffer.from('virusdb package'))
+        await login(page, 'admin', 'admin@123')
+        await expect(page).toHaveURL(/#\/users$/)
+        await openMenu(page, '系统管理')
+        await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+
+        await app.evaluate(({ dialog }, path) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+        }, packagePath)
+        const startedAt = Date.now()
+        await page.getByTestId('virusdb-upgrade-upload').click()
+        await expect(progressDialog(page)).toBeVisible()
+        await expect(progressDialog(page)).toContainText('病毒库升级')
+        await expect(progressDialog(page)).toContainText('正在传输文件...')
+
+        await page.waitForTimeout(2_800)
+        await expect(progressDialog(page)).toBeVisible()
+        await expectAppDialog(page, '病毒库升级完成', '病毒库升级成功')
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(3_000)
+        await expect(progressDialog(page)).toBeHidden()
+        await closeAppDialog(page)
+        const virusdbButton = page.getByTestId('virusdb-upgrade-upload')
+        await expect(virusdbButton).not.toHaveClass(/is-loading/)
+        await expect(virusdbButton).not.toBeFocused()
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    })
+  })
+
+  test('升级包文件名不符合规则时提示错误且不进入上传状态', async () => {
+    await withDevice(async (device, app, page) => {
+      const directory = await mkdtemp(join(tmpdir(), 'invalid-upgrade-'))
+      const invalidSystemPackage = join(directory, 'bad-system.bin')
+      const invalidVirusdbPackage = join(directory, 'bad-virusdb.zip')
+      try {
+        await writeFile(invalidSystemPackage, Buffer.from('invalid system package'))
+        await writeFile(invalidVirusdbPackage, Buffer.from('invalid virusdb package'))
+        await login(page, 'admin', 'admin@123')
+        await expect(page).toHaveURL(/#\/users$/)
+        await openMenu(page, '系统管理')
+        await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+
+        const systemButton = page.getByTestId('system-upgrade-upload')
+        await app.evaluate(({ dialog }, path) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+        }, invalidSystemPackage)
+        await systemButton.click()
+        await expectAppDialog(page, '系统升级包文件名错误', /系统升级包文件名格式错误/)
+        await expect(progressDialog(page)).toBeHidden()
+        await closeAppDialog(page)
+        await expect(systemButton).not.toHaveClass(/is-loading/)
+        await expect(systemButton).not.toBeFocused()
+        expect(device.systemUpgradeUploadCount).toBe(0)
+
+        const virusdbButton = page.getByTestId('virusdb-upgrade-upload')
+        await app.evaluate(({ dialog }, path) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+        }, invalidVirusdbPackage)
+        await virusdbButton.click()
+        await expectAppDialog(page, '病毒库升级包文件名错误', /病毒库升级包文件名格式错误/)
+        await expect(progressDialog(page)).toBeHidden()
+        await closeAppDialog(page)
+        await expect(virusdbButton).not.toHaveClass(/is-loading/)
+        await expect(virusdbButton).not.toBeFocused()
+        expect(device.virusdbUpgradeUploadCount).toBe(0)
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    })
+  })
+
+  test('授权文件上传使用居中进度和结果弹窗', async () => {
+    await withDevice(async (device, app, page) => {
+      const directory = await mkdtemp(join(tmpdir(), 'license-upload-'))
+      const invalidLicensePath = join(directory, 'license.bin')
+      const validLicensePath = join(directory, 'license.txt')
+      try {
+        await writeFile(invalidLicensePath, Buffer.from('invalid license'))
+        await writeFile(validLicensePath, Buffer.from('valid license'))
+        await login(page, 'admin', 'admin@123')
+        await expect(page).toHaveURL(/#\/users$/)
+        await openMenu(page, '系统管理')
+        await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+
+        const licenseButton = page.getByTestId('license-upload')
+        await app.evaluate(({ dialog }, path) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+        }, invalidLicensePath)
+        await licenseButton.click()
+        await expectAppDialog(page, '授权文件格式错误', '仅支持 .txt 格式授权文件')
+        await expect(progressDialog(page)).toBeHidden()
+        await closeAppDialog(page)
+        await expect(licenseButton).not.toHaveClass(/is-loading/)
+        await expect(licenseButton).not.toBeFocused()
+        expect(device.licenseUploadCount).toBe(0)
+
+        await app.evaluate(({ dialog }, path) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+        }, validLicensePath)
+        const startedAt = Date.now()
+        await licenseButton.click()
+        await expect(progressDialog(page)).toBeVisible()
+        await expect(progressDialog(page)).toContainText('上传授权文件')
+        await expect(progressDialog(page)).toContainText('正在传输文件...')
+        await page.waitForTimeout(2_800)
+        await expect(progressDialog(page)).toBeVisible()
+        await expectAppDialog(page, '授权文件上传完成', '授权文件上传成功')
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(3_000)
+        await expect(progressDialog(page)).toBeHidden()
+        await closeAppDialog(page)
+        await expect(licenseButton).not.toHaveClass(/is-loading/)
+        await expect(licenseButton).not.toBeFocused()
+        expect(device.licenseUploadCount).toBe(1)
       } finally {
         await rm(directory, { recursive: true, force: true })
       }

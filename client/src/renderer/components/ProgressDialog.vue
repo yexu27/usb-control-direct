@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 <template>
   <el-dialog
+    data-testid="progress-dialog"
     :model-value="props.visible"
     :title="props.title"
     width="360px"

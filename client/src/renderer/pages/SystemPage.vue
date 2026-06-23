@@ -18,18 +18,15 @@ import {
   parseSystemUpgradeVersion,
   parseVirusdbUpgradeVersion,
 } from '@/utils/upgrade-package'
-import { confirmAction } from '@/utils/confirm-action'
+import { alertAction, confirmAction } from '@/utils/confirm-action'
 import type { usb_control } from '../../shared/proto/usb_control'
 
 const session = useSessionStore()
 const connection = useConnectionStore()
 
+const DEFAULT_DEVICE_DESCRIPTION = '(AD USB protection dev)USB Device'
 const systemInfo = ref<usb_control.RspSystemInfo | null>(null)
 const isLoadingInfo = ref(false)
-const systemPackagePath = ref('')
-const systemTargetVersion = ref('')
-const virusdbPackagePath = ref('')
-const virusdbTargetVersion = ref('')
 const systemUpgrading = ref(false)
 const virusdbUpgrading = ref(false)
 const licenseUploading = ref(false)
@@ -39,6 +36,7 @@ const machineCode = ref('')
 const qrcodePng = ref<Uint8Array>(new Uint8Array())
 const qrcodeUrl = ref('')
 const deviceDescription = ref('')
+const deviceDescriptionDialogVisible = ref(false)
 const deviceDescriptionSaving = ref(false)
 
 const systemVersion = computed(() => systemInfo.value?.systemVersion ?? '-')
@@ -49,8 +47,6 @@ const authStatusText = computed(() => {
   return formatAuthStatus(systemInfo.value?.authStatus ?? '', systemInfo.value?.authorized ?? false)
 })
 const currentDeviceDescription = computed(() => systemInfo.value?.deviceDescription ?? '-')
-const selectedSystemPackageName = computed(() => basename(systemPackagePath.value))
-const selectedVirusdbPackageName = computed(() => basename(virusdbPackagePath.value))
 const transferVisible = computed(() => systemUpgrading.value || virusdbUpgrading.value || licenseUploading.value)
 const transferTitle = computed(() => {
   if (systemUpgrading.value) {
@@ -62,6 +58,19 @@ const transferTitle = computed(() => {
   return '上传授权文件'
 })
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+async function waitAtLeast(startedAt: number, minimumMs = 3_000): Promise<void> {
+  const remainingMs = minimumMs - (Date.now() - startedAt)
+  if (remainingMs > 0) {
+    await delay(remainingMs)
+  }
+}
+
 onMounted(() => {
   void loadSystemInfo()
 })
@@ -71,10 +80,6 @@ onUnmounted(() => {
     URL.revokeObjectURL(qrcodeUrl.value)
   }
 })
-
-function basename(filePath: string): string {
-  return filePath.split(/[\\/]/).pop() ?? filePath
-}
 
 function formatAuthStatus(status: string, authorized: boolean): string {
   if (status === 'expired') {
@@ -88,6 +93,28 @@ function formatAuthStatus(status: string, authorized: boolean): string {
 
 function showError(error: unknown, fallback: string): void {
   ElMessage.error(error instanceof Error ? error.message : fallback)
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
+function blurActiveElement(): void {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur()
+  }
+}
+
+async function showUploadResult(title: string, message: string, type: 'success' | 'error' | 'warning'): Promise<void> {
+  try {
+    await alertAction({
+      title,
+      message,
+      type,
+    })
+  } finally {
+    blurActiveElement()
+  }
 }
 
 function canOperate(): boolean {
@@ -114,7 +141,10 @@ async function loadSystemInfo(): Promise<void> {
   }
 }
 
-async function selectSystemPackage(): Promise<void> {
+async function uploadSystemUpgradePackage(): Promise<void> {
+  if (systemUpgrading.value || !canOperate()) {
+    return
+  }
   const result = await window.desktopApi.dialog.openFile({
     title: '选择系统升级包',
     filters: [{ name: '系统升级包', extensions: ['bin'] }],
@@ -124,36 +154,43 @@ async function selectSystemPackage(): Promise<void> {
   }
   const filePath = result.filePaths[0]
   if (!filePath.toLowerCase().endsWith('.bin')) {
-    ElMessage.error('仅支持 .bin 系统升级包')
+    await showUploadResult('系统升级包格式错误', '仅支持 .bin 系统升级包', 'error')
     return
   }
+  let targetVersion = ''
   try {
-    systemTargetVersion.value = parseSystemUpgradeVersion(filePath)
-    systemPackagePath.value = filePath
+    targetVersion = parseSystemUpgradeVersion(filePath)
   } catch (error: unknown) {
-    showError(error, '系统升级包文件名格式错误')
+    await showUploadResult('系统升级包文件名错误', errorMessage(error, '系统升级包文件名格式错误'), 'error')
+    return
   }
-}
 
-async function runSystemUpgrade(): Promise<void> {
-  if (systemUpgrading.value || systemPackagePath.value === '' || !canOperate()) {
-    return
-  }
   systemUpgrading.value = true
+  const startedAt = Date.now()
+  let caughtError: unknown = null
   try {
-    const fileData = await window.desktopApi.dialog.readFile(systemPackagePath.value)
+    const fileData = await window.desktopApi.dialog.readFile(filePath)
     const checksum = await calculateSha256Hex(fileData)
-    await uploadSystemUpgrade(session.token, fileData, systemTargetVersion.value, checksum)
-    ElMessage.success('升级完成，请重新连接')
-    await connection.disconnect(true).catch(() => {})
+    await uploadSystemUpgrade(session.token, fileData, targetVersion, checksum)
   } catch (error: unknown) {
-    showError(error, '系统升级失败')
+    caughtError = error
   } finally {
+    await waitAtLeast(startedAt)
     systemUpgrading.value = false
   }
+
+  if (caughtError == null) {
+    await showUploadResult('系统升级完成', '升级完成，请重新连接', 'success')
+    await connection.disconnect(true).catch(() => {})
+  } else {
+    await showUploadResult('系统升级失败', errorMessage(caughtError, '系统升级失败'), 'error')
+  }
 }
 
-async function selectVirusdbPackage(): Promise<void> {
+async function uploadVirusdbUpgradePackage(): Promise<void> {
+  if (virusdbUpgrading.value || !canOperate()) {
+    return
+  }
   const result = await window.desktopApi.dialog.openFile({
     title: '选择病毒库升级包',
     filters: [{ name: '病毒库升级包', extensions: ['zip'] }],
@@ -163,32 +200,36 @@ async function selectVirusdbPackage(): Promise<void> {
   }
   const filePath = result.filePaths[0]
   if (!filePath.toLowerCase().endsWith('.zip')) {
-    ElMessage.error('仅支持 .zip 病毒库升级包')
+    await showUploadResult('病毒库升级包格式错误', '仅支持 .zip 病毒库升级包', 'error')
     return
   }
+  let targetVersion = ''
   try {
-    virusdbTargetVersion.value = parseVirusdbUpgradeVersion(filePath)
-    virusdbPackagePath.value = filePath
+    targetVersion = parseVirusdbUpgradeVersion(filePath)
   } catch (error: unknown) {
-    showError(error, '病毒库升级包文件名格式错误')
+    await showUploadResult('病毒库升级包文件名错误', errorMessage(error, '病毒库升级包文件名格式错误'), 'error')
+    return
   }
-}
 
-async function runVirusdbUpgrade(): Promise<void> {
-  if (virusdbUpgrading.value || virusdbPackagePath.value === '' || !canOperate()) {
-    return
-  }
   virusdbUpgrading.value = true
+  const startedAt = Date.now()
+  let caughtError: unknown = null
   try {
-    const fileData = await window.desktopApi.dialog.readFile(virusdbPackagePath.value)
+    const fileData = await window.desktopApi.dialog.readFile(filePath)
     const checksum = await calculateSha256Hex(fileData)
-    await uploadVirusdbUpgrade(session.token, fileData, virusdbTargetVersion.value, checksum)
-    ElMessage.success('病毒库升级成功')
-    await loadSystemInfo()
+    await uploadVirusdbUpgrade(session.token, fileData, targetVersion, checksum)
   } catch (error: unknown) {
-    showError(error, '病毒库升级失败')
+    caughtError = error
   } finally {
+    await waitAtLeast(startedAt)
     virusdbUpgrading.value = false
+  }
+
+  if (caughtError == null) {
+    await showUploadResult('病毒库升级完成', '病毒库升级成功', 'success')
+    await loadSystemInfo()
+  } else {
+    await showUploadResult('病毒库升级失败', errorMessage(caughtError, '病毒库升级失败'), 'error')
   }
 }
 
@@ -253,19 +294,27 @@ async function uploadLicenseFile(): Promise<void> {
   }
   const filePath = result.filePaths[0]
   if (!filePath.toLowerCase().endsWith('.txt')) {
-    ElMessage.error('仅支持 .txt 格式授权文件')
+    await showUploadResult('授权文件格式错误', '仅支持 .txt 格式授权文件', 'error')
     return
   }
   licenseUploading.value = true
+  const startedAt = Date.now()
+  let caughtError: unknown = null
   try {
     const fileData = await window.desktopApi.dialog.readFile(filePath)
     await uploadLicense(session.token, fileData)
-    ElMessage.success('授权文件上传成功')
-    await loadSystemInfo()
   } catch (error: unknown) {
-    showError(error, '授权文件上传失败')
+    caughtError = error
   } finally {
+    await waitAtLeast(startedAt)
     licenseUploading.value = false
+  }
+
+  if (caughtError == null) {
+    await showUploadResult('授权文件上传完成', '授权文件上传成功', 'success')
+    await loadSystemInfo()
+  } else {
+    await showUploadResult('授权文件上传失败', errorMessage(caughtError, '授权文件上传失败'), 'error')
   }
 }
 
@@ -280,6 +329,11 @@ function validateDeviceDescription(value: string): string {
     return '设备描述格式错误'
   }
   return ''
+}
+
+function openDeviceDescriptionDialog(): void {
+  deviceDescription.value = DEFAULT_DEVICE_DESCRIPTION
+  deviceDescriptionDialogVisible.value = true
 }
 
 async function saveDeviceDescription(): Promise<void> {
@@ -306,6 +360,7 @@ async function saveDeviceDescription(): Promise<void> {
   try {
     await updateDeviceDescription(session.token, nextDescription)
     ElMessage.success('修改成功，重启设备后生效')
+    deviceDescriptionDialogVisible.value = false
     await loadSystemInfo()
   } catch (error: unknown) {
     showError(error, '设备描述修改失败')
@@ -326,66 +381,40 @@ async function saveDeviceDescription(): Promise<void> {
     <ConnectionAlert />
 
     <div v-loading="isLoadingInfo" class="system-grid">
-      <el-card shadow="never" class="system-card app-card">
-        <template #header>系统信息</template>
-        <dl class="info-list app-info-list">
-          <dt>当前系统版本</dt><dd>{{ systemVersion }}</dd>
-          <dt>病毒库版本</dt><dd>{{ virusDbVersion }}</dd>
-          <dt>病毒库更新时间</dt><dd>{{ virusDbUpdatedAt }}</dd>
-          <dt>授权状态</dt><dd>{{ authStatusText }}</dd>
-          <dt>授权截止时间</dt><dd>{{ authExpireTime }}</dd>
-          <dt>当前设备描述</dt><dd>{{ currentDeviceDescription }}</dd>
-        </dl>
-      </el-card>
-
-      <el-card shadow="never" class="system-card app-card">
-        <template #header>系统升级</template>
-        <p>当前版本：{{ systemVersion }}</p>
-        <div class="action-row">
-          <el-button data-testid="system-upgrade-select" @click="selectSystemPackage">
-            选择系统升级包
-          </el-button>
+      <section class="system-card" data-testid="system-management-card">
+        <h3>系统升级</h3>
+        <p class="system-card-meta">当前版本: {{ systemVersion }}</p>
+        <div class="system-card-actions">
           <el-button
             type="primary"
-            data-testid="system-upgrade-submit"
-            :loading="systemUpgrading"
-            :disabled="systemPackagePath === ''"
-            @click="runSystemUpgrade"
+            data-testid="system-upgrade-upload"
+            @click="uploadSystemUpgradePackage"
           >
-            升级
+            上传 .bin 升级包
           </el-button>
         </div>
-        <p v-if="systemPackagePath" class="selected-file app-hint-block">
-          {{ selectedSystemPackageName }}，目标版本 {{ systemTargetVersion }}
-        </p>
-      </el-card>
+        <p class="system-card-note">版本校验：升级包版本必须大于当前系统版本</p>
+      </section>
 
-      <el-card shadow="never" class="system-card app-card">
-        <template #header>病毒库升级</template>
-        <p>当前版本：{{ virusDbVersion }}，更新时间：{{ virusDbUpdatedAt }}</p>
-        <div class="action-row">
-          <el-button data-testid="virusdb-upgrade-select" @click="selectVirusdbPackage">
-            选择病毒库升级包
-          </el-button>
+      <section class="system-card" data-testid="system-management-card">
+        <h3>病毒库升级</h3>
+        <p class="system-card-meta">当前: {{ virusDbVersion }} | 更新时间: {{ virusDbUpdatedAt }}</p>
+        <div class="system-card-actions">
           <el-button
             type="primary"
-            data-testid="virusdb-upgrade-submit"
-            :loading="virusdbUpgrading"
-            :disabled="virusdbPackagePath === ''"
-            @click="runVirusdbUpgrade"
+            data-testid="virusdb-upgrade-upload"
+            @click="uploadVirusdbUpgradePackage"
           >
-            升级
+            上传 .zip 升级包
           </el-button>
         </div>
-        <p v-if="virusdbPackagePath" class="selected-file app-hint-block">
-          {{ selectedVirusdbPackageName }}，目标版本 {{ virusdbTargetVersion }}
-        </p>
-      </el-card>
+      </section>
 
-      <el-card shadow="never" class="system-card app-card">
-        <template #header>授权信息管理</template>
-        <p>状态：{{ authStatusText }}，截止时间：{{ authExpireTime }}</p>
-        <div class="action-row">
+      <section class="system-card" data-testid="system-management-card">
+        <h3>授权信息管理</h3>
+        <p class="auth-line">状态: <span>{{ authStatusText }}</span></p>
+        <p class="system-card-meta">授权截止时间: {{ authExpireTime }}</p>
+        <div class="system-card-actions">
           <el-button data-testid="machine-code-open" @click="openMachineCode">
             下载机器码
           </el-button>
@@ -393,29 +422,20 @@ async function saveDeviceDescription(): Promise<void> {
             上传授权文件
           </el-button>
         </div>
-      </el-card>
+      </section>
 
-      <el-card shadow="never" class="system-card app-card">
-        <template #header>自定义设备描述</template>
-        <p>当前描述：{{ currentDeviceDescription }}</p>
-        <div class="device-desc-row">
-          <el-input
-            v-model="deviceDescription"
-            maxlength="32"
-            data-testid="device-desc-input"
-            placeholder="请输入设备描述"
-          />
-          <el-button
-            type="primary"
-            data-testid="device-desc-save"
-            :loading="deviceDescriptionSaving"
-            @click="saveDeviceDescription"
-          >
-            保存
-          </el-button>
-        </div>
-        <p class="hint app-hint-block">仅支持 1-32 位字母、数字或下划线，修改成功后重启设备生效。</p>
-      </el-card>
+      <section class="system-card" data-testid="system-management-card">
+        <h3>自定义设备描述</h3>
+        <p class="system-card-meta device-description-line">
+          当前: <code>{{ currentDeviceDescription }}</code>
+        </p>
+        <p class="device-description-warning">
+          修改完成后需重启设备，此时设备上请勿连接USB设备。描述长度最大32位，仅字母数字下划线。
+        </p>
+        <el-button data-testid="device-desc-edit" @click="openDeviceDescriptionDialog">
+          修改
+        </el-button>
+      </section>
     </div>
 
     <el-dialog v-model="machineCodeDialogVisible" title="机器码" width="520px">
@@ -427,6 +447,31 @@ async function saveDeviceDescription(): Promise<void> {
         <el-button @click="machineCodeDialogVisible = false">关闭</el-button>
         <el-button type="primary" data-testid="machine-code-save" @click="saveQrcode">
           保存二维码
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="deviceDescriptionDialogVisible" title="修改自定义设备描述" width="480px">
+      <div class="device-description-dialog">
+        <label for="device-desc-input">自定义设备描述</label>
+        <el-input
+          id="device-desc-input"
+          v-model="deviceDescription"
+          maxlength="32"
+          data-testid="device-desc-input"
+          placeholder="请输入设备描述"
+        />
+        <p class="dialog-hint">描述长度最大32位，仅可以使用字母数字下划线，不能存在空格</p>
+      </div>
+      <template #footer>
+        <el-button @click="deviceDescriptionDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          data-testid="device-desc-save"
+          :loading="deviceDescriptionSaving"
+          @click="saveDeviceDescription"
+        >
+          确定
         </el-button>
       </template>
     </el-dialog>
@@ -463,46 +508,99 @@ async function saveDeviceDescription(): Promise<void> {
 .system-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: $spacing-5;
+  gap: 14px;
 }
 
 .system-card {
-  border-color: $border-color;
-}
+  min-height: 160px;
+  padding: 18px;
+  background: $bg-white;
+  border: 1px solid $border-color;
+  border-radius: 6px;
 
-.info-list {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: $spacing-3 $spacing-5;
-  margin: 0;
-
-  dt {
-    color: $text-secondary;
-  }
-
-  dd {
-    min-width: 0;
-    margin: 0;
+  h3 {
+    margin: 0 0 6px;
     color: $text-primary;
-    word-break: break-all;
+    font-size: 13px;
+    font-weight: $font-weight-semibold;
   }
 }
 
-.action-row,
-.device-desc-row {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-}
-
-.device-desc-row {
-  margin-top: $spacing-3;
-}
-
-.selected-file,
-.hint {
-  margin: $spacing-3 0 0;
+.system-card-meta {
+  margin: 0 0 10px;
   color: $text-secondary;
+  font-size: 11px;
+  font-weight: $font-weight-semibold;
+}
+
+.system-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.system-card-note {
+  margin: 6px 0 0;
+  color: $text-secondary;
+  font-size: 10px;
+  font-weight: $font-weight-semibold;
+}
+
+.auth-line {
+  margin: 0 0 2px;
+  color: $text-primary;
+  font-size: 12px;
+
+  span {
+    color: #2e7d32;
+    font-weight: $font-weight-semibold;
+  }
+}
+
+.device-description-line {
+  margin-bottom: 2px;
+
+  code {
+    padding: 1px 5px;
+    color: $brand-primary-dark;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 11px;
+    background: #f0f2f5;
+    border-radius: 3px;
+  }
+}
+
+.device-description-warning {
+  margin: 0 0 10px;
+  padding: 4px 8px;
+  color: #e65100;
+  font-size: 10px;
+  font-weight: $font-weight-semibold;
+  background: #fff8e1;
+  border-radius: 4px;
+}
+
+.device-description-dialog {
+  label {
+    display: block;
+    margin-bottom: 4px;
+    color: $text-secondary;
+    font-size: 12px;
+  }
+}
+
+.dialog-hint {
+  margin: 4px 0 0;
+  color: $text-secondary;
+  font-size: 11px;
+}
+
+.system-card :deep(.el-button) {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: $font-weight-semibold;
+  border-radius: 4px;
 }
 
 .machine-code-dialog {
