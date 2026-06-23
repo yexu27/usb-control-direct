@@ -153,6 +153,9 @@ export class MockDevice {
     capacityBytes: 16_000_000_000, deviceType: 'storage', interfaceType: 'mass_storage',
     admissionStatus: 'addable', failReason: '',
   }]
+  public systemUpgradeUploadCount = 0
+  public virusdbUpgradeUploadCount = 0
+  public licenseUploadCount = 0
 
   constructor(private readonly scenario: MockScenario) {
     const { role } = scenario
@@ -407,6 +410,7 @@ export class MockDevice {
   }
 
   private uploadLicenseResponse(payload: Uint8Array): MockResponse {
+    this.licenseUploadCount += 1
     const command = usb_control.CmdUploadLicense.decode(payload)
     const success = this.scenario.uploadedLicenseValid && command.licenseData.length > 0
     if (success) {
@@ -494,6 +498,7 @@ export class MockDevice {
   }
 
   private uploadSystemUpgradeResponse(payload: Uint8Array): MockResponse {
+    this.systemUpgradeUploadCount += 1
     const command = usb_control.CmdUploadSystemUpgrade.decode(payload)
     if (compareVersions(command.targetVersion, this.systemInfo.systemVersion) <= 0) {
       return this.commonErrorResponse(0x0601, '升级包版本低于当前版本')
@@ -506,6 +511,7 @@ export class MockDevice {
   }
 
   private uploadVirusdbUpgradeResponse(payload: Uint8Array): MockResponse {
+    this.virusdbUpgradeUploadCount += 1
     const command = usb_control.CmdUploadVirusdbUpgrade.decode(payload)
     if (command.targetVersion.includes('4')) {
       return this.commonErrorResponse(0x0605, '病毒库版本号命中 4 跳过规则')
