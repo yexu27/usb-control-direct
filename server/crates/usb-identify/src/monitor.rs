@@ -119,6 +119,11 @@ impl DeviceManager {
         self.records.get(parent_path)
     }
 
+    /// 根据序列号查找已连接设备信息。
+    pub fn connected_device_by_serial(&self, serial: &str) -> Option<&UsbDeviceInfo> {
+        self.records.values().find(|r| r.info.serial_number == serial).map(|r| &r.info)
+    }
+
     /// 列出所有已连接设备。
     pub fn list_all(&self) -> Vec<&DeviceRecord> {
         self.records.values().collect()

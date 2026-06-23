@@ -121,7 +121,7 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             }
         };
         let info = match dm_guard.connected_device_by_serial(&cmd.serial_number) {
-            Some(session) => &session.info,
+            Some(info) => info,
             None => {
                 return error_response(
                     ctx.seq_id,
