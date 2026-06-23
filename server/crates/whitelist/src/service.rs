@@ -4,11 +4,10 @@
 //! 缓存在构造时从数据库全量加载，后续随写操作同步更新，无需定期刷新。
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 
-use storage::model::{UsbWhitelist, UsbWhitelistInsert};
-use storage::StorageError;
-use storage::Storage;
+use storage::model::{UsbWhitelist, UsbWhitelistInsert, WhitelistCacheSnapshotEntry};
+use storage::{Storage, StorageError};
 use tracing::{debug, info, warn};
 
 use crate::error::WhitelistError;
@@ -58,6 +57,8 @@ pub struct AddWhitelistRequest {
 pub struct WhitelistManager {
     /// 存储层句柄。
     storage: Storage,
+    /// 串行化白名单增删改与策略全量导入。
+    mutation_lock: Mutex<()>,
     /// 序列号 → 缓存条目，用于快速判断是否在白名单中。
     cache: RwLock<HashMap<String, CacheEntry>>,
 }
@@ -74,6 +75,7 @@ impl WhitelistManager {
     pub fn new(storage: Storage) -> Result<Self, WhitelistError> {
         let manager = WhitelistManager {
             storage,
+            mutation_lock: Mutex::new(()),
             cache: RwLock::new(HashMap::new()),
         };
         manager.reload_cache()?;
@@ -85,22 +87,49 @@ impl WhitelistManager {
     /// 返回:
     /// - 重建成功时返回 `()`；数据库读取失败时返回 [`WhitelistError`]。
     pub fn reload_cache(&self) -> Result<(), WhitelistError> {
+        let _mutation = match self.mutation_lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("白名单变更协调锁中毒，尝试通过全量重载恢复");
+                poisoned.into_inner()
+            }
+        };
+        let mut cache = match self.cache.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("白名单缓存锁中毒，尝试通过全量重载恢复");
+                poisoned.into_inner()
+            }
+        };
         let items = self.storage.whitelist_query_all()?;
-        let mut cache = self
-            .cache
-            .write()
-            .map_err(|e| WhitelistError::Internal(format!("缓存写锁异常: {e}")))?;
-        cache.clear();
-        for item in items {
-            cache.insert(
-                item.serial_number.clone(),
-                CacheEntry {
-                    id: item.id,
-                    permission: item.permission,
-                },
-            );
-        }
-        info!("白名单缓存已重建，共 {} 条", cache.len());
+        let snapshot = items
+            .into_iter()
+            .map(|item| WhitelistCacheSnapshotEntry {
+                id: item.id,
+                serial_number: item.serial_number,
+                permission: item.permission,
+            })
+            .collect();
+        Self::replace_cache(&mut cache, snapshot);
+        self.cache.clear_poison();
+        self.mutation_lock.clear_poison();
+        Ok(())
+    }
+
+    /// 在白名单变更协调锁内执行策略导入并原子替换缓存。
+    ///
+    /// `import` 必须执行完整数据库事务，
+    /// 并返回事务内构造的完整白名单缓存快照。
+    /// 增删改操作与本方法共用同一把锁，
+    /// 不会在数据库提交与缓存替换之间交错。
+    pub fn coordinate_policy_import<F>(&self, import: F) -> Result<(), WhitelistError>
+    where
+        F: FnOnce() -> Result<Vec<WhitelistCacheSnapshotEntry>, StorageError>,
+    {
+        let _mutation = self.lock_mutations()?;
+        let mut cache = self.lock_cache_for_mutation()?;
+        let snapshot = import()?;
+        Self::replace_cache(&mut cache, snapshot);
         Ok(())
     }
 
@@ -113,7 +142,13 @@ impl WhitelistManager {
     /// - 在白名单中时返回 `Some(WhitelistResult)`，携带行 ID 和权限值；
     /// - 不在白名单中时返回 `None`。
     pub fn is_whitelisted(&self, sn: &str) -> Option<WhitelistResult> {
+        if self.mutation_lock.is_poisoned() {
+            return None;
+        }
         let cache = self.cache.read().ok()?;
+        if self.mutation_lock.is_poisoned() {
+            return None;
+        }
         cache.get(sn).map(|entry| WhitelistResult {
             id: entry.id,
             permission: entry.permission,
@@ -131,9 +166,11 @@ impl WhitelistManager {
     /// - 序列号已存在时返回 [`WhitelistError::AlreadyExists`]；
     /// - 存储层失败时返回 [`WhitelistError::Storage`]。
     pub fn add(&self, req: AddWhitelistRequest) -> Result<i64, WhitelistError> {
+        let _mutation = self.lock_mutations()?;
         if req.serial_number.is_empty() {
             return Err(WhitelistError::SerialNumberEmpty);
         }
+        let mut cache = self.lock_cache_for_mutation()?;
 
         let sn = req.serial_number.clone();
         let insert = UsbWhitelistInsert {
@@ -158,21 +195,8 @@ impl WhitelistManager {
         })?;
 
         // 写入缓存
-        match self.cache.write() {
-            Ok(mut cache) => {
-                cache.insert(
-                    sn.clone(),
-                    CacheEntry {
-                        id,
-                        permission,
-                    },
-                );
-                debug!("白名单缓存新增: sn={sn}, id={id}");
-            }
-            Err(e) => {
-                warn!("白名单缓存写锁异常，缓存未同步: {e}");
-            }
-        }
+        cache.insert(sn.clone(), CacheEntry { id, permission });
+        debug!("白名单缓存新增: sn={sn}, id={id}");
 
         Ok(id)
     }
@@ -188,9 +212,11 @@ impl WhitelistManager {
     /// - 条目不存在时返回 [`WhitelistError::NotFound`]；
     /// - 存储层失败时返回 [`WhitelistError::Storage`]。
     pub fn remove(&self, sn: &str) -> Result<(), WhitelistError> {
+        let _mutation = self.lock_mutations()?;
         if sn.is_empty() {
             return Err(WhitelistError::SerialNumberEmpty);
         }
+        let mut cache = self.lock_cache_for_mutation()?;
 
         let item = self
             .storage
@@ -199,15 +225,8 @@ impl WhitelistManager {
 
         self.storage.whitelist_delete(item.id)?;
 
-        match self.cache.write() {
-            Ok(mut cache) => {
-                cache.remove(sn);
-                debug!("白名单缓存删除: sn={sn}");
-            }
-            Err(e) => {
-                warn!("白名单缓存写锁异常，缓存未同步: {e}");
-            }
-        }
+        cache.remove(sn);
+        debug!("白名单缓存删除: sn={sn}");
 
         Ok(())
     }
@@ -230,9 +249,11 @@ impl WhitelistManager {
         permission: Option<i32>,
         description: Option<&str>,
     ) -> Result<(), WhitelistError> {
+        let _mutation = self.lock_mutations()?;
         if sn.is_empty() {
             return Err(WhitelistError::SerialNumberEmpty);
         }
+        let mut cache = self.lock_cache_for_mutation()?;
 
         let item = self
             .storage
@@ -244,17 +265,10 @@ impl WhitelistManager {
         self.storage
             .whitelist_update(item.id, final_permission, description)?;
 
-        match self.cache.write() {
-            Ok(mut cache) => {
-                if let Some(entry) = cache.get_mut(sn) {
-                    entry.permission = final_permission;
-                }
-                debug!("白名单缓存更新: sn={sn}, permission={final_permission}");
-            }
-            Err(e) => {
-                warn!("白名单缓存写锁异常，缓存未同步: {e}");
-            }
+        if let Some(entry) = cache.get_mut(sn) {
+            entry.permission = final_permission;
         }
+        debug!("白名单缓存更新: sn={sn}, permission={final_permission}");
 
         Ok(())
     }
@@ -288,11 +302,64 @@ impl WhitelistManager {
     pub fn storage(&self) -> &Storage {
         &self.storage
     }
+
+    fn lock_mutations(&self) -> Result<MutexGuard<'_, ()>, WhitelistError> {
+        match self.mutation_lock.lock() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                warn!("白名单变更协调锁中毒，拒绝执行变更");
+                drop(poisoned.into_inner());
+                Err(WhitelistError::Internal(
+                    "白名单变更状态异常，需全量重载后恢复".into(),
+                ))
+            }
+        }
+    }
+
+    fn lock_cache_for_mutation(
+        &self,
+    ) -> Result<RwLockWriteGuard<'_, HashMap<String, CacheEntry>>, WhitelistError> {
+        match self.cache.write() {
+            Ok(guard) => Ok(guard),
+            Err(poisoned) => {
+                warn!("白名单缓存锁中毒，拒绝执行变更");
+                drop(poisoned.into_inner());
+                Err(WhitelistError::Internal(
+                    "白名单缓存状态异常，需全量重载后恢复".into(),
+                ))
+            }
+        }
+    }
+
+    fn replace_cache(
+        cache: &mut HashMap<String, CacheEntry>,
+        snapshot: Vec<WhitelistCacheSnapshotEntry>,
+    ) {
+        let replacement = snapshot
+            .into_iter()
+            .map(|item| {
+                (
+                    item.serial_number,
+                    CacheEntry {
+                        id: item.id,
+                        permission: item.permission,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        *cache = replacement;
+        info!("白名单缓存已原子替换，共 {} 条", cache.len());
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
     use tempfile::NamedTempFile;
 
     /// 创建临时数据库并返回 WhitelistManager。
@@ -426,5 +493,165 @@ mod tests {
 
         manager.reload_cache().unwrap();
         assert!(manager.is_whitelisted("SN008").is_some());
+    }
+
+    #[test]
+    fn policy_import_and_add_share_the_same_mutation_lock() {
+        let (_tmp, manager) = make_manager();
+        let manager = Arc::new(manager);
+        let (import_entered_tx, import_entered_rx) = mpsc::channel();
+        let (release_import_tx, release_import_rx) = mpsc::channel();
+        let import_manager = Arc::clone(&manager);
+        let import_thread = thread::spawn(move || {
+            import_manager
+                .coordinate_policy_import(|| {
+                    import_entered_tx.send(()).unwrap();
+                    release_import_rx.recv().unwrap();
+                    Ok(Vec::new())
+                })
+                .unwrap();
+        });
+        import_entered_rx.recv().unwrap();
+
+        let (add_started_tx, add_started_rx) = mpsc::channel();
+        let (add_done_tx, add_done_rx) = mpsc::channel();
+        let add_manager = Arc::clone(&manager);
+        let add_thread = thread::spawn(move || {
+            add_started_tx.send(()).unwrap();
+            let result = add_manager.add(make_request("SERIALIZED_ADD"));
+            add_done_tx.send(result).unwrap();
+        });
+        add_started_rx.recv().unwrap();
+        assert!(matches!(
+            add_done_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+
+        release_import_tx.send(()).unwrap();
+        import_thread.join().unwrap();
+        assert!(add_done_rx.recv().unwrap().is_ok());
+        add_thread.join().unwrap();
+        assert!(manager.is_whitelisted("SERIALIZED_ADD").is_some());
+    }
+
+    #[test]
+    fn policy_import_blocks_authorization_reads_until_cache_snapshot_is_swapped() {
+        let (_tmp, manager) = make_manager();
+        let manager = Arc::new(manager);
+        manager.add(make_request("A")).unwrap();
+        let (committed_tx, committed_rx) = mpsc::channel();
+        let (allow_swap_tx, allow_swap_rx) = mpsc::channel();
+        let imported_whitelist = vec![UsbWhitelistInsert {
+            serial_number: "B".into(),
+            vid: None,
+            pid: None,
+            device_name: None,
+            capacity_bytes: Some(1024),
+            device_type: "storage".into(),
+            description: None,
+            permission: 1,
+            add_method: 0,
+        }];
+        let imported_policies = vec![
+            ("exec_control".into(), 0),
+            ("auto_read_control".into(), 0),
+            ("file_type_blacklist_control".into(), 0),
+        ];
+        let import_manager = Arc::clone(&manager);
+        let import_thread = thread::spawn(move || {
+            import_manager
+                .coordinate_policy_import(|| {
+                    let snapshot = import_manager.storage.policy_import_transaction(
+                        &imported_whitelist,
+                        &imported_policies,
+                        &[],
+                    )?;
+                    committed_tx.send(()).unwrap();
+                    allow_swap_rx.recv().unwrap();
+                    Ok(snapshot)
+                })
+                .unwrap();
+        });
+        committed_rx.recv().unwrap();
+
+        let (read_done_tx, read_done_rx) = mpsc::channel();
+        let read_manager = Arc::clone(&manager);
+        let read_thread = thread::spawn(move || {
+            read_done_tx.send(read_manager.is_whitelisted("A")).unwrap();
+        });
+        assert!(matches!(
+            read_done_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert!(manager
+            .storage
+            .whitelist_query_by_sn("A")
+            .unwrap()
+            .is_none());
+        assert!(manager
+            .storage
+            .whitelist_query_by_sn("B")
+            .unwrap()
+            .is_some());
+
+        allow_swap_tx.send(()).unwrap();
+        import_thread.join().unwrap();
+        assert!(read_done_rx.recv().unwrap().is_none());
+        read_thread.join().unwrap();
+
+        assert!(manager.is_whitelisted("A").is_none());
+        assert!(manager.is_whitelisted("B").is_some());
+    }
+
+    #[test]
+    fn failed_policy_import_keeps_existing_cache() {
+        let (_tmp, manager) = make_manager();
+        manager.add(make_request("A")).unwrap();
+
+        let result = manager.coordinate_policy_import(|| {
+            Err::<Vec<WhitelistCacheSnapshotEntry>, _>(StorageError::Validation(
+                "injected import failure".into(),
+            ))
+        });
+
+        assert!(matches!(result, Err(WhitelistError::Storage(_))));
+        assert!(manager.is_whitelisted("A").is_some());
+    }
+
+    #[test]
+    fn poisoned_mutation_lock_denies_authorization_and_mutations_until_reload() {
+        let (_tmp, manager) = make_manager();
+        let manager = Arc::new(manager);
+        manager.add(make_request("A")).unwrap();
+        let poison_manager = Arc::clone(&manager);
+        let _ = thread::spawn(move || {
+            let _mutation = poison_manager.mutation_lock.lock().unwrap();
+            panic!("poison mutation lock for test");
+        })
+        .join();
+
+        assert!(manager.is_whitelisted("A").is_none());
+        assert!(matches!(
+            manager.add(make_request("B")),
+            Err(WhitelistError::Internal(_))
+        ));
+        assert!(matches!(
+            manager.remove("A"),
+            Err(WhitelistError::Internal(_))
+        ));
+        assert!(matches!(
+            manager.update("A", Some(0), None),
+            Err(WhitelistError::Internal(_))
+        ));
+        assert!(matches!(
+            manager.coordinate_policy_import(|| {
+                Ok::<Vec<WhitelistCacheSnapshotEntry>, StorageError>(Vec::new())
+            }),
+            Err(WhitelistError::Internal(_))
+        ));
+
+        manager.reload_cache().unwrap();
+        assert!(manager.is_whitelisted("A").is_some());
+        assert!(manager.add(make_request("B")).is_ok());
     }
 }

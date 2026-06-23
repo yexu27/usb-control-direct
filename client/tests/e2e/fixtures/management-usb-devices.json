@@ -1,0 +1,22 @@
+[
+  {
+    "serialNumber": "MANAGEMENT-USB-001",
+    "vid": "0951",
+    "pid": "1666",
+    "deviceName": "Management USB",
+    "capacityBytes": 64000000000,
+    "deviceType": "storage",
+    "addable": true,
+    "unavailableReason": ""
+  },
+  {
+    "serialNumber": "",
+    "vid": "ffff",
+    "pid": "0001",
+    "deviceName": "Broken serial USB",
+    "capacityBytes": 8000000000,
+    "deviceType": "storage",
+    "addable": false,
+    "unavailableReason": "设备标识异常"
+  }
+]

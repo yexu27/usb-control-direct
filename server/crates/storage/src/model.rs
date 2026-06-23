@@ -35,6 +35,17 @@ pub struct UsbWhitelistInsert {
     pub add_method: i32,
 }
 
+/// 策略导入事务构造的白名单缓存快照条目。
+#[derive(Debug, Clone)]
+pub struct WhitelistCacheSnapshotEntry {
+    /// 导入后数据库行 ID。
+    pub id: i64,
+    /// 设备序列号。
+    pub serial_number: String,
+    /// 权限值（0: 只读，1: 读写）。
+    pub permission: i32,
+}
+
 /// T02 文件类型黑名单条目。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileTypeBlacklist {

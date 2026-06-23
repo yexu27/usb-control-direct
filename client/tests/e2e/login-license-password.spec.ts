@@ -23,9 +23,9 @@ async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
 }
 
 async function fillAndSubmitLogin(page: Page, username = 'e2e-user'): Promise<void> {
-  await page.locator('[data-testid="login-username"] input').fill(username)
-  await page.locator('[data-testid="login-password"] input').fill('Password1!')
-  await page.locator('[data-testid="login-ip"] input').fill('127.0.0.1')
+  await page.locator('[data-testid="login-username"]').fill(username)
+  await page.locator('[data-testid="login-password"]').fill('Password1!')
+  await page.locator('[data-testid="login-ip"]').fill('127.0.0.1')
   await page.getByTestId('login-submit').click()
 }
 
@@ -62,7 +62,8 @@ test.describe('登录、授权与修改密码闭环', () => {
       await withScenario({ role }, async (_app, page) => {
         await fillAndSubmitLogin(page, `${role}-user`)
         await expect(page).toHaveURL(new RegExp(`#${route}$`))
-        await expect(page.getByTestId('current-user')).toContainText(`${role}-user`)
+        await expect(page.getByTestId('user-menu-trigger')).toBeVisible()
+        await expect(page.getByTestId('user-menu-trigger')).toHaveText('')
       })
     })
   }
@@ -97,7 +98,7 @@ test.describe('登录、授权与修改密码闭环', () => {
       await assertOwnershipLabelsAbsent(page)
 
       await page.getByTestId('machine-code-open').click()
-      await expect(page.getByDisplayValue('USB-CONTROL-E2E-MACHINE-CODE')).toBeVisible()
+      await expect(page.locator('.machine-code-content textarea')).toHaveValue('USB-CONTROL-E2E-MACHINE-CODE')
       await expect(page.getByRole('img', { name: '机器码二维码' })).toBeVisible()
       await page.keyboard.press('Escape')
 
@@ -109,13 +110,13 @@ test.describe('登录、授权与修改密码闭环', () => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [licensePath] })
       }, LICENSE_FIXTURE)
       await page.locator('.file-selector').click()
-      await expect(page.getByDisplayValue('license.txt')).toBeVisible()
+      await expect(page.locator('.el-dialog input[readonly]')).toHaveValue('license.txt')
       await page.getByTestId('license-upload-confirm').click()
 
       await expect(page).toHaveURL(/#\/login$/)
-      await expect(page.locator('[data-testid="login-username"] input')).toHaveValue('')
-      await expect(page.locator('[data-testid="login-password"] input')).toHaveValue('')
-      await expect(page.locator('[data-testid="login-ip"] input')).toHaveValue('')
+      await expect(page.locator('[data-testid="login-username"]')).toHaveValue('')
+      await expect(page.locator('[data-testid="login-password"]')).toHaveValue('')
+      await expect(page.locator('[data-testid="login-ip"]')).toHaveValue('')
       await assertOwnershipLabelsAbsent(page)
     })
   })
@@ -137,7 +138,7 @@ test.describe('登录、授权与修改密码闭环', () => {
       await fillAndSubmitLogin(page, 'admin-user')
       await expect(page).toHaveURL(/#\/users$/)
 
-      await page.getByTestId('current-user').click()
+      await page.getByTestId('user-menu-trigger').click()
       await page.getByText('修改密码', { exact: true }).click()
       await page.getByPlaceholder('请输入旧密码').fill('Password1!')
       await page.getByPlaceholder('请输入新密码').fill('NewPassword2!')

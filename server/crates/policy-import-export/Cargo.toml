@@ -9,6 +9,7 @@ description = "S06 策略包导入导出服务"
 [dependencies]
 common = { workspace = true }
 storage = { workspace = true }
+whitelist = { path = "../whitelist" }
 smcrypto = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

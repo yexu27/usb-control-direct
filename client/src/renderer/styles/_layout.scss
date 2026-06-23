@@ -1,0 +1,297 @@
+@use './tokens' as *;
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--andi-text);
+  font-family: var(--andi-font-family);
+  font-size: $font-size-body;
+  line-height: $line-height-base;
+  background: var(--andi-page-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-desktop {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+  background: var(--andi-white);
+}
+
+.app-window-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--andi-white);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.main-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  height: $app-header-height;
+  padding: 0 12px;
+  color: var(--andi-white);
+  background: linear-gradient(135deg, var(--andi-header-start), var(--andi-header-end));
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shield-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--andi-blue);
+  background: var(--andi-white);
+  border-radius: $radius-control;
+}
+
+.shield-shape {
+  color: var(--andi-blue);
+}
+
+.shield-letter {
+  color: var(--andi-white);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.brand-cn {
+  color: var(--andi-white);
+  font-size: $font-size-brand-cn;
+  font-weight: $font-weight-bold;
+}
+
+.brand-en {
+  color: rgb(255 255 255 / 80%);
+  font-size: $font-size-brand-en;
+}
+
+.header-separator {
+  flex-shrink: 0;
+  width: 1px;
+  height: 28px;
+  background: rgb(255 255 255 / 35%);
+}
+
+.system-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.sys-name {
+  color: var(--andi-white);
+  font-size: 14px;
+  font-weight: $font-weight-medium;
+}
+
+.sys-sub {
+  color: rgb(255 255 255 / 82%);
+  font-size: $font-size-body;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+  margin-left: auto;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.user-menu-trigger,
+.win-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0;
+  color: rgb(255 255 255 / 92%);
+  background: transparent;
+  border: 0;
+  border-radius: $radius-control;
+  cursor: pointer;
+  transition:
+    color $transition-base,
+    background-color $transition-base;
+}
+
+.user-menu-trigger {
+  width: 32px;
+  font-size: 16px;
+}
+
+.win-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.win-btn {
+  width: 36px;
+  font-size: 12px;
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger:focus-visible,
+.win-btn:hover {
+  background: rgb(255 255 255 / 16%);
+}
+
+.win-btn-close:hover {
+  color: var(--andi-white);
+  background: #d93025;
+}
+
+.main-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-sidebar {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  width: $app-sidebar-width;
+  min-width: $app-sidebar-width;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--andi-sidebar);
+  border-right: 1px solid var(--andi-border);
+}
+
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 0;
+  overflow: hidden auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 18px;
+  color: var(--andi-text);
+  font-size: $font-size-body;
+  cursor: pointer;
+  gap: 8px;
+  border-right: 3px solid transparent;
+  transition:
+    color $transition-base,
+    background-color $transition-base,
+    border-color $transition-base;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.nav-item:hover {
+  background: var(--andi-blue-light);
+}
+
+.nav-item.active {
+  color: var(--andi-blue);
+  font-weight: $font-weight-medium;
+  background: var(--andi-active-bg);
+  border-right-color: var(--andi-blue);
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  color: var(--andi-text-light);
+  font-size: $font-size-hint;
+  border-top: 1px solid var(--andi-border);
+}
+
+.sidebar-footer-brand,
+.connection-status {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-footer-brand {
+  margin-bottom: 5px;
+}
+
+.connection-status {
+  color: var(--andi-text-secondary);
+  gap: 6px;
+}
+
+.connection-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.connection-dot.connected {
+  background: var(--andi-success);
+}
+
+.connection-dot.disconnected {
+  background: var(--andi-danger);
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+  padding: $app-content-padding-y $app-content-padding-x;
+  overflow: hidden auto;
+  background: var(--andi-white);
+}
+
+.app-content-scroll {
+  overscroll-behavior: contain;
+}
+
+@media (width < 1000px) {
+  .app-desktop {
+    overflow-x: auto;
+  }
+}

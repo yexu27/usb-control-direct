@@ -12,6 +12,7 @@ export default defineConfig({
       ['tests/unit/layouts/**', 'happy-dom'],
       ['tests/unit/components/**', 'happy-dom'],
       ['tests/unit/services/**', 'happy-dom'],
+      ['tests/unit/pages/**', 'happy-dom'],
     ],
   },
   resolve: {

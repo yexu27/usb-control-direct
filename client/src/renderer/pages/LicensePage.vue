@@ -174,7 +174,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="license-page">
+  <div class="license-page auth-page">
     <div class="win-controls">
       <button class="win-btn" title="最小化" @click="handleMinimize">
         <el-icon><Minus /></el-icon>
@@ -187,13 +187,13 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <section class="license-card" aria-labelledby="license-title">
+    <section class="license-card auth-card app-card" aria-labelledby="license-title">
       <div class="license-logo" aria-hidden="true">
         <svg viewBox="0 0 16 16" role="img">
           <path d="M8 1 3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1Z" />
         </svg>
       </div>
-      <h1 id="license-title">{{ isExpired ? '授权已到期' : '设备授权' }}</h1>
+      <h1 id="license-title" class="auth-title">{{ isExpired ? '授权已到期' : '设备授权' }}</h1>
       <p class="license-description">
         {{
           isExpired
@@ -303,9 +303,9 @@ onUnmounted(() => {
   justify-content: center;
   height: 100vh;
   overflow: hidden;
-  color: $text-primary;
-  font-family: $font-family-base;
-  background: $bg-page;
+  color: var(--andi-text);
+  font-family: var(--andi-font-family);
+  background: linear-gradient(135deg, var(--andi-page-bg), #f5f7fa);
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -345,15 +345,16 @@ onUnmounted(() => {
   width: 400px;
   padding: 40px 32px;
   text-align: center;
-  background: $bg-white;
-  border-radius: $border-radius-card;
-  box-shadow: $box-shadow;
+  background: var(--andi-white);
+  border-radius: var(--andi-radius-window);
+  box-shadow: var(--andi-shadow-window);
   -webkit-app-region: no-drag;
 
   h1 {
     margin: 0 0 $spacing-1;
-    font-size: $font-xl;
-    font-weight: $font-weight-semibold;
+    color: var(--andi-text);
+    font-size: 17px;
+    font-weight: 700;
   }
 }
 
@@ -364,8 +365,8 @@ onUnmounted(() => {
   width: 52px;
   height: 52px;
   margin: 0 auto $spacing-6;
-  color: $brand-primary;
-  background: $brand-primary-light;
+  color: var(--andi-blue);
+  background: var(--andi-blue-light);
   border-radius: 10px;
 
   svg {
@@ -377,7 +378,7 @@ onUnmounted(() => {
 
 .license-description {
   margin: 0 0 $spacing-8;
-  color: $text-secondary;
+  color: var(--andi-text-secondary);
   font-size: $font-base;
   line-height: $line-height-base;
 }
@@ -396,7 +397,7 @@ onUnmounted(() => {
 
 .license-hint {
   margin: $spacing-7 0 0;
-  color: $text-secondary;
+  color: var(--andi-text-secondary);
   font-size: $font-sm;
 }
 
@@ -429,16 +430,16 @@ onUnmounted(() => {
   width: 100%;
   margin-bottom: $spacing-5;
   padding: $spacing-8;
-  color: $text-regular;
-  background: $bg-white;
-  border: 2px dashed $border-color;
+  color: var(--andi-text-secondary);
+  background: var(--andi-white);
+  border: 1px dashed var(--andi-border);
   border-radius: $border-radius-lg;
   cursor: pointer;
   gap: $spacing-2;
 
   &:hover:not(:disabled) {
-    color: $brand-primary;
-    border-color: $brand-primary;
+    color: var(--andi-blue);
+    border-color: var(--andi-blue);
   }
 
   small {

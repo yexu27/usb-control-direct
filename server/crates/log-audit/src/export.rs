@@ -40,11 +40,35 @@ pub fn generate_zip(filename: &str, csv_content: &str) -> Result<Vec<u8>, AuditE
 /// - 带时间戳的 ZIP 文件名。
 pub fn generate_filename(log_type: &str) -> String {
     let now = chrono::Local::now();
-    let timestamp = now.format("%Y%m%d%H%M%S");
+    generate_filename_with_timestamp(log_type, &now.format("%Y%m%d%H%M%S").to_string())
+}
+
+fn generate_filename_with_timestamp(log_type: &str, timestamp: &str) -> String {
     match log_type {
         "usb_audit" => format!("USBUsageLog{}.zip", timestamp),
         "malware" => format!("MalwareDetectionLog{}.zip", timestamp),
         "operation" => format!("OperationLog{}.zip", timestamp),
         _ => format!("Log{}.zip", timestamp),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_filename_with_timestamp;
+
+    #[test]
+    fn generated_export_filename_matches_prd() {
+        assert_eq!(
+            generate_filename_with_timestamp("usb_audit", "20260101000000"),
+            "USBUsageLog20260101000000.zip",
+        );
+        assert_eq!(
+            generate_filename_with_timestamp("malware", "20260101000000"),
+            "MalwareDetectionLog20260101000000.zip",
+        );
+        assert_eq!(
+            generate_filename_with_timestamp("operation", "20260101000000"),
+            "OperationLog20260101000000.zip",
+        );
     }
 }

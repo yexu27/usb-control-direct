@@ -78,7 +78,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function finishAuthentication(): Promise<void> {
     const connection = useConnectionStore()
-    const bootstrap = useBootstrapStore()
+    const bootstrapStore = useBootstrapStore()
 
     await connection.applyStateEvent('AUTH_SUCCESS')
 
@@ -99,7 +99,7 @@ export const useSessionStore = defineStore('session', () => {
 
     await connection.applyStateEvent('LICENSE_AUTHORIZED')
     try {
-      await bootstrap.loadForRole(token.value, role.value)
+      await bootstrapStore.loadForRole(token.value, role.value)
       await connection.applyStateEvent('CONFIG_LOADED')
       startInactivityTimer()
     } catch (error: unknown) {
@@ -108,7 +108,7 @@ export const useSessionStore = defineStore('session', () => {
       } catch {
         // 网络断开可能已将主进程状态推进到 DISCONNECTED。
       }
-      bootstrap.clear()
+      bootstrapStore.clear()
       clearSession()
       await connection.disconnect(true).catch(() => {})
       throw error
@@ -147,7 +147,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function logout(): Promise<void> {
     const connection = useConnectionStore()
-    const bootstrap = useBootstrapStore()
+    const bootstrapStore = useBootstrapStore()
     const currentToken = token.value
 
     try {
@@ -157,7 +157,7 @@ export const useSessionStore = defineStore('session', () => {
     } catch {
       // 本地登出必须继续，远端失败交由装置侧会话超时兜底。
     } finally {
-      bootstrap.clear()
+      bootstrapStore.clear()
       clearSession()
       await connection.disconnect(true).catch(() => {})
     }

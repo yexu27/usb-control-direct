@@ -94,7 +94,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
 
     if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
         log_operation(ctx, session, "system_management", "system_upgrade", &cmd.target_version, 1, Some("SHA-256 校验失败"));
-        return error_response(ctx.seq_id, ResultCode::ValidationFailed, "升级包 SHA-256 校验失败");
+        return error_response(ctx.seq_id, ResultCode::UpgradeChecksumError, "升级包 SHA-256 校验失败");
     }
 
     match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
@@ -183,7 +183,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
 
     if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
         log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("SHA-256 校验失败"));
-        return error_response(ctx.seq_id, ResultCode::ValidationFailed, "病毒库升级包 SHA-256 校验失败");
+        return error_response(ctx.seq_id, ResultCode::UpgradeChecksumError, "升级包 SHA-256 校验失败");
     }
 
     if let Err(e) = mgr.validate_upgrade(&cmd.target_version, &current_version) {
@@ -271,7 +271,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
                 ctx,
                 session,
                 "system_management",
-                "update_device_desc",
+                "device_desc_update",
                 &cmd.description,
                 0,
                 None,
@@ -283,7 +283,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
                 ctx,
                 session,
                 "system_management",
-                "update_device_desc",
+                "device_desc_update",
                 &cmd.description,
                 1,
                 Some(&e.to_string()),

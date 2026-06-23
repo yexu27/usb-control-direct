@@ -1,5 +1,6 @@
 module.exports = {
   root: true,
+  ignorePatterns: ['src/shared/proto/usb_control.*'],
   env: {
     node: true,
     browser: true,

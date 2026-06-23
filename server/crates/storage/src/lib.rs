@@ -4,6 +4,7 @@
 //! 上层通过 `Storage` 句柄调用，禁止暴露 `rusqlite::Connection`。
 
 pub mod error;
+pub mod extension;
 pub mod model;
 
 pub(crate) mod pool;
@@ -22,6 +23,7 @@ pub(crate) mod log_retention_event;
 pub(crate) mod policy_import;
 
 pub use error::StorageError;
+pub use extension::normalize_extension;
 
 use std::path::Path;
 

@@ -2,20 +2,31 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { usb_control } from '../../shared/proto/usb_control'
 import type { UserRole } from '../../shared/connection-state'
-import { listWhitelist } from '@/services/whitelist-service'
-import { getFilePolicy } from '@/services/file-policy-service'
+import { useFilePolicyStore } from './file-policy'
+import { useWhitelistStore } from './whitelist'
 import { getSystemInfo } from '@/services/system-service'
 import { listUsers } from '@/services/user-service'
 
+type LoadResult =
+  | { success: true }
+  | { success: false; error: unknown }
+
+async function captureLoad(load: Promise<void>): Promise<LoadResult> {
+  try {
+    await load
+    return { success: true }
+  } catch (error: unknown) {
+    return { success: false, error }
+  }
+}
+
 export const useBootstrapStore = defineStore('bootstrap', () => {
-  const whitelist = ref<usb_control.RspListWhitelist | null>(null)
-  const filePolicy = ref<usb_control.RspFilePolicy | null>(null)
   const systemInfo = ref<usb_control.RspSystemInfo | null>(null)
   const users = ref<usb_control.RspListUsers | null>(null)
 
   function clear(): void {
-    whitelist.value = null
-    filePolicy.value = null
+    useFilePolicyStore().clear()
+    useWhitelistStore().clear()
     systemInfo.value = null
     users.value = null
   }
@@ -24,12 +35,16 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
     clear()
 
     if (role === 'operator') {
-      const [whitelistResponse, filePolicyResponse] = await Promise.all([
-        listWhitelist(sessionToken),
-        getFilePolicy(sessionToken),
+      const [filePolicyResult, whitelistResult] = await Promise.all([
+        captureLoad(useFilePolicyStore().load(sessionToken)),
+        captureLoad(useWhitelistStore().listWhitelist(sessionToken)),
       ])
-      whitelist.value = whitelistResponse
-      filePolicy.value = filePolicyResponse
+      if (!filePolicyResult.success) {
+        throw filePolicyResult.error
+      }
+      if (!whitelistResult.success) {
+        throw whitelistResult.error
+      }
       return
     }
 
@@ -44,8 +59,6 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
   }
 
   return {
-    whitelist,
-    filePolicy,
     systemInfo,
     users,
     clear,

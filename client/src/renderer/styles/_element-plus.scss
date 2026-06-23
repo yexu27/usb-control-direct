@@ -1,0 +1,200 @@
+@use './tokens' as *;
+
+.el-button {
+  min-height: 28px;
+  padding: 6px 14px;
+  border-radius: $radius-control;
+  font-size: $font-size-control;
+  transition:
+    color $transition-base,
+    background-color $transition-base,
+    border-color $transition-base,
+    box-shadow $transition-base;
+}
+
+.el-button--primary {
+  background-color: var(--andi-blue);
+  border-color: var(--andi-blue);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background-color: var(--andi-blue-dark);
+  border-color: var(--andi-blue-dark);
+}
+
+.el-button--danger.is-plain {
+  color: var(--andi-danger);
+  background: transparent;
+  border-color: #ef9a9a;
+}
+
+.el-button--danger.is-plain:hover,
+.el-button--danger.is-plain:focus {
+  color: var(--andi-white);
+  background: var(--andi-danger);
+  border-color: var(--andi-danger);
+}
+
+.app-row-actions .el-button {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: $font-size-hint;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: $radius-control;
+  transition:
+    box-shadow $transition-base,
+    border-color $transition-base;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: 30px;
+  font-size: $font-size-control;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: var(--andi-shadow-control-focus);
+}
+
+.el-form-item {
+  margin-bottom: 14px;
+}
+
+.el-form-item__label {
+  color: var(--andi-text-secondary);
+  font-size: $font-size-control;
+}
+
+.el-form-item__error {
+  color: var(--andi-danger);
+  font-size: $font-size-hint;
+}
+
+.el-tabs__header {
+  margin-bottom: 12px;
+}
+
+.el-tabs__nav-wrap::after {
+  display: none;
+}
+
+.el-tabs__nav {
+  padding: 2px;
+  background: var(--andi-blue-bg);
+  border: 1px solid var(--andi-border);
+  border-radius: $radius-control;
+}
+
+.el-tabs__item {
+  height: 28px;
+  padding: 0 14px;
+  color: var(--andi-text-secondary);
+  font-size: $font-size-control;
+  border-radius: $radius-control;
+  transition:
+    color $transition-base,
+    background-color $transition-base;
+}
+
+.el-tabs__active-bar {
+  display: none;
+}
+
+.el-tabs__item:hover,
+.el-tabs__item.is-active {
+  color: var(--andi-blue);
+  background: var(--andi-white);
+}
+
+.el-table {
+  color: var(--andi-text);
+  font-size: $font-size-body;
+}
+
+.el-table th.el-table__cell {
+  padding: 7px 12px;
+  color: var(--andi-text-secondary);
+  font-size: $font-size-table-head;
+  font-weight: $font-weight-medium;
+  background: var(--andi-blue-bg);
+}
+
+.el-table td.el-table__cell {
+  padding: 7px 12px;
+}
+
+.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+  background: var(--andi-blue-light);
+}
+
+.data-table-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.data-table {
+  width: 100%;
+}
+
+.app-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.app-table-error {
+  padding: 18px;
+  color: var(--andi-danger);
+  font-size: $font-size-body;
+  text-align: center;
+  background: var(--andi-danger-bg);
+  border-radius: $radius-card;
+}
+
+.app-table-pagination {
+  align-self: flex-end;
+  font-size: $font-size-hint;
+}
+
+.el-pagination {
+  --el-pagination-font-size: #{$font-size-hint};
+}
+
+.el-dialog {
+  border-radius: $radius-dialog;
+  box-shadow: $shadow-dialog;
+}
+
+.el-dialog__header {
+  padding: 16px 18px 10px;
+}
+
+.el-dialog__title {
+  color: var(--andi-text);
+  font-size: 15px;
+  font-weight: $font-weight-medium;
+}
+
+.el-dialog__body {
+  padding: 10px 18px 14px;
+  color: var(--andi-text-secondary);
+  font-size: $font-size-body;
+}
+
+.el-dialog__footer {
+  padding: 10px 18px 16px;
+}
+
+.el-message-box {
+  border-radius: $radius-dialog;
+}

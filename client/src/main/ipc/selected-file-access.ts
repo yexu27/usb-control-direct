@@ -19,6 +19,15 @@ export class SelectedFileAccess {
     }
   }
 
+  revoke(input: unknown): void {
+    if (typeof input !== 'string' || !isAbsolute(input)) {
+      throw new Error('文件路径无效')
+    }
+
+    this.readablePaths.delete(input)
+    this.writablePaths.delete(input)
+  }
+
   async readSelectedFile(input: unknown): Promise<Uint8Array> {
     const filePath = this.parseSelectedPath(input, this.readablePaths)
     const fileContent = await readFile(filePath)
