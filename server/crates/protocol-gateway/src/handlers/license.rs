@@ -1,6 +1,7 @@
 //! 授权管理 handler（0x0005/0x0007）。
 
 use prost::Message;
+use tracing::info;
 
 use common::code::ResultCode;
 use common::proto::{
@@ -58,6 +59,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
 
     match license_upgrade::generate_machine_code() {
         Ok(result) => {
+            info!(user = %session.username, "下载机器码");
             log_operation(ctx, session, "system_management", "get_machine_code", "机器码", 0, None);
             let rsp = RspMachineCode {
                 machine_code: result.machine_code,
@@ -130,7 +132,10 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     // 获取当前机器码用于校验
     let machine_code = match license_upgrade::generate_machine_code() {
-        Ok(r) => r.machine_code,
+        Ok(ref result) => {
+            info!(mc = %result.machine_code, "服务端真实机器码");
+            result.machine_code.clone()
+        }
         Err(_e) => {
             return license_error(ctx.seq_id, ResultCode::InternalError, "机器码获取失败");
         }
@@ -138,6 +143,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match validator.validate(&cmd.license_data, &machine_code) {
         Ok(info) => {
+            info!(user = %session.username, expire = info.expire_time, "授权文件校验成功");
             if let Err(_e) = storage.config_set("auth_status", "authorized") {
                 log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
@@ -158,6 +164,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 .unwrap_or_default()
         }
         Err(e) => {
+            info!(user = %session.username, error = %e, "授权文件校验失败");
             let code = e.to_result_code();
             log_operation(
                 ctx,

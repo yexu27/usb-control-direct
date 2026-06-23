@@ -1,6 +1,7 @@
 //! CMD_LOGIN (0x0001) handler。
 
 use prost::Message;
+use tracing::info;
 
 use auth_session::service::LoginResult;
 use common::code::ResultCode;
@@ -57,6 +58,7 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match result {
         Ok(login_result) => {
+            info!(user = %login_result.username, role = login_result.role, source_ip = %ctx.source_ip, "用户登录成功");
             let role_str = role_int_to_str(login_result.role)
                 .ok()
                 .unwrap_or("unknown");

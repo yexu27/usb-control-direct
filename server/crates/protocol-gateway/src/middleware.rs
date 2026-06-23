@@ -4,6 +4,7 @@
 //! 权限中间件根据 Router 注册的角色声明校验当前会话角色。
 
 use prost::Message;
+use tracing::warn;
 
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
@@ -84,6 +85,7 @@ pub fn check_permission(session: &SessionInfo, allowed_roles: &[i32]) -> Result<
     if allowed_roles.contains(&session.role) {
         Ok(())
     } else {
+        warn!(user = %session.username, role = session.role, allowed = ?allowed_roles, "权限拒绝");
         Err(ResultCode::PermissionDenied)
     }
 }

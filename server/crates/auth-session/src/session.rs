@@ -10,6 +10,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use tracing::warn;
 
 use crate::error::AuthError;
 
@@ -82,6 +83,7 @@ impl SessionManager {
             Some(info) => {
                 let now = now_unix();
                 if now - info.last_active_time > SESSION_TIMEOUT_SECS {
+                    warn!(user = %info.username, source_ip = %info.source_ip, "会话超时，token 已失效");
                     drop(sessions);
                     self.remove_token(token);
                     return Err(AuthError::Unauthenticated);
