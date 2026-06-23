@@ -14,6 +14,7 @@ import {
 } from '../../../src/renderer/services/user-service'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('../../../src/renderer/services/user-service', () => ({
   listUsers: vi.fn(),
@@ -23,8 +24,13 @@ vi.mock('../../../src/renderer/services/user-service', () => ({
 }))
 
 vi.mock('element-plus', () => ({
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   ElMessageBox: { confirm: vi.fn(() => Promise.resolve()) },
+}))
+
+vi.mock('../../../src/renderer/utils/operation-feedback', () => ({
+  errorMessage: (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
+  showErrorDialog: vi.fn(() => Promise.resolve()),
+  showSuccessToast: vi.fn(),
 }))
 
 let pinia: Pinia
@@ -86,6 +92,7 @@ function mountPage() {
         ElCard: { template: '<section><slot /></section>' },
         ElButton: { emits: ['click'], template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot /><slot name="footer" /></section>' },
+        ElAlert: { props: ['title'], template: '<strong v-bind="$attrs">{{ title }}</strong>' },
         ElForm: ElFormStub,
         ElFormItem: { template: '<label><slot /></label>' },
         ElInput: ElInputStub,
@@ -155,7 +162,26 @@ describe('UsersPage', () => {
     await flushPromises()
 
     expect(createUser).toHaveBeenCalledWith('token', 'new_operator', 'operator', 'NewPass@123', 'NewPass@123')
+    expect(showSuccessToast).toHaveBeenCalledWith('用户创建成功')
     expect(listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps create dialog open and shows inline service error when creating user fails', async () => {
+    vi.mocked(createUser).mockRejectedValue(new Error('用户名已存在'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="create-user-open"]').trigger('click')
+    await wrapper.get('[data-testid="create-username"]').setValue('admin')
+    await wrapper.get('[data-testid="create-role"]').setValue('operator')
+    await wrapper.get('[data-testid="create-password"]').setValue('NewPass@123')
+    await wrapper.get('[data-testid="create-confirm-password"]').setValue('NewPass@123')
+    await wrapper.get('[data-testid="create-user-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="create-user-error"]').text()).toContain('用户名已存在')
+    expect(wrapper.find('[data-testid="create-user-submit"]').exists()).toBe(true)
+    expect(showSuccessToast).not.toHaveBeenCalledWith('用户创建成功')
   })
 
   it('deletes non-builtin users only after confirmation', async () => {
@@ -173,7 +199,20 @@ describe('UsersPage', () => {
       expect.any(Object),
     )
     expect(deleteUser).toHaveBeenCalledWith('token', 'zhang_wei')
+    expect(showSuccessToast).toHaveBeenCalledWith('用户已删除')
     expect(listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows centered error dialog when deleting user fails', async () => {
+    vi.mocked(deleteUser).mockRejectedValue(new Error('用户不存在'))
+    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as never)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="delete-user-zhang_wei"]').trigger('click')
+    await flushPromises()
+
+    expect(showErrorDialog).toHaveBeenCalledWith('用户删除失败', '用户不存在')
   })
 
   it('resets password after validating complexity and matching confirmation', async () => {
@@ -188,6 +227,23 @@ describe('UsersPage', () => {
     await flushPromises()
 
     expect(resetPassword).toHaveBeenCalledWith('token', 'zhang_wei', 'Reset@123', 'Reset@123')
+    expect(showSuccessToast).toHaveBeenCalledWith('密码已重置')
     expect(listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps reset dialog open and shows inline service error when reset fails', async () => {
+    vi.mocked(resetPassword).mockRejectedValue(new Error('密码复杂度不符合要求'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="reset-password-zhang_wei"]').trigger('click')
+    await wrapper.get('[data-testid="reset-password"]').setValue('short')
+    await wrapper.get('[data-testid="reset-confirm-password"]').setValue('short')
+    await wrapper.get('[data-testid="reset-password-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="reset-password-error"]').text()).toContain('密码复杂度不符合要求')
+    expect(wrapper.find('[data-testid="reset-password-submit"]').exists()).toBe(true)
+    expect(showSuccessToast).not.toHaveBeenCalledWith('密码已重置')
   })
 })

@@ -279,6 +279,18 @@ test.describe('管理员与审计员页面业务闭环', () => {
       await page.getByTestId('create-user-submit').click()
       await expectLatestMessage(page, '用户创建成功')
       await expect(page.getByText('new_operator', { exact: true })).toBeVisible()
+
+      await page.getByTestId('create-user-open').click()
+      await page.getByTestId('create-username').fill('new_operator')
+      await page.getByTestId('create-role').click()
+      await page.getByRole('option', { name: '操作员' }).click()
+      await page.getByTestId('create-password').fill('NewPass@123')
+      await page.getByTestId('create-confirm-password').fill('NewPass@123')
+      await page.getByTestId('create-user-submit').click()
+      await expect(page.getByTestId('create-user-error')).toContainText('用户名已存在')
+      await expect(page.getByTestId('create-user-submit')).toBeVisible()
+      await page.getByRole('button', { name: '取消' }).click()
+
       await page.getByTestId('delete-user-new_operator').click()
       const confirmBox = page.locator('.app-confirm-message-box')
       await expect(confirmBox).toContainText('是否要删除 new_operator 用户？')

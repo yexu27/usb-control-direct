@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { type FormInstance, type FormRules } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
@@ -14,6 +14,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { validatePasswordComplexity } from '@/utils/password-validator'
 import { confirmAction } from '@/utils/confirm-action'
+import { errorMessage as formatErrorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 import {
   USER_ROLE_OPTIONS,
   formatCreatedAt,
@@ -56,6 +57,8 @@ const createDialogVisible = ref(false)
 const resetDialogVisible = ref(false)
 const createSubmitting = ref(false)
 const resetSubmitting = ref(false)
+const createErrorMessage = ref('')
+const resetErrorMessage = ref('')
 const createFormRef = ref<FormInstance | null>(null)
 const resetFormRef = ref<FormInstance | null>(null)
 
@@ -123,16 +126,16 @@ onMounted(() => {
   void loadUsers()
 })
 
-function canOperate(): boolean {
+async function canOperate(): Promise<boolean> {
   if (connection.isConnected) {
     return true
   }
-  ElMessage.warning(DISCONNECTED_MESSAGE)
+  await showErrorDialog('操作失败', DISCONNECTED_MESSAGE)
   return false
 }
 
-function showError(error: unknown, fallback: string): void {
-  ElMessage.error(error instanceof Error ? error.message : fallback)
+async function showError(error: unknown, fallback: string): Promise<void> {
+  await showErrorDialog(fallback, formatErrorMessage(error, fallback))
 }
 
 function mapUserItem(item: usb_control.IUserItem): UserRow {
@@ -146,7 +149,7 @@ function mapUserItem(item: usb_control.IUserItem): UserRow {
 }
 
 async function loadUsers(): Promise<void> {
-  if (!canOperate()) {
+  if (!(await canOperate())) {
     return
   }
   isLoading.value = true
@@ -156,7 +159,8 @@ async function loadUsers(): Promise<void> {
     users.value = response.users.map(mapUserItem)
   } catch (error: unknown) {
     users.value = []
-    errorMessage.value = error instanceof Error ? error.message : '用户列表加载失败'
+    errorMessage.value = formatErrorMessage(error, '用户列表加载失败')
+    await showError(error, '用户列表加载失败')
   } finally {
     isLoading.value = false
   }
@@ -167,6 +171,7 @@ function resetCreateForm(): void {
   createForm.role = 'operator'
   createForm.password = ''
   createForm.confirmPassword = ''
+  createErrorMessage.value = ''
   createFormRef.value?.clearValidate()
 }
 
@@ -180,6 +185,7 @@ function openResetDialog(username: string): void {
   resetForm.username = username
   resetForm.password = ''
   resetForm.confirmPassword = ''
+  resetErrorMessage.value = ''
   resetDialogVisible.value = true
   void nextTick(() => resetFormRef.value?.clearValidate())
 }
@@ -192,9 +198,10 @@ function validateUsername(username: string): string {
 }
 
 async function submitCreateUser(): Promise<void> {
-  if (createFormRef.value == null || createSubmitting.value || !canOperate()) {
+  if (createFormRef.value == null || createSubmitting.value || !(await canOperate())) {
     return
   }
+  createErrorMessage.value = ''
   const valid = await createFormRef.value.validate().catch(() => false)
   if (!valid) {
     return
@@ -209,18 +216,18 @@ async function submitCreateUser(): Promise<void> {
       createForm.password,
       createForm.confirmPassword,
     )
-    ElMessage.success('用户创建成功')
+    showSuccessToast('用户创建成功')
     createDialogVisible.value = false
     await loadUsers()
   } catch (error: unknown) {
-    showError(error, '用户创建失败')
+    createErrorMessage.value = formatErrorMessage(error, '用户创建失败')
   } finally {
     createSubmitting.value = false
   }
 }
 
 async function handleDeleteUser(username: string): Promise<void> {
-  if (!canOperate()) {
+  if (!(await canOperate())) {
     return
   }
   try {
@@ -235,17 +242,18 @@ async function handleDeleteUser(username: string): Promise<void> {
   }
   try {
     await deleteUser(session.token, username)
-    ElMessage.success('用户已删除')
+    showSuccessToast('用户已删除')
     await loadUsers()
   } catch (error: unknown) {
-    showError(error, '用户删除失败')
+    await showError(error, '用户删除失败')
   }
 }
 
 async function submitResetPassword(): Promise<void> {
-  if (resetFormRef.value == null || resetSubmitting.value || !canOperate()) {
+  if (resetFormRef.value == null || resetSubmitting.value || !(await canOperate())) {
     return
   }
+  resetErrorMessage.value = ''
   const valid = await resetFormRef.value.validate().catch(() => false)
   if (!valid) {
     return
@@ -258,11 +266,11 @@ async function submitResetPassword(): Promise<void> {
       resetForm.password,
       resetForm.confirmPassword,
     )
-    ElMessage.success('密码已重置')
+    showSuccessToast('密码已重置')
     resetDialogVisible.value = false
     await loadUsers()
   } catch (error: unknown) {
-    showError(error, '密码重置失败')
+    resetErrorMessage.value = formatErrorMessage(error, '密码重置失败')
   } finally {
     resetSubmitting.value = false
   }
@@ -343,6 +351,15 @@ async function submitResetPassword(): Promise<void> {
     </el-card>
 
     <el-dialog v-model="createDialogVisible" title="新建用户" width="520px">
+      <el-alert
+        v-if="createErrorMessage"
+        class="dialog-error-alert"
+        :title="createErrorMessage"
+        type="error"
+        show-icon
+        :closable="false"
+        data-testid="create-user-error"
+      />
       <el-form
         ref="createFormRef"
         :model="createForm"
@@ -393,6 +410,15 @@ async function submitResetPassword(): Promise<void> {
     </el-dialog>
 
     <el-dialog v-model="resetDialogVisible" title="重置密码" width="520px">
+      <el-alert
+        v-if="resetErrorMessage"
+        class="dialog-error-alert"
+        :title="resetErrorMessage"
+        type="error"
+        show-icon
+        :closable="false"
+        data-testid="reset-password-error"
+      />
       <el-form
         ref="resetFormRef"
         :model="resetForm"
@@ -469,5 +495,9 @@ async function submitResetPassword(): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   gap: $spacing-2;
+}
+
+.dialog-error-alert {
+  margin-bottom: $spacing-4;
 }
 </style>
