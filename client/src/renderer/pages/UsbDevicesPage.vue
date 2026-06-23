@@ -8,11 +8,11 @@ import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
 import { getConnectedDevices } from '@/services/device-service'
 import { listManagementUsbStorageDevices } from '@/services/management-usb-service'
-import { ServiceError } from '@/services/send-command'
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
 import { confirmAction } from '@/utils/confirm-action'
+import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 
 const PAGE_SIZE = 20
 const DISCONNECTED_MESSAGE = '装置已断开连接，无法修改白名单'
@@ -64,10 +64,12 @@ const addSource = ref<AddSource>('device')
 const candidates = ref<CandidateDevice[]>([])
 const candidatesLoading = ref(false)
 const addSubmitting = ref(false)
+const addErrorMessage = ref('')
 const addEpoch = ref(0)
 const editVisible = ref(false)
 const editTarget = ref<WhitelistRow | null>(null)
 const editSubmitting = ref(false)
+const editErrorMessage = ref('')
 const editEpoch = ref(0)
 const addOwnership = new Set<string>()
 const editOwnership = new Set<string>()
@@ -129,8 +131,8 @@ watch([() => rows.value.length, pageSize], ([total, size]) => {
   page.value = Math.min(page.value, Math.max(1, Math.ceil(total / size)))
 })
 
-function showError(error: unknown, fallback: string): void {
-  ElMessage.error(error instanceof ServiceError ? error.message : fallback)
+async function showError(error: unknown, fallback: string): Promise<void> {
+  await showErrorDialog(fallback, errorMessage(error, fallback))
 }
 function canWrite(): boolean {
   if (connection.isConnected) {
@@ -172,6 +174,7 @@ async function openAddDialog(source: AddSource): Promise<void> {
   const dialogEpoch = addEpoch.value
   addSource.value = source
   addVisible.value = true
+  addErrorMessage.value = ''
   candidates.value = []
   const epoch = ++loadEpochs[source]
   candidatesLoading.value = true
@@ -209,10 +212,9 @@ async function openAddDialog(source: AddSource): Promise<void> {
       addVisible.value && addSource.value === source && addEpoch.value === dialogEpoch &&
       loadEpochs[source] === epoch
     ) {
-      showError(
-        error,
-        source === 'management' ? MANAGEMENT_ENUM_ERROR : '装置端 USB 设备读取失败，请重试',
-      )
+      addErrorMessage.value = source === 'management'
+        ? MANAGEMENT_ENUM_ERROR
+        : errorMessage(error, '装置端 USB 设备读取失败，请重试')
     }
   } finally {
     if (addSource.value === source && loadEpochs[source] === epoch) {
@@ -226,6 +228,7 @@ function changeAddVisible(visible: boolean): void {
     addEpoch.value += 1
     invalidateCandidateLoad(addSource.value)
     candidates.value = []
+    addErrorMessage.value = ''
   }
   addVisible.value = visible
 }
@@ -249,6 +252,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
   }
   addOwnership.add(ownershipKey)
   addSubmitting.value = true
+  addErrorMessage.value = ''
   try {
     let candidate = dialogCandidate
     if (source === 'management') {
@@ -257,7 +261,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
         currentDevices = mapManagementCandidates(await listManagementUsbStorageDevices())
       } catch {
         if (addEpoch.value === dialogEpoch && addVisible.value && addSource.value === source) {
-          ElMessage.error(MANAGEMENT_ENUM_ERROR)
+          addErrorMessage.value = MANAGEMENT_ENUM_ERROR
         }
         return
       }
@@ -269,7 +273,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
       )
       const current = matches.length === 1 ? matches[0] : undefined
       if (current == null || !current.addable || current.serialNumber.trim() === '') {
-        ElMessage.warning(REMOVED_MESSAGE)
+        addErrorMessage.value = REMOVED_MESSAGE
         return
       }
       candidate = current
@@ -298,10 +302,10 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
       return
     }
     changeAddVisible(false)
-    ElMessage.success('添加成功，重新拔插后生效')
+    showSuccessToast('添加成功，重新拔插后生效')
   } catch (error: unknown) {
     if (addEpoch.value === dialogEpoch && addVisible.value && addSource.value === source) {
-      showError(error, '白名单添加失败')
+      addErrorMessage.value = errorMessage(error, '白名单添加失败')
     }
   } finally {
     addSubmitting.value = false
@@ -314,6 +318,7 @@ function openEditDialog(row: WhitelistRow): void {
     return
   }
   editEpoch.value += 1
+  editErrorMessage.value = ''
   editTarget.value = row
   editVisible.value = true
 }
@@ -322,6 +327,7 @@ function changeEditVisible(visible: boolean): void {
     editEpoch.value += 1
     editVisible.value = false
     editTarget.value = null
+    editErrorMessage.value = ''
     return
   }
   if (editTarget.value == null) {
@@ -344,6 +350,7 @@ async function handleEdit(value: EditWhitelistFormValue): Promise<void> {
   }
   editOwnership.add(serialNumber)
   editSubmitting.value = true
+  editErrorMessage.value = ''
   try {
     await whitelist.updateWhitelist(session.token, serialNumber, value.permission, value.description)
     if (
@@ -353,13 +360,13 @@ async function handleEdit(value: EditWhitelistFormValue): Promise<void> {
       return
     }
     changeEditVisible(false)
-    ElMessage.success('修改成功，重新拔插后生效')
+    showSuccessToast('修改成功，重新拔插后生效')
   } catch (error: unknown) {
     if (
       editEpoch.value === dialogEpoch && editVisible.value &&
       editTarget.value?.serialNumber === serialNumber
     ) {
-      showError(error, '白名单修改失败')
+      editErrorMessage.value = errorMessage(error, '白名单修改失败')
     }
   } finally {
     editSubmitting.value = false
@@ -390,9 +397,9 @@ async function handleRemove(serialNumber: string): Promise<void> {
     if (!canWrite()) {
       return
     }
-    ElMessage.success('删除成功')
+    showSuccessToast('删除成功')
   } catch (error: unknown) {
-    showError(error, '白名单删除失败')
+    await showError(error, '白名单删除失败')
   } finally {
     removeOwnership.value.delete(serialNumber)
   }
@@ -416,50 +423,58 @@ function changePageSize(nextPageSize: number): void {
       </div>
     </header>
     <ConnectionAlert />
-    <DataTable
-      :columns="columns" :data="pageRows" :loading="whitelist.isLoading"
-      :error="tableError" :total="rows.length" :page="page" :page-size="pageSize"
-      empty-text="暂无数据" @page-change="changePage" @page-size-change="changePageSize"
-    >
-      <template #filters>
-        <el-button
-          type="primary" data-testid="add-device-trigger"
-          :disabled="addSubmitting" :loading="addSubmitting" @click="openAddDialog('device')"
-        >
-          装置端添加
-        </el-button>
-        <el-button
-          data-testid="add-management-trigger" :disabled="addSubmitting" :loading="addSubmitting"
-          @click="openAddDialog('management')"
-        >
-          管理端添加
-        </el-button>
+    <el-card shadow="never" class="whitelist-card app-card">
+      <template #header>
+        <h2 class="whitelist-title">受信任普通移动存储设备白名单</h2>
       </template>
-      <template #actions="{ row }">
-        <el-button
-          link type="primary" :data-testid="`edit-${row.serialNumber}`"
-          :disabled="editSubmitting" :loading="editSubmitting" @click="openEditDialog(row as WhitelistRow)"
-        >
-          修改
-        </el-button>
-        <el-button
-          link type="danger" :data-testid="`remove-${row.serialNumber}`"
-          :disabled="removeOwnership.has(row.serialNumber)" :loading="removeOwnership.has(row.serialNumber)"
-          @click="handleRemove(row.serialNumber)"
-        >删除</el-button>
-      </template>
-    </DataTable>
+      <DataTable
+        :columns="columns" :data="pageRows" :loading="whitelist.isLoading"
+        :error="tableError" :total="rows.length" :page="page" :page-size="pageSize"
+        empty-text="暂无数据" @page-change="changePage" @page-size-change="changePageSize"
+      >
+        <template #filters>
+          <el-button
+            data-testid="add-device-trigger"
+            :disabled="addSubmitting" :loading="addSubmitting" @click="openAddDialog('device')"
+          >
+            装置端添加
+          </el-button>
+          <el-button
+            type="primary"
+            data-testid="add-management-trigger" :disabled="addSubmitting" :loading="addSubmitting"
+            @click="openAddDialog('management')"
+          >
+            管理端添加
+          </el-button>
+        </template>
+        <template #actions="{ row }">
+          <el-button
+            link type="primary" :data-testid="`edit-${row.serialNumber}`"
+            :disabled="editSubmitting" :loading="editSubmitting" @click="openEditDialog(row as WhitelistRow)"
+          >
+            修改
+          </el-button>
+          <el-button
+            link type="danger" :data-testid="`remove-${row.serialNumber}`"
+            :disabled="removeOwnership.has(row.serialNumber)" :loading="removeOwnership.has(row.serialNumber)"
+            @click="handleRemove(row.serialNumber)"
+          >删除</el-button>
+        </template>
+      </DataTable>
+    </el-card>
     <AddWhitelistDialog
       :key="`${addSource}-${addEpoch}`"
       :visible="addVisible" :source="addSource" :candidates="candidates"
       :loading="candidatesLoading" :submitting="addSubmitting"
+      :error-message="addErrorMessage"
       @update:visible="changeAddVisible" @submit="handleAdd"
     />
     <EditWhitelistDialog
       :key="editEpoch" :visible="editVisible" :serial-number="editTarget?.serialNumber ?? ''"
       :current-description="editTarget?.description ?? ''"
       :current-permission="editPermission"
-      :submitting="editSubmitting" @update:visible="changeEditVisible" @submit="handleEdit"
+      :submitting="editSubmitting" :error-message="editErrorMessage"
+      @update:visible="changeEditVisible" @submit="handleEdit"
     />
   </div>
 </template>
@@ -476,5 +491,16 @@ function changePageSize(nextPageSize: number): void {
 .page-header p {
   margin: $spacing-2 0 0;
   color: $text-secondary;
+}
+
+.whitelist-card {
+  border-color: $border-color;
+}
+
+.whitelist-title {
+  margin: 0;
+  color: $text-primary;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
 }
 </style>

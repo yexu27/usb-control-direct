@@ -10,10 +10,17 @@ import FileAccessPage from '../../../src/renderer/pages/FileAccessPage.vue'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   ElMessageBox: { confirm: vi.fn() },
+}))
+
+vi.mock('../../../src/renderer/utils/operation-feedback', () => ({
+  showSuccessToast: vi.fn(),
+  showErrorDialog: vi.fn().mockResolvedValue(undefined),
+  errorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
 }))
 
 interface PageVm {
@@ -51,6 +58,7 @@ const AddBlacklistDialogStub = defineComponent({
   props: {
     visible: { type: Boolean, required: true },
     submitting: { type: Boolean, required: true },
+    errorMessage: { type: String, default: '' },
   },
   emits: ['update:visible', 'submit'],
   template: `
@@ -58,7 +66,7 @@ const AddBlacklistDialogStub = defineComponent({
       data-testid="add-dialog"
       :data-visible="visible"
       :data-submitting="submitting"
-    />
+    >{{ errorMessage }}</div>
   `,
 })
 
@@ -151,6 +159,18 @@ describe('FileAccessPage', () => {
     expect(wrapper.text()).not.toContain('操作员')
   })
 
+  it('展示 PRD 可执行类型与页面说明', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('管理移动存储设备的文件访问策略')
+    expect(wrapper.text()).toContain('可执行程序访问控制')
+    expect(wrapper.text()).toContain('介质自动读取功能控制')
+    expect(wrapper.text()).toContain('文件类型黑名单')
+    expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
+      'dll', 'exe', 'PE', 'ELF',
+    ])
+  })
+
   it.each([
     ['exec-control-switch', '可执行程序访问控制', 'exec_control', true],
     ['auto-read-control-switch', '介质自动读取控制', 'auto_read_control', false],
@@ -176,6 +196,7 @@ describe('FileAccessPage', () => {
     await flushPromises()
 
     expect(setSwitch).toHaveBeenCalledWith('session-token', key, enabled)
+    expect(showSuccessToast).not.toHaveBeenCalled()
   })
 
   it('远端开关更新失败时受控 checked 保持不变', async () => {
@@ -189,6 +210,7 @@ describe('FileAccessPage', () => {
     await flushPromises()
     expect(execSwitch.attributes('data-checked')).toBe('false')
     expect(store.policy?.execControlEnabled).toBe(false)
+    expect(showErrorDialog).toHaveBeenCalledWith('开关修改失败', '更新失败')
   })
 
   it('断线时保留 store 数据且禁止写操作', async () => {
@@ -270,11 +292,11 @@ describe('FileAccessPage', () => {
     await deleteButton.trigger('click')
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenCalledTimes(1)
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
 
     removeDeferred.resolve()
     await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledTimes(1)
+    expect(showSuccessToast).toHaveBeenCalledTimes(1)
     expect(deleteButton.attributes('disabled')).toBeUndefined()
   })
 
@@ -295,7 +317,7 @@ describe('FileAccessPage', () => {
 
     expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改策略')
     expect(remove).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(deleteButton.attributes('disabled')).toBeUndefined()
 
     useConnectionStore().updateStatus('CONNECTED')
@@ -338,15 +360,15 @@ describe('FileAccessPage', () => {
     await deleteButton.trigger('click')
     removeDeferred.reject(new Error('删除失败'))
     await flushPromises()
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('删除失败')
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).toHaveBeenCalledWith('黑名单删除失败', '删除失败')
     expect(deleteButton.attributes('disabled')).toBeUndefined()
 
     await deleteButton.trigger('click')
     await flushPromises()
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(2)
     expect(remove).toHaveBeenCalledTimes(2)
-    expect(ElMessage.success).toHaveBeenCalledTimes(1)
+    expect(showSuccessToast).toHaveBeenCalledTimes(1)
   })
 
   it('取消删除确认后释放占有并可再次点击', async () => {
@@ -424,13 +446,13 @@ describe('FileAccessPage', () => {
     expect(add).toHaveBeenCalledTimes(1)
     expect(dialog.props('visible')).toBe(true)
     expect(dialog.props('submitting')).toBe(true)
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
 
     deferred.resolve()
     await flushPromises()
     expect(dialog.props('visible')).toBe(false)
     expect(dialog.props('submitting')).toBe(false)
-    expect(ElMessage.success).toHaveBeenCalledWith(
+    expect(showSuccessToast).toHaveBeenCalledWith(
       '修改成功，重新拔插或重新映射后生效',
     )
   })
@@ -453,8 +475,9 @@ describe('FileAccessPage', () => {
 
     expect(dialog.props('visible')).toBe(true)
     expect(dialog.props('submitting')).toBe(false)
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('添加失败')
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(dialog.props('errorMessage')).toBe('添加失败')
+    expect(wrapper.text()).toContain('添加失败')
   })
 
   it('添加和删除均通过 store，删除前必须确认', async () => {
@@ -470,7 +493,7 @@ describe('FileAccessPage', () => {
     expect(add).toHaveBeenCalledWith('session-token', '.zip', '压缩包')
     expect(ElMessageBox.confirm).toHaveBeenCalled()
     expect(remove).toHaveBeenCalledWith('session-token', '.doc')
-    expect(ElMessage.success).toHaveBeenCalledWith(
+    expect(showSuccessToast).toHaveBeenCalledWith(
       '修改成功，重新拔插或重新映射后生效',
     )
   })

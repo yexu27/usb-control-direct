@@ -10,6 +10,7 @@ import { useFilePolicyStore } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
 import { confirmAction } from '@/utils/confirm-action'
+import { showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 
 const connection = useConnectionStore()
 const session = useSessionStore()
@@ -107,10 +108,10 @@ function defaultPolicyFileName(now = new Date()): string {
   return `安全策略-${date}-${time}.bin`
 }
 
-function reportOperationFailure(
+async function reportOperationFailure(
   operation: PolicyOperation,
   failure: PendingFailure,
-): void {
+): Promise<void> {
   if (!hasSameSession(operation)) {
     return
   }
@@ -118,7 +119,8 @@ function reportOperationFailure(
     warnDisconnected(operation)
     return
   }
-  ElMessage.error(
+  await showErrorDialog(
+    failure.fallback,
     failure.allowServiceMessage && failure.error instanceof ServiceError
       ? failure.error.message
       : failure.fallback,
@@ -154,7 +156,7 @@ async function handleExport(): Promise<void> {
         filters: [{ name: '安全策略', extensions: ['bin'] }],
       })
     } catch (error: unknown) {
-      reportOperationFailure(operation, {
+      await reportOperationFailure(operation, {
         error,
         fallback: '无法打开策略保存对话框',
         allowServiceMessage: false,
@@ -184,7 +186,7 @@ async function handleExport(): Promise<void> {
     } catch (error: unknown) {
       await revokeSelectedFileAccess(selectedPath)
       accessRevoked = true
-      reportOperationFailure(operation, {
+      await reportOperationFailure(operation, {
         error,
         fallback: '策略导出失败',
         allowServiceMessage: true,
@@ -198,12 +200,12 @@ async function handleExport(): Promise<void> {
       await window.desktopApi.dialog.writeFile(selectedPath, response.policyData)
       writeCompleted = true
       if (canContinue(operation)) {
-        ElMessage.success('策略导出成功')
+        showSuccessToast('策略导出成功')
       }
     } catch (error: unknown) {
       await revokeSelectedFileAccess(selectedPath)
       accessRevoked = true
-      reportOperationFailure(operation, {
+      await reportOperationFailure(operation, {
         error,
         fallback: '策略导出失败',
         allowServiceMessage: false,
@@ -252,7 +254,7 @@ async function handleImport(): Promise<void> {
     }
 
     if (!selectedPath.toLowerCase().endsWith('.bin')) {
-      ElMessage.error('仅支持 .bin 策略文件')
+      await showErrorDialog('策略文件格式错误', '仅支持 .bin 策略文件')
       return
     }
 
@@ -301,7 +303,7 @@ async function handleImport(): Promise<void> {
       return
     }
     if (!connection.isConnected) {
-      ElMessage.warning('策略已导入，但状态刷新失败，请稍后重试')
+      await showErrorDialog('策略状态刷新失败', '策略已导入，但状态刷新失败，请稍后重试')
       return
     }
 
@@ -317,18 +319,16 @@ async function handleImport(): Promise<void> {
       !connection.isConnected ||
       refreshResults.some((refreshResult) => refreshResult.status === 'rejected')
     ) {
-      ElMessage.warning('策略已导入，但状态刷新失败，请稍后重试')
+      await showErrorDialog('策略状态刷新失败', '策略已导入，但状态刷新失败，请稍后重试')
       return
     }
-    ElMessage.success(
-      '策略已导入：文件访问控制重新映射或拔插后生效，白名单重新拔插后生效',
-    )
+    showSuccessToast('导入成功，重新拔插或重新映射后生效')
   } finally {
     if (selectedPath !== '') {
       await revokeSelectedFileAccess(selectedPath)
     }
     if (pendingFailure != null) {
-      reportOperationFailure(operation, pendingFailure)
+      await reportOperationFailure(operation, pendingFailure)
     }
     finishOperation(operation)
   }
@@ -340,7 +340,7 @@ async function handleImport(): Promise<void> {
     <header class="page-header app-page-header">
       <div>
         <h1 class="app-page-title">策略管理</h1>
-        <p class="app-page-desc">导入或导出当前装置的 U 盘白名单与文件访问策略。</p>
+        <p class="app-page-desc">导入和导出安全策略配置</p>
       </div>
     </header>
     <ConnectionAlert />

@@ -19,6 +19,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
     global: { stubs: {
       ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot/><slot name="footer"/></section>' },
       ElForm: ElFormStub, ElFormItem: { template: '<label><slot/></label>' },
+      ElAlert: { props: ['title'], template: '<strong>{{ title }}</strong>' },
       ElInput: {
         props: ['modelValue', 'disabled'], emits: ['update:modelValue'],
         template: '<input :disabled="disabled" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)"/>',
@@ -43,6 +44,12 @@ describe('EditWhitelistDialog', () => {
     expect(wrapper.findAll('[data-value]').map((item) => item.attributes('data-value'))).toEqual([
       'readonly', 'readwrite',
     ])
+  })
+
+  it('在弹窗内展示修改失败原因', () => {
+    const wrapper = mountDialog({ errorMessage: '白名单修改失败' })
+
+    expect(wrapper.text()).toContain('白名单修改失败')
   })
 
   it('空说明合法提交并防止同 tick 重复提交', async () => {

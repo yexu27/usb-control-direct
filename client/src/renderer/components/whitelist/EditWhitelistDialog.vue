@@ -15,6 +15,7 @@ const props = defineProps<{
   currentDescription: string
   currentPermission: WhitelistPermission
   submitting: boolean
+  errorMessage?: string
 }>()
 const emit = defineEmits<{
   'update:visible': [value: boolean]
@@ -87,6 +88,14 @@ defineExpose({ handleSubmit })
     :close-on-click-modal="false" :close-on-press-escape="!isBusy" :show-close="!isBusy"
     :before-close="beforeClose" @update:model-value="updateVisible"
   >
+    <el-alert
+      v-if="props.errorMessage"
+      class="dialog-error"
+      type="error"
+      :title="props.errorMessage"
+      :closable="false"
+      show-icon
+    />
     <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
       <el-form-item label="序列号">
         <el-input :model-value="props.serialNumber" disabled />
@@ -113,3 +122,9 @@ defineExpose({ handleSubmit })
     </template>
   </el-dialog>
 </template>
+
+<style scoped lang="scss">
+.dialog-error {
+  margin-bottom: $spacing-4;
+}
+</style>

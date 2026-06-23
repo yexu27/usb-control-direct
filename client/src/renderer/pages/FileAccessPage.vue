@@ -9,6 +9,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore, type FilePolicyKey } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
 import { confirmAction } from '@/utils/confirm-action'
+import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 
 const SUCCESS_MESSAGE = '修改成功，重新拔插或重新映射后生效'
 const PAGE_SIZE = 20
@@ -23,6 +24,7 @@ const connection = useConnectionStore()
 const filePolicy = useFilePolicyStore()
 const addDialogVisible = ref(false)
 const isAdding = ref(false)
+const addErrorMessage = ref('')
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE)
 const removingExtensions = ref(new Set<string>())
@@ -55,8 +57,8 @@ function isRemoving(extension: string): boolean {
   )
 }
 
-function showError(error: unknown, fallback: string): void {
-  ElMessage.error(error instanceof Error ? error.message : fallback)
+async function showError(error: unknown, fallback: string): Promise<void> {
+  await showErrorDialog(fallback, errorMessage(error, fallback))
 }
 
 function canWrite(): boolean {
@@ -73,10 +75,9 @@ async function changeSwitch(key: FilePolicyKey, enabled: boolean): Promise<boole
   }
   try {
     await filePolicy.setSwitch(session.token, key, enabled)
-    ElMessage.success(SUCCESS_MESSAGE)
     return true
   } catch (error: unknown) {
-    showError(error, '开关修改失败')
+    await showError(error, '开关修改失败')
     return false
   }
 }
@@ -86,12 +87,13 @@ async function handleAdd(value: BlacklistFormValue): Promise<void> {
     return
   }
   isAdding.value = true
+  addErrorMessage.value = ''
   try {
     await filePolicy.addExtension(session.token, value.extension, value.description)
     addDialogVisible.value = false
-    ElMessage.success(SUCCESS_MESSAGE)
+    showSuccessToast(SUCCESS_MESSAGE)
   } catch (error: unknown) {
-    showError(error, '黑名单添加失败')
+    addErrorMessage.value = errorMessage(error, '黑名单添加失败')
   } finally {
     isAdding.value = false
   }
@@ -122,9 +124,9 @@ async function handleRemove(extension: string): Promise<void> {
     }
     try {
       await filePolicy.removeExtension(session.token, normalizedExtension)
-      ElMessage.success(SUCCESS_MESSAGE)
+      showSuccessToast(SUCCESS_MESSAGE)
     } catch (error: unknown) {
-      showError(error, '黑名单删除失败')
+      await showError(error, '黑名单删除失败')
     }
   } finally {
     removingExtensions.value.delete(normalizedExtension)
@@ -136,6 +138,7 @@ function handlePolicyCheckboxChange(key: FilePolicyKey, enabled: boolean): void 
 }
 
 function openAddDialog(): void {
+  addErrorMessage.value = ''
   addDialogVisible.value = true
 }
 
@@ -154,7 +157,7 @@ function changePageSize(nextPageSize: number): void {
     <header class="page-header app-page-header">
       <div>
         <h1 class="app-page-title">文件访问控制</h1>
-        <p class="app-page-desc">管理 USB 介质的可执行程序、自动读取与文件类型访问策略。</p>
+        <p class="app-page-desc">管理移动存储设备的文件访问策略</p>
       </div>
     </header>
     <ConnectionAlert />
@@ -206,8 +209,8 @@ function changePageSize(nextPageSize: number): void {
               @change="(enabled) => handlePolicyCheckboxChange('auto_read_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
-              <span class="app-checkbox-title">介质自动读取</span>
-              <span class="app-checkbox-desc">控制 USB 介质插入后是否允许系统自动读取。</span>
+              <span class="app-checkbox-title">介质自动读取功能控制</span>
+              <span class="app-checkbox-desc">控制移动存储设备插入后是否启用自动读取相关访问控制。</span>
             </span>
           </label>
         </el-card>
@@ -229,7 +232,7 @@ function changePageSize(nextPageSize: number): void {
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">文件类型黑名单</span>
-              <span class="app-checkbox-desc">禁止访问指定后缀名的文件。</span>
+              <span class="app-checkbox-desc">启用后禁止访问黑名单后缀对应的文件。</span>
             </span>
           </label>
           <DataTable
@@ -274,6 +277,7 @@ function changePageSize(nextPageSize: number): void {
     <AddBlacklistDialog
       v-model:visible="addDialogVisible"
       :submitting="isAdding"
+      :error-message="addErrorMessage"
       @submit="handleAdd"
     />
   </div>

@@ -28,6 +28,7 @@ const props = defineProps<{
   candidates: CandidateDevice[]
   loading: boolean
   submitting: boolean
+  errorMessage?: string
 }>()
 const emit = defineEmits<{
   'update:visible': [value: boolean]
@@ -130,6 +131,14 @@ defineExpose({ handleSubmit })
     :before-close="beforeClose"
     @update:model-value="updateVisible"
   >
+    <el-alert
+      v-if="props.errorMessage"
+      class="dialog-error"
+      type="error"
+      :title="props.errorMessage"
+      :closable="false"
+      show-icon
+    />
     <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
       <el-form-item label="U盘设备" prop="serialNumber">
         <el-select
@@ -187,5 +196,9 @@ defineExpose({ handleSubmit })
 
 .candidate-select {
   width: 100%;
+}
+
+.dialog-error {
+  margin-bottom: $spacing-4;
 }
 </style>

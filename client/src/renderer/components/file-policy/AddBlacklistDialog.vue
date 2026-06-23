@@ -10,6 +10,7 @@ interface BlacklistFormValue {
 const props = defineProps<{
   visible: boolean
   submitting: boolean
+  errorMessage?: string
 }>()
 const emit = defineEmits<{
   'update:visible': [value: boolean]
@@ -112,6 +113,14 @@ watch(
     :before-close="handleBeforeClose"
     @update:model-value="handleVisibilityChange"
   >
+    <el-alert
+      v-if="props.errorMessage"
+      class="dialog-error"
+      type="error"
+      :title="props.errorMessage"
+      :closable="false"
+      show-icon
+    />
     <el-form ref="formRef" :model="blacklistForm" :rules="rules" label-width="80px">
       <el-form-item label="后缀名" prop="extension">
         <el-input
@@ -148,3 +157,9 @@ watch(
     </template>
   </el-dialog>
 </template>
+
+<style scoped lang="scss">
+.dialog-error {
+  margin-bottom: $spacing-4;
+}
+</style>
