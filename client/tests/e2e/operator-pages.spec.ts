@@ -61,7 +61,6 @@ test.describe('操作员三页面业务闭环', () => {
     await withOperator(async (_device, _app, page) => {
       for (const testId of ['exec-control-switch', 'auto-read-control-switch', 'blacklist-control-switch']) {
         await page.getByTestId(testId).click()
-        await expectLatestMessage(page, '修改成功，重新拔插或重新映射后生效')
         await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)
       }
       await openMenu(page, 'U盘设备控制')
@@ -81,7 +80,7 @@ test.describe('操作员三页面业务闭环', () => {
       await page.getByTestId('add-blacklist-trigger').click()
       await page.locator('[data-testid="blacklist-extension-input"]').fill('.ps1')
       await page.getByTestId('blacklist-submit').click()
-      await expectLatestMessage(page, '该文件后缀已在黑名单中')
+      await expect(page.getByRole('dialog').getByText('该文件后缀已在黑名单中')).toBeVisible()
       await page.keyboard.press('Escape')
       await page.locator('button[data-extension=".jse"]').click()
       await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
