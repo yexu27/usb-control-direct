@@ -10,6 +10,7 @@ use prost::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 
@@ -23,7 +24,7 @@ use crate::router::Router;
 const MAX_CRC_FAILURES: u32 = 3;
 
 /// 心跳间隔（秒）。
-const HEARTBEAT_INTERVAL_SECS: u64 = 10;
+const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 /// 心跳超时倍数：心跳间隔 × 3 + 5s 抖动窗口。
 const HEARTBEAT_TIMEOUT_SECS: u64 = HEARTBEAT_INTERVAL_SECS * 3 + 5;
@@ -111,6 +112,8 @@ pub async fn handle_connection(
     let mut crc_fail_count: u32 = 0;
     let mut last_activity = Instant::now();
 
+    info!(source_ip = %source_ip, "管理端 TLS 连接已建立");
+
     loop {
         let timeout = Duration::from_secs(HEARTBEAT_TIMEOUT_SECS);
         let remaining = timeout.saturating_sub(last_activity.elapsed());
@@ -119,6 +122,7 @@ pub async fn handle_connection(
             result = stream.read(&mut tmp) => {
                 let n = result?;
                 if n == 0 {
+                    info!(source_ip = %source_ip, "管理端主动断开连接");
                     return Ok(());
                 }
                 buf.extend_from_slice(&tmp[..n]);
@@ -129,7 +133,9 @@ pub async fn handle_connection(
 
                     if !codec::verify_crc(&header, &payload) {
                         crc_fail_count += 1;
+                        warn!(seq_id = header.seq_id, count = crc_fail_count, "CRC 校验失败");
                         if crc_fail_count >= MAX_CRC_FAILURES {
+                            warn!(source_ip = %source_ip, "CRC 连续失败 {} 次，断开连接", MAX_CRC_FAILURES);
                             return Err(GatewayError::CrcExceeded);
                         }
                         continue;
@@ -138,10 +144,13 @@ pub async fn handle_connection(
 
                     // 心跳处理（不刷新 session 活跃时间）
                     if header.msg_type == CMD_HEARTBEAT {
+                        debug!("收到心跳请求");
                         let rsp = codec::encode_frame(CMD_HEARTBEAT_RSP, header.seq_id, &[])?;
                         stream.write_all(&rsp).await?;
                         continue;
                     }
+
+                    debug!(msg_type = format_args!("0x{:04X}", header.msg_type), seq_id = header.seq_id, "收到业务请求");
 
                     // Token 中间件
                     let token_result = middleware::check_token(
@@ -191,6 +200,7 @@ pub async fn handle_connection(
                 }
             }
             _ = tokio::time::sleep(remaining) => {
+                warn!(source_ip = %source_ip, seconds = remaining.as_secs(), "管理端心跳超时，断开连接");
                 return Err(GatewayError::HeartbeatTimeout);
             }
         }

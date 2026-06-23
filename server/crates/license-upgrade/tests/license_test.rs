@@ -1,7 +1,34 @@
-//! MockLicenseValidator 集成测试。
+//! MockLicenseValidator + ProductionLicenseValidator 集成测试。
 
 use license_upgrade::error::LicenseUpgradeError;
 use license_upgrade::license::{LicenseValidator, MockLicenseValidator};
+use license_upgrade::production_license::ProductionLicenseValidator;
+
+#[test]
+fn production_validator_smcrypto_roundtrip() {
+    use smcrypto::sm2::{gen_keypair, Sign, Verify};
+    let (sk, pk_hex) = gen_keypair();
+
+    // 验证 sign_raw + verify_raw 兼容
+    let payload = r#"{"machine_code":"mc-001","expire_time":9999999999}"#;
+    let signer = Sign::new(&sk);
+    let sig_raw = signer.sign_raw(payload.as_bytes());
+    let verifier = Verify::new(&pk_hex);
+    assert!(verifier.verify_raw(payload.as_bytes(), &sig_raw), "sign_raw+verify_raw 失败");
+
+    // ProductionLicenseValidator 使用 verify_raw → 授权文件需用 sign_raw
+    let pk_raw = hex::decode(&pk_hex).unwrap();
+    let validator = ProductionLicenseValidator::new(pk_raw);
+
+    let mut license = Vec::new();
+    let sig_len = sig_raw.len() as u32;
+    license.extend_from_slice(&sig_len.to_be_bytes());
+    license.extend_from_slice(&sig_raw);
+    license.extend_from_slice(payload.as_bytes());
+
+    let result = validator.validate(&license, "mc-001");
+    assert!(result.is_ok(), "SM2 roundtrip: {:?}", result.err());
+}
 
 #[test]
 fn mock_validator_wrong_machine_code_returns_verify_failed() {
