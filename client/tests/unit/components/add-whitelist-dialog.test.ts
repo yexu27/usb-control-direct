@@ -84,6 +84,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
     props: { visible: true, source: 'management', candidates, loading: false, submitting: false, ...props },
     global: { stubs: {
       ElDialog: ElDialogStub, ElForm: ElFormStub, ElFormItem: { template: '<label><slot/></label>' },
+      ElAlert: { props: ['title'], template: '<strong>{{ title }}</strong>' },
       ElSelect: ElSelectStub, ElOption: ElOptionStub, ElInput: ElInputStub,
       ElRadioGroup: ElRadioGroupStub, ElRadio: ElRadioStub,
       ElButton: { template: '<button :disabled="$attrs.disabled" @click="$emit(\'click\')"><slot/></button>' },
@@ -106,6 +107,12 @@ describe('AddWhitelistDialog', () => {
     const options = wrapper.findAll('option')
     expect(options[1].attributes('disabled')).toBeDefined()
     expect(wrapper.text()).not.toContain('keyboard')
+  })
+
+  it('在弹窗内展示添加失败原因', () => {
+    const wrapper = mountDialog({ errorMessage: '该设备已在白名单中' })
+
+    expect(wrapper.text()).toContain('该设备已在白名单中')
   })
 
   it('只允许 readonly/readwrite，提交真实表单且同 tick 只发一次', async () => {

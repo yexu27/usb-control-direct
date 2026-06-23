@@ -91,6 +91,7 @@ function mountDialog(submitting = false) {
         ElDialog: ElDialogStub,
         ElForm: ElFormStub,
         ElFormItem: { template: '<label><slot /></label>' },
+        ElAlert: { props: ['title'], template: '<strong>{{ title }}</strong>' },
         ElInput: ElInputStub,
         ElButton: ElButtonStub,
       },
@@ -117,6 +118,28 @@ describe('AddBlacklistDialog', () => {
     expect(wrapper.emitted('submit')).toEqual([[
       { extension: '.doc_x', description: 'Office 文档' },
     ]])
+  })
+
+  it('在弹窗内展示提交失败原因', () => {
+    const wrapper = mount(AddBlacklistDialog, {
+      props: {
+        visible: true,
+        submitting: false,
+        errorMessage: '该文件后缀已在黑名单中',
+      },
+      global: {
+        stubs: {
+          ElDialog: ElDialogStub,
+          ElForm: ElFormStub,
+          ElFormItem: { template: '<label><slot /></label>' },
+          ElAlert: { props: ['title'], template: '<strong>{{ title }}</strong>' },
+          ElInput: ElInputStub,
+          ElButton: ElButtonStub,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('该文件后缀已在黑名单中')
   })
 
   it('扩展名必须含点号且仅允许字母数字、下划线和连字符', () => {
