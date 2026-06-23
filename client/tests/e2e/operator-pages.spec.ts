@@ -99,7 +99,7 @@ test.describe('操作员三页面业务闭环', () => {
       await chooseCandidate(page, 'DEVICE-REMOVED-002')
       device.removeConnectedDevice('DEVICE-REMOVED-002')
       await page.getByTestId('whitelist-add-submit').click()
-      await expectLatestMessage(page, '设备已移除，请重新插入后再添加')
+      await expect(page.getByRole('dialog').getByText('设备已移除，请重新插入后再添加')).toBeVisible()
     })
   })
 

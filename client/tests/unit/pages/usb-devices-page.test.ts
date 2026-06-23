@@ -13,6 +13,7 @@ import { useWhitelistStore } from '../../../src/renderer/stores/whitelist'
 import { getConnectedDevices } from '../../../src/renderer/services/device-service'
 import { listManagementUsbStorageDevices } from '../../../src/renderer/services/management-usb-service'
 import { ServiceError } from '../../../src/renderer/services/send-command'
+import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -22,17 +23,23 @@ vi.mock('../../../src/renderer/services/device-service', () => ({ getConnectedDe
 vi.mock('../../../src/renderer/services/management-usb-service', () => ({
   listManagementUsbStorageDevices: vi.fn(),
 }))
+vi.mock('../../../src/renderer/utils/operation-feedback', () => ({
+  showSuccessToast: vi.fn(),
+  showErrorDialog: vi.fn().mockResolvedValue(undefined),
+  errorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
+}))
 
 const AddDialogStub = defineComponent({
-  name: 'AddWhitelistDialog', props: ['visible', 'source', 'candidates', 'loading', 'submitting'],
+  name: 'AddWhitelistDialog',
+  props: ['visible', 'source', 'candidates', 'loading', 'submitting', 'errorMessage'],
   emits: ['update:visible', 'submit'],
-  template: '<div data-testid="add-dialog" :data-visible="visible" :data-source="source"/>',
+  template: '<div data-testid="add-dialog" :data-visible="visible" :data-source="source">{{ errorMessage }}</div>',
 })
 const EditDialogStub = defineComponent({
   name: 'EditWhitelistDialog',
-  props: ['visible', 'serialNumber', 'currentDescription', 'currentPermission', 'submitting'],
+  props: ['visible', 'serialNumber', 'currentDescription', 'currentPermission', 'submitting', 'errorMessage'],
   emits: ['update:visible', 'submit'],
-  template: '<div data-testid="edit-dialog" :data-visible="visible" :data-serial="serialNumber"/>',
+  template: '<div data-testid="edit-dialog" :data-visible="visible" :data-serial="serialNumber">{{ errorMessage }}</div>',
 })
 
 function seed(): void {
@@ -53,7 +60,11 @@ function mountPage() {
   return mount(UsbDevicesPage, { global: { stubs: {
     ConnectionAlert: { template: '<aside data-testid="connection-alert"/>' },
     AddWhitelistDialog: AddDialogStub, EditWhitelistDialog: EditDialogStub,
-    ElButton: { template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot/></button>' },
+    ElCard: { template: '<section><slot name="header"/><slot /></section>' },
+    ElButton: {
+      props: ['type'],
+      template: '<button v-bind="$attrs" :data-button-type="type" @click="$emit(\'click\')"><slot/></button>',
+    },
     DataTable: {
       name: 'DataTable',
       props: ['data', 'columns', 'error', 'total', 'page', 'pageSize'], emits: ['page-change', 'page-size-change'],
@@ -114,6 +125,14 @@ describe('UsbDevicesPage', () => {
     expect(wrapper.findAll('[data-testid="row"]')).toHaveLength(20)
   })
 
+  it('展示白名单卡片标题并按原型设置按钮主次', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('受信任普通移动存储设备白名单')
+    expect(wrapper.get('[data-testid="add-device-trigger"]').attributes('data-button-type')).toBeUndefined()
+    expect(wrapper.get('[data-testid="add-management-trigger"]').attributes('data-button-type')).toBe('primary')
+  })
+
   it('管理端枚举原始执行错误映射为稳定中文且不泄露路径命令', async () => {
     vi.mocked(listManagementUsbStorageDevices).mockRejectedValue(
       new Error('spawn powershell.exe C:\\private\\script.ps1 stderr=Access denied'),
@@ -122,8 +141,8 @@ describe('UsbDevicesPage', () => {
     await wrapper.get('[data-testid="add-management-trigger"]').trigger('click')
     await flushPromises()
 
-    expect(ElMessage.error).toHaveBeenCalledWith('管理端 USB 设备读取失败，请重试')
-    expect(ElMessage.error).not.toHaveBeenCalledWith(expect.stringContaining('powershell'))
+    expect(wrapper.getComponent(AddDialogStub).props('errorMessage')).toBe('管理端 USB 设备读取失败，请重试')
+    expect(wrapper.text()).not.toContain('powershell')
   })
 
   it('白名单加载错误仅向表格展示固定可信文案', () => {
@@ -214,7 +233,8 @@ describe('UsbDevicesPage', () => {
     expect(add).toHaveBeenCalledWith('token', expect.objectContaining({
       serialNumber: 'DEVICE-SN', addMethod: 'device', permission: 'readonly', deviceType: 'storage',
     }))
-    expect(ElMessage.success).toHaveBeenCalledWith('添加成功，重新拔插后生效')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).toHaveBeenCalledWith('添加成功，重新拔插后生效')
   })
 
   it('管理端提交前二次枚举，trim精确匹配；拔出和异常候选均不写入', async () => {
@@ -226,7 +246,7 @@ describe('UsbDevicesPage', () => {
     const submit = { candidate: managementCandidate, description: '', permission: 'readwrite' as const }
     wrapper.getComponent(AddDialogStub).vm.$emit('submit', submit); await flushPromises()
     expect(add).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledWith('设备已移除，请重新插入后再添加')
+    expect(wrapper.getComponent(AddDialogStub).props('errorMessage')).toBe('设备已移除，请重新插入后再添加')
     wrapper.getComponent(AddDialogStub).vm.$emit('update:visible', false)
     await wrapper.get('[data-testid="add-management-trigger"]').trigger('click'); await flushPromises()
     wrapper.getComponent(AddDialogStub).vm.$emit('submit', submit); await flushPromises()
@@ -249,7 +269,7 @@ describe('UsbDevicesPage', () => {
     await flushPromises()
 
     expect(add).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledWith('设备已移除，请重新插入后再添加')
+    expect(wrapper.getComponent(AddDialogStub).props('errorMessage')).toBe('设备已移除，请重新插入后再添加')
   })
 
   it('管理端二次枚举错误同样映射稳定中文', async () => {
@@ -266,8 +286,8 @@ describe('UsbDevicesPage', () => {
     await flushPromises()
 
     expect(add).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('管理端 USB 设备读取失败，请重试')
-    expect(ElMessage.error).not.toHaveBeenCalledWith(expect.stringContaining('execFile'))
+    expect(wrapper.getComponent(AddDialogStub).props('errorMessage')).toBe('管理端 USB 设备读取失败，请重试')
+    expect(wrapper.text()).not.toContain('execFile')
   })
 
   it('关闭管理端弹窗后迟到的二次枚举不添加也不提示成功', async () => {
@@ -288,7 +308,7 @@ describe('UsbDevicesPage', () => {
     await flushPromises()
 
     expect(add).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
   })
 
   it('管理端真实成功使用二次枚举结果、management方法且重复提交只成功一次', async () => {
@@ -302,7 +322,7 @@ describe('UsbDevicesPage', () => {
     expect(add).toHaveBeenCalledWith('token', expect.objectContaining({
       serialNumber: 'LOCAL-SN', addMethod: 'management', permission: 'readwrite',
     }))
-    expect(ElMessage.success).toHaveBeenCalledWith('添加成功，重新拔插后生效')
+    expect(showSuccessToast).toHaveBeenCalledWith('添加成功，重新拔插后生效')
   })
 
   it('添加失败展示统一错误、不假成功并释放ownership允许重试', async () => {
@@ -327,15 +347,15 @@ describe('UsbDevicesPage', () => {
     await flushPromises()
 
     expect(add).toHaveBeenCalledTimes(1)
-    expect(ElMessage.error).toHaveBeenCalledWith('该设备已在白名单中')
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(dialog.props('errorMessage')).toBe('该设备已在白名单中')
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(dialog.props('visible')).toBe(true)
     expect(useWhitelistStore().devices).toHaveLength(21)
 
     dialog.vm.$emit('submit', value)
     await flushPromises()
     expect(add).toHaveBeenCalledTimes(2)
-    expect(ElMessage.success).toHaveBeenCalledWith('添加成功，重新拔插后生效')
+    expect(showSuccessToast).toHaveBeenCalledWith('添加成功，重新拔插后生效')
   })
 
   it('添加请求期间拒绝打开另一来源，断线后迟到成功不关闭或提示成功', async () => {
@@ -363,7 +383,7 @@ describe('UsbDevicesPage', () => {
     addRequest.resolve()
     await flushPromises()
     expect(dialog.props('visible')).toBe(true)
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
   })
 
   it('修改只信任当前目标serial，关闭后的旧submit不操作', async () => {
@@ -376,7 +396,7 @@ describe('UsbDevicesPage', () => {
       serialNumber: 'SN-19', description: '', permission: 'readwrite',
     }); await flushPromises()
     expect(update).toHaveBeenCalledWith('token', 'SN-0', 'readwrite', '')
-    expect(ElMessage.success).toHaveBeenCalledWith('修改成功，重新拔插后生效')
+    expect(showSuccessToast).toHaveBeenCalledWith('修改成功，重新拔插后生效')
 
     dialog.vm.$emit('update:visible', false)
     dialog.vm.$emit('submit', { serialNumber: 'SN-1', description: '迟到', permission: 'readonly' })
@@ -399,7 +419,7 @@ describe('UsbDevicesPage', () => {
     updateRequest.resolve()
     await flushPromises()
     expect(dialog.props('visible')).toBe(true)
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
   })
 
   it('删除成功确认明确serial并显示成功文案', async () => {
@@ -414,7 +434,7 @@ describe('UsbDevicesPage', () => {
       '确定删除白名单设备 SN-1 吗？', '删除确认', expect.any(Object),
     )
     expect(remove).toHaveBeenCalledWith('token', 'SN-1')
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    expect(showSuccessToast).toHaveBeenCalledWith('删除成功')
   })
 
   it('删除失败不假成功且释放ownership允许相同serial重试', async () => {
@@ -429,16 +449,16 @@ describe('UsbDevicesPage', () => {
     await flushPromises()
     expect(remove).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenLastCalledWith('token', 'SN-1')
-    expect(ElMessage.error).toHaveBeenCalledWith('白名单删除失败')
+    expect(showErrorDialog).toHaveBeenCalledWith('白名单删除失败', 'C:\\secret\\powershell.exe stderr')
     expect(wrapper.text()).not.toContain('powershell.exe')
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(useWhitelistStore().devices).toHaveLength(21)
 
     await deleteButton.trigger('click')
     await flushPromises()
     expect(remove).toHaveBeenCalledTimes(2)
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(2)
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    expect(showSuccessToast).toHaveBeenCalledWith('删除成功')
   })
 
   it('删除确认等待期间断线二次复检', async () => {
@@ -463,8 +483,8 @@ describe('UsbDevicesPage', () => {
       serialNumber: 'SN-19', description: 'x', permission: 'readonly',
     }); await flushPromises()
     expect(update).toHaveBeenCalledWith('token', 'SN-0', 'readonly', 'x')
-    expect(ElMessage.error).toHaveBeenCalledWith('白名单修改失败')
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(EditDialogStub).props('errorMessage')).toBe('内部路径泄露')
+    expect(showSuccessToast).not.toHaveBeenCalled()
     useConnectionStore().updateStatus('DISCONNECTED')
     await wrapper.get('[data-testid="add-device-trigger"]').trigger('click'); await flushPromises()
     wrapper.getComponent(AddDialogStub).vm.$emit('submit', {
