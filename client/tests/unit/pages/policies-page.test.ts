@@ -13,6 +13,7 @@ import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { useWhitelistStore } from '../../../src/renderer/stores/whitelist'
 import type { ConnectionStatus } from '../../../src/shared/connection-state'
+import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -21,6 +22,10 @@ vi.mock('element-plus', () => ({
 vi.mock('../../../src/renderer/services/policy-service', () => ({
   exportPolicy: vi.fn(),
   importPolicy: vi.fn(),
+}))
+vi.mock('../../../src/renderer/utils/operation-feedback', () => ({
+  showSuccessToast: vi.fn(),
+  showErrorDialog: vi.fn().mockResolvedValue(undefined),
 }))
 
 function deferred<T>() {
@@ -157,7 +162,7 @@ describe('PoliciesPage', () => {
     expect(writeFile).toHaveBeenCalledOnce()
     expect(writeFile).toHaveBeenCalledWith('/tmp/policy.bin', new Uint8Array([1, 2]))
     expect(revokeFileAccess).not.toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('策略导出成功')
+    expect(showSuccessToast).toHaveBeenCalledWith('策略导出成功')
   })
 
   it.each(['export', 'write'] as const)('%s 失败时 await 撤权并脱敏', async (stage) => {
@@ -170,12 +175,12 @@ describe('PoliciesPage', () => {
 
     await wrapper.get('[data-testid="export-policy"]').trigger('click')
     await nextTick()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     revokeDone.resolve()
     await flushPromises()
 
     expect(revokeFileAccess).toHaveBeenCalledWith('/secret/policy.bin')
-    expect(ElMessage.error).toHaveBeenCalledWith('策略导出失败')
+    expect(showErrorDialog).toHaveBeenCalledWith('策略导出失败', '策略导出失败')
   })
 
   it('仅传递可信 ServiceError 文案，且撤权失败不替换主错误', async () => {
@@ -185,7 +190,7 @@ describe('PoliciesPage', () => {
     const wrapper = mountPage()
     await wrapper.get('[data-testid="export-policy"]').trigger('click')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('策略版本不兼容')
+    expect(showErrorDialog).toHaveBeenCalledWith('策略导出失败', '策略版本不兼容')
   })
 
   it('导入仅选 bin，取消时无动作', async () => {
@@ -208,7 +213,7 @@ describe('PoliciesPage', () => {
     await flushPromises()
     expect(readFile).not.toHaveBeenCalled()
     expect(importPolicy).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('仅支持 .bin 策略文件')
+    expect(showErrorDialog).toHaveBeenCalledWith('策略文件格式错误', '仅支持 .bin 策略文件')
     expect(revokeFileAccess).toHaveBeenCalledOnce()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.BIN.txt')
   })
@@ -256,12 +261,10 @@ describe('PoliciesPage', () => {
     expect(whitelistLoad).toHaveBeenCalledWith('session-token')
     fileDone.resolve()
     await flushPromises()
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     whitelistDone.resolve()
     await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith(
-      '策略已导入：文件访问控制重新映射或拔插后生效，白名单重新拔插后生效',
-    )
+    expect(showSuccessToast).toHaveBeenCalledWith('导入成功，重新拔插或重新映射后生效')
   })
 
   it('导入成功但任一刷新失败时等待另一侧且不误报导入失败', async () => {
@@ -273,10 +276,13 @@ describe('PoliciesPage', () => {
     const wrapper = mountPage()
     await wrapper.get('[data-testid="import-policy"]').trigger('click')
     await flushPromises()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     whitelistDone.resolve()
     await flushPromises()
-    expect(ElMessage.warning).toHaveBeenCalledWith('策略已导入，但状态刷新失败，请稍后重试')
+    expect(showErrorDialog).toHaveBeenCalledWith(
+      '策略状态刷新失败',
+      '策略已导入，但状态刷新失败，请稍后重试',
+    )
   })
 
   it('导入失败不刷新 store，原始错误统一脱敏', async () => {
@@ -290,7 +296,7 @@ describe('PoliciesPage', () => {
     await flushPromises()
     expect(fileLoad).not.toHaveBeenCalled()
     expect(whitelistLoad).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('策略导入失败')
+    expect(showErrorDialog).toHaveBeenCalledWith('策略导入失败', '策略导入失败')
     expect(revokeFileAccess).toHaveBeenCalledWith('/private/policy.bin')
   })
 
@@ -371,8 +377,8 @@ describe('PoliciesPage', () => {
 
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/late.bin')
     expect(exportPolicy).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
   })
 
   it('卸载后导出响应迟到时撤权且不写文件', async () => {
@@ -389,8 +395,8 @@ describe('PoliciesPage', () => {
 
     expect(writeFile).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/late.bin')
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
   })
 
   it('卸载后导入确认迟到时不读文件', async () => {
@@ -407,8 +413,8 @@ describe('PoliciesPage', () => {
 
     expect(readFile).not.toHaveBeenCalled()
     expect(importPolicy).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -425,8 +431,8 @@ describe('PoliciesPage', () => {
     await flushPromises()
 
     expect(importPolicy).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -447,8 +453,8 @@ describe('PoliciesPage', () => {
 
     expect(fileLoad).not.toHaveBeenCalled()
     expect(whitelistLoad).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -463,7 +469,7 @@ describe('PoliciesPage', () => {
 
     expect(revokeFileAccess).toHaveBeenCalledWith('/private/read.bin')
     expect(importPolicy).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('策略文件读取失败')
+    expect(showErrorDialog).toHaveBeenCalledWith('策略文件读取失败', '策略文件读取失败')
   })
 
   it.each(['disconnect', 'token'] as const)('导出响应期 %s 失效时不写入并撤权', async (kind) => {
@@ -487,8 +493,8 @@ describe('PoliciesPage', () => {
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/session.bin')
     if (kind === 'token') {
       expect(ElMessage.warning).not.toHaveBeenCalled()
-      expect(ElMessage.success).not.toHaveBeenCalled()
-      expect(ElMessage.error).not.toHaveBeenCalled()
+      expect(showSuccessToast).not.toHaveBeenCalled()
+      expect(showErrorDialog).not.toHaveBeenCalled()
     }
   })
 
@@ -518,8 +524,8 @@ describe('PoliciesPage', () => {
     }
     expect(importPolicy).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/session.bin')
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
   })
 
   it('导入成功后刷新期断线只提示已导入但刷新失败', async () => {
@@ -538,8 +544,11 @@ describe('PoliciesPage', () => {
     whitelistDone.resolve()
     await flushPromises()
 
-    expect(ElMessage.warning).toHaveBeenCalledWith('策略已导入，但状态刷新失败，请稍后重试')
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showErrorDialog).toHaveBeenCalledWith(
+      '策略状态刷新失败',
+      '策略已导入，但状态刷新失败，请稍后重试',
+    )
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -561,9 +570,9 @@ describe('PoliciesPage', () => {
     expect(importPolicy).toHaveBeenCalledWith('session-token', new Uint8Array([1]))
     expect(fileLoad).not.toHaveBeenCalled()
     expect(whitelistLoad).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(ElMessage.warning).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -584,9 +593,11 @@ describe('PoliciesPage', () => {
 
     expect(fileLoad).not.toHaveBeenCalled()
     expect(whitelistLoad).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledWith('策略已导入，但状态刷新失败，请稍后重试')
-    expect(ElMessage.success).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).toHaveBeenCalledWith(
+      '策略状态刷新失败',
+      '策略已导入，但状态刷新失败，请稍后重试',
+    )
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -631,9 +642,9 @@ describe('PoliciesPage', () => {
 
     expect(fileLoad).toHaveBeenCalledWith('session-token')
     expect(whitelistLoad).toHaveBeenCalledWith('session-token')
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     expect(ElMessage.warning).not.toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/policy.bin')
   })
 
@@ -670,7 +681,7 @@ describe('PoliciesPage', () => {
       pending.reject(new Error('/private/old-session failed'))
       await flushPromises()
 
-      expect(ElMessage.error).not.toHaveBeenCalled()
+      expect(showErrorDialog).not.toHaveBeenCalled()
       expect(ElMessage.warning).toHaveBeenCalledTimes(1)
       expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法传输策略')
       if (['export', 'write', 'read', 'import'].includes(stage)) {
@@ -721,9 +732,9 @@ describe('PoliciesPage', () => {
     pending.reject(new Error('/private/stale failed'))
     await flushPromises()
 
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
     expect(ElMessage.warning).not.toHaveBeenCalled()
-    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(showSuccessToast).not.toHaveBeenCalled()
     if (stage === 'export' || stage === 'write' || stage === 'read' || stage === 'import') {
       expect(revokeFileAccess).toHaveBeenCalledWith('/tmp/stale.bin')
     }
