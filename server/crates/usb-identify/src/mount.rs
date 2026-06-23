@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::error::UsbIdentifyError;
 
@@ -57,10 +57,15 @@ impl MountOperations for RealMountOps {
             UsbIdentifyError::MountFailed(format!("创建挂载点 {} 失败: {}", mount_point, e))
         })?;
 
+        let fs_type_opt = if fs_type.is_empty() || fs_type == "auto" {
+            None::<&str>
+        } else {
+            Some(fs_type)
+        };
         nix::mount::mount(
             Some(dev_path),
             mount_point,
-            Some(fs_type),
+            fs_type_opt,
             nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID,
             None::<&str>,
         )
@@ -134,4 +139,69 @@ pub fn dev_name_from_path(dev_path: &str) -> &str {
         .rsplit('/')
         .next()
         .unwrap_or(dev_path)
+}
+
+/// mount 三步递进（同 demo 逻辑）:
+/// 1. 内核自动探测（`None` fs type）
+/// 2. ntfs-3g 命令
+/// 3. 内核 ntfs 只读
+pub fn mount_partition(
+    dev_path: &str,
+    mount_point: &str,
+    read_only: bool,
+) -> Result<(), UsbIdentifyError> {
+    std::fs::create_dir_all(mount_point).map_err(|e| {
+        UsbIdentifyError::MountFailed(format!("创建挂载点 {} 失败: {}", mount_point, e))
+    })?;
+
+    let flags = if read_only {
+        nix::mount::MsFlags::MS_RDONLY | nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID
+    } else {
+        nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID
+    };
+
+    // 1. 内核自动探测
+    if nix::mount::mount(Some(dev_path), mount_point, None::<&str>, flags, None::<&str>).is_ok()
+    {
+        info!(dev = dev_path, mount_point = mount_point, "自动检测挂载成功");
+        return Ok(());
+    }
+
+    // 2. ntfs-3g
+    let mut cmd = std::process::Command::new("ntfs-3g");
+    if read_only {
+        cmd.arg("-o").arg("ro");
+    }
+    cmd.arg(dev_path).arg(mount_point);
+    match cmd.output() {
+        Ok(out) if out.status.success() => {
+            info!(dev = dev_path, mount_point = mount_point, read_only, "ntfs-3g 挂载成功");
+            return Ok(());
+        }
+        Ok(out) => {
+            debug!(dev = dev_path, stderr = %String::from_utf8_lossy(&out.stderr), "ntfs-3g 失败");
+        }
+        Err(e) => {
+            debug!(dev = dev_path, ?e, "ntfs-3g 执行失败");
+        }
+    }
+
+    // 3. 内核 ntfs 只读兜底
+    if nix::mount::mount(
+        Some(dev_path),
+        mount_point,
+        Some("ntfs"),
+        nix::mount::MsFlags::MS_RDONLY | nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID,
+        None::<&str>,
+    )
+    .is_ok()
+    {
+        warn!(dev = dev_path, mount_point = mount_point, "回退到内核 ntfs 只读挂载");
+        return Ok(());
+    }
+
+    Err(UsbIdentifyError::MountFailed(format!(
+        "挂载 {} -> {} 失败（已尝试所有方式）",
+        dev_path, mount_point
+    )))
 }

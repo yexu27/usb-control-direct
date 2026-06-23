@@ -4,8 +4,12 @@
 //! S02 不自己监听 udev，输入来自 S01 的设备类型识别结果和 HID 事件流。
 
 pub mod error;
+pub mod evdev_interceptor;
+pub mod hid_gadget;
+pub mod hid_report;
 pub mod keyboard;
 pub mod mouse;
+pub mod mouse_forwarder;
 
 pub use error::HidAccessError;
 pub use keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardTransitionResult};

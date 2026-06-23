@@ -8,13 +8,14 @@
 //! - 接管失败直接进入 KbRejected，不进入挑战流程。
 //! - 任意状态下拔出设备均进入 KbRemoved。
 
-use common::types::KeyboardState;
+pub use common::types::KeyboardState;
 use tracing::{debug, info, warn};
 
 use crate::error::HidAccessError;
 
 /// 键盘挑战码：用户必须按序输入 "1234"。
-const CHALLENGE_CODE: &[u8] = b"1234";
+/// 值为 HID usage code: 1=0x1E, 2=0x1F, 3=0x20, 4=0x21。
+const CHALLENGE_CODE: &[u8] = &[0x1E, 0x1F, 0x20, 0x21];
 
 /// 键盘准入状态机。
 ///
@@ -262,7 +263,7 @@ mod tests {
         let mut ch = KeyboardChallenge::new();
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-        let result = press_sequence(&mut ch, b"1234").unwrap();
+        let result = press_sequence(&mut ch, &[0x1E, 0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(
             result,
             KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
@@ -276,14 +277,14 @@ mod tests {
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
         // 先输入部分正确序列
-        press_sequence(&mut ch, b"12").unwrap();
+        press_sequence(&mut ch, &[0x1E, 0x1F]).unwrap();
         // 输入错误按键
-        let result = ch.transition(KeyboardEvent::KeyPress(b'9')).unwrap();
+        let result = ch.transition(KeyboardEvent::KeyPress(0x26)).unwrap();
         assert_eq!(result, KeyboardTransitionResult::Unchanged);
         assert_eq!(ch.state(), KeyboardState::KbWaiting);
 
         // 重新输入完整正确序列应能成功
-        let result = press_sequence(&mut ch, b"1234").unwrap();
+        let result = press_sequence(&mut ch, &[0x1E, 0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(
             result,
             KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
@@ -296,12 +297,12 @@ mod tests {
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
         // 输入部分序列后夹杂修饰键
-        ch.transition(KeyboardEvent::KeyPress(b'1')).unwrap();
+        ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
         let modifier_result = ch.transition(KeyboardEvent::ModifierKey).unwrap();
         assert_eq!(modifier_result, KeyboardTransitionResult::Unchanged);
 
         // 修饰键后继续完成序列
-        let result = press_sequence(&mut ch, b"234").unwrap();
+        let result = press_sequence(&mut ch, &[0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(
             result,
             KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
@@ -340,7 +341,7 @@ mod tests {
     #[test]
     fn kb_detected状态不接受按键事件() {
         let mut ch = KeyboardChallenge::new();
-        let result = ch.transition(KeyboardEvent::KeyPress(b'1'));
+        let result = ch.transition(KeyboardEvent::KeyPress(0x1E));
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, HidAccessError::InvalidTransition { .. }));
@@ -350,7 +351,7 @@ mod tests {
     fn 终态kb_mapped不接受普通事件() {
         let mut ch = KeyboardChallenge::new();
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
-        press_sequence(&mut ch, b"1234").unwrap();
+        press_sequence(&mut ch, &[0x1E, 0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(ch.state(), KeyboardState::KbMapped);
 
         let result = ch.transition(KeyboardEvent::GrabSuccess);
@@ -363,7 +364,7 @@ mod tests {
         ch.transition(KeyboardEvent::GrabFailed).unwrap();
         assert_eq!(ch.state(), KeyboardState::KbRejected);
 
-        let result = ch.transition(KeyboardEvent::KeyPress(b'1'));
+        let result = ch.transition(KeyboardEvent::KeyPress(0x1E));
         assert!(result.is_err());
     }
 
@@ -372,8 +373,8 @@ mod tests {
         let mut ch = KeyboardChallenge::new();
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-        for key in b"123" {
-            let result = ch.transition(KeyboardEvent::KeyPress(*key)).unwrap();
+        for &key in &[0x1E, 0x1F, 0x20] {
+            let result = ch.transition(KeyboardEvent::KeyPress(key)).unwrap();
             assert_eq!(result, KeyboardTransitionResult::Unchanged);
             assert_eq!(ch.state(), KeyboardState::KbWaiting);
         }

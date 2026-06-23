@@ -12,7 +12,7 @@ use tracing::{error, info};
 const GADGET_BASE: &str = "/sys/kernel/config/usb_gadget";
 
 /// 默认 gadget 名称。
-const GADGET_NAME: &str = "usb_ctrl";
+const GADGET_NAME: &str = "rockchip";
 
 /// 默认 UDC 名称（RK3568）。
 const DEFAULT_UDC: &str = "fcc00000.dwc3";
@@ -63,6 +63,7 @@ impl GadgetManager {
     ) -> Result<(), std::io::Error> {
         self.setup_gadget(device_description)?;
         self.configure_mass_storage(nbd_device, readonly)?;
+        self.link_function("mass_storage.usb0")?;
         self.bind_udc()?;
         self.enabled = true;
         info!(
@@ -85,7 +86,7 @@ impl GadgetManager {
     }
 
     /// 设置 gadget 基础结构。
-    fn setup_gadget(&self, device_description: &str) -> Result<(), std::io::Error> {
+    pub fn setup_gadget(&self, device_description: &str) -> Result<(), std::io::Error> {
         let gadget = &self.gadget_path;
 
         if !gadget.exists() {
@@ -105,7 +106,7 @@ impl GadgetManager {
         write_file(&strings.join("manufacturer"), "USB Security")?;
         write_file(&strings.join("product"), device_description)?;
 
-        let config = gadget.join("configs/c.1");
+        let config = gadget.join("configs/b.1");
         if !config.exists() {
             fs::create_dir_all(&config)?;
         }
@@ -121,7 +122,7 @@ impl GadgetManager {
     }
 
     /// 配置 f_mass_storage。
-    fn configure_mass_storage(
+    pub fn configure_mass_storage(
         &self,
         nbd_device: &Path,
         readonly: bool,
@@ -140,24 +141,44 @@ impl GadgetManager {
         write_file(&lun.join("removable"), "1")?;
         write_file(&lun.join("nofua"), "1")?;
         write_file(&lun.join("ro"), if readonly { "1" } else { "0" })?;
-        write_file(&lun.join("file"), &nbd_device.to_string_lossy())?;
-
-        let link_target = self.gadget_path.join("configs/c.1/mass_storage.usb0");
-        if !link_target.exists() {
-            std::os::unix::fs::symlink(&function, &link_target)?;
-        }
+        write_file(&lun.join("file"), "")?;
 
         Ok(())
     }
 
+    /// 将 function 通过 symlink 链接到 config。
+    pub fn link_function(&self, function_name: &str) -> Result<(), std::io::Error> {
+        let function = self.gadget_path.join("functions").join(function_name);
+        let link_target = self.gadget_path.join("configs/b.1").join(function_name);
+        if !link_target.exists() {
+            std::os::unix::fs::symlink(&function, &link_target)?;
+        }
+        Ok(())
+    }
+
     /// 绑定 UDC。
-    fn bind_udc(&self) -> Result<(), std::io::Error> {
+    pub fn bind_udc(&self) -> Result<(), std::io::Error> {
         write_file(&self.gadget_path.join("UDC"), &self.udc_name)
     }
 
     /// 解绑 UDC。
-    fn unbind_udc(&self) -> Result<(), std::io::Error> {
+    pub fn unbind_udc(&self) -> Result<(), std::io::Error> {
         write_file(&self.gadget_path.join("UDC"), "")
+    }
+
+    /// 移除 config 目录下的旧 symlink（如 ffs.adb）。
+    pub fn remove_config_links(&self) -> Result<(), std::io::Error> {
+        let config_dir = self.gadget_path.join("configs/b.1");
+        if !config_dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(&config_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_symlink() {
+                fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -172,6 +193,6 @@ impl Drop for GadgetManager {
 }
 
 /// 写入 sysfs/configfs 文件。
-fn write_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
+pub(crate) fn write_file(path: &Path, content: &str) -> Result<(), std::io::Error> {
     fs::write(path, content)
 }

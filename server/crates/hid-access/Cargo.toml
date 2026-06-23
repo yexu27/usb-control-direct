@@ -8,6 +8,7 @@ description = "S02 键鼠准入控制引擎"
 
 [dependencies]
 common = { workspace = true }
+evdev = "0.12"
 thiserror = { workspace = true }
 tracing = "0.1"
 tokio = { workspace = true }
