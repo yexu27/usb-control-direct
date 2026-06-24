@@ -660,14 +660,14 @@ function disabledClearDate(date: Date): boolean {
 
 .log-filter-bar {
   display: grid;
-  grid-template-columns: 150px 168px 168px 86px minmax(0, 1fr);
+  grid-template-columns: 134px 168px 168px 86px minmax(0, 1fr);
   align-items: center;
   width: 100%;
-  gap: 6px;
+  gap: 10px;
 }
 
 .log-filter-bar.without-type-filter {
-  grid-template-columns: 220px 176px 176px minmax(0, 1fr);
+  grid-template-columns: 208px 176px 176px minmax(0, 1fr);
 }
 
 .filter-keyword {
