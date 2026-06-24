@@ -660,14 +660,14 @@ function disabledClearDate(date: Date): boolean {
 
 .log-filter-bar {
   display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) 280px 280px 150px auto;
+  grid-template-columns: 150px 168px 168px 86px minmax(0, 1fr);
   align-items: center;
   width: 100%;
-  gap: 10px;
+  gap: 6px;
 }
 
 .log-filter-bar.without-type-filter {
-  grid-template-columns: minmax(320px, 1fr) 280px 280px auto;
+  grid-template-columns: 220px 176px 176px minmax(0, 1fr);
 }
 
 .filter-keyword {
@@ -688,25 +688,40 @@ function disabledClearDate(date: Date): boolean {
 .filter-start :deep(.el-input__wrapper),
 .filter-end :deep(.el-input__wrapper),
 .filter-select :deep(.el-select__wrapper) {
-  min-height: 38px;
+  min-height: 34px;
   border-radius: 4px;
   box-shadow: 0 0 0 1px #d8dee8 inset;
-  font-size: 16px;
+  font-size: 13px;
+}
+
+.filter-keyword :deep(.el-input__inner),
+.filter-start :deep(.el-input__inner),
+.filter-end :deep(.el-input__inner),
+.filter-select :deep(.el-select__placeholder),
+.filter-select :deep(.el-select__selected-item) {
+  font-size: 13px;
 }
 
 .filter-actions {
   display: flex;
+  justify-content: flex-end;
+  min-width: 0;
   margin-left: auto;
-  gap: 10px;
+  gap: 6px;
 }
 
 .filter-actions :deep(.el-button) {
-  min-width: 86px;
-  height: 38px;
+  min-width: 58px;
+  height: 34px;
   margin-left: 0;
+  padding: 0 12px;
   border-radius: 4px;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: $font-weight-semibold;
+}
+
+.filter-actions :deep([data-testid='log-export']) {
+  min-width: 76px;
 }
 
 .filter-actions :deep(.el-button--primary) {
@@ -817,13 +832,6 @@ function disabledClearDate(date: Date): boolean {
 
 .clear-range {
   width: 100%;
-}
-
-@media (max-width: 1120px) {
-  .filter-actions {
-    flex: 1 1 100%;
-    justify-content: flex-end;
-  }
 }
 
 @media (max-width: 720px) {

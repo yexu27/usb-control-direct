@@ -79,4 +79,15 @@ describe('page style contract', () => {
     expect(source).not.toContain('logs-card app-card')
     expect(source).not.toContain('data-testid="logs-role-badge"')
   })
+
+  it('LogsPage keeps log filter controls within the confirmed content width', () => {
+    const source = readPage('LogsPage.vue')
+
+    expect(source).toContain('grid-template-columns: 150px 168px 168px 86px minmax(0, 1fr)')
+    expect(source).toContain('grid-template-columns: 220px 176px 176px minmax(0, 1fr)')
+    expect(source).toContain('font-size: 13px')
+    expect(source).toContain('height: 34px')
+    expect(source).not.toContain('grid-template-columns: minmax(260px, 1.4fr) 280px 280px 150px auto')
+    expect(source).not.toContain('grid-template-columns: minmax(320px, 1fr) 280px 280px auto')
+  })
 })

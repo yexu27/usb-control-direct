@@ -35,6 +35,18 @@ async function expectRoundedTable(page: Page, selector: string): Promise<void> {
   expect(Number.parseFloat(radius)).toBeGreaterThanOrEqual(8)
 }
 
+async function expectWithinMainContent(page: Page, selector: string): Promise<void> {
+  const box = await page.locator(selector).boundingBox()
+  const contentBox = await page.locator('.main-content').boundingBox()
+  expect(box).not.toBeNull()
+  expect(contentBox).not.toBeNull()
+  if (box == null || contentBox == null) {
+    return
+  }
+  expect(box.x).toBeGreaterThanOrEqual(contentBox.x)
+  expect(box.x + box.width).toBeLessThanOrEqual(contentBox.x + contentBox.width)
+}
+
 test.describe('管理端 UI 视觉契约', () => {
   test('登录页卡片宽度对齐原型尺寸', async () => {
     const { app, page } = await launchApp()
@@ -144,6 +156,25 @@ test.describe('管理端 UI 视觉契约', () => {
       await expect(page.getByText('20/page')).toHaveCount(0)
       await expect(page.getByTestId('logs-role-badge')).toHaveCount(0)
       await expectRoundedTable(page, '[data-testid="logs-table-shell"]')
+
+      for (const tabTestId of ['logs-tab-usb_audit', 'logs-tab-malware', 'logs-tab-operation']) {
+        await page.getByTestId(tabTestId).click()
+        await expectWithinMainContent(page, '[data-testid="log-keyword"]')
+        await expectWithinMainContent(page, '.filter-start')
+        await expectWithinMainContent(page, '.filter-end')
+        await expectWithinMainContent(page, '[data-testid="log-search"]')
+        await expectWithinMainContent(page, '[data-testid="log-export"]')
+        await expectWithinMainContent(page, '[data-testid="log-clear"]')
+      }
+
+      await page.getByTestId('logs-tab-usb_audit').click()
+      await expectWithinMainContent(page, '.filter-select')
+
+      await page.getByTestId('logs-tab-malware').click()
+      await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+      await page.getByTestId('logs-tab-operation').click()
+      await expect(page.getByTestId('log-event-type')).toHaveCount(0)
     } finally {
       await app?.close()
       await device.stop()
