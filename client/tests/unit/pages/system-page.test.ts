@@ -132,7 +132,21 @@ describe('SystemPage', () => {
     await flushPromises()
 
     expect(getSystemInfo).toHaveBeenCalledWith('token')
-    expect(wrapper.findAll('[data-testid="system-management-card"]')).toHaveLength(4)
+    expect(wrapper.get('[data-testid="system-card-grid"]').classes()).toContain('system-grid')
+    const cards = wrapper.findAll('[data-testid="system-management-card"]')
+    expect(cards).toHaveLength(4)
+    expect(cards.map((card) => card.classes())).toEqual([
+      expect.arrayContaining(['system-card', 'system-card-upgrade']),
+      expect.arrayContaining(['system-card', 'system-card-virusdb']),
+      expect.arrayContaining(['system-card', 'system-card-license']),
+      expect.arrayContaining(['system-card', 'system-card-device-desc']),
+    ])
+    expect(cards.map((card) => card.text())).toEqual([
+      expect.stringContaining('系统升级'),
+      expect.stringContaining('病毒库升级'),
+      expect.stringContaining('授权信息管理'),
+      expect.stringContaining('自定义设备描述'),
+    ])
     expect(wrapper.text()).not.toContain('系统信息')
     expect(wrapper.text()).toContain('系统升级')
     expect(wrapper.text()).toContain('当前版本: v1.0.0')

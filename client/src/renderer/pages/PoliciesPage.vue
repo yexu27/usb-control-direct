@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
@@ -16,6 +16,7 @@ const connection = useConnectionStore()
 const session = useSessionStore()
 const filePolicyStore = useFilePolicyStore()
 const whitelistStore = useWhitelistStore()
+const defaultPolicyFileNamePreview = computed(() => defaultPolicyFileName(new Date(2026, 5, 9, 13, 35, 36)))
 
 const isTransferring = ref(false)
 const progressTitle = ref('')
@@ -345,10 +346,13 @@ async function handleImport(): Promise<void> {
     </header>
     <ConnectionAlert />
 
-    <div class="policy-actions">
-      <el-card shadow="never" class="policy-card app-card">
-        <h2>导出策略</h2>
-        <p>将当前装置策略备份为加密 .bin 文件。</p>
+    <div class="policy-transfer-grid" data-testid="policy-transfer-grid">
+      <section class="policy-transfer-card" data-testid="policy-export-card">
+        <div class="transfer-icon">+</div>
+        <h3>导出策略</h3>
+        <p>将当前配置导出为加密 .bin 文件</p>
+        <div class="transfer-hint">默认文件名：<code>{{ defaultPolicyFileNamePreview }}</code></div>
+        <div class="transfer-danger">导出的策略文件为加密格式</div>
         <el-button
           type="primary"
           data-testid="export-policy"
@@ -358,13 +362,14 @@ async function handleImport(): Promise<void> {
         >
           导出策略
         </el-button>
-      </el-card>
+      </section>
 
-      <el-card shadow="never" class="policy-card app-card">
-        <h2>导入策略</h2>
-        <p>整体覆盖当前白名单和文件访问策略，仅支持 .bin 文件。</p>
+      <section class="policy-transfer-card" data-testid="policy-import-card">
+        <div class="transfer-icon transfer-icon-import">+</div>
+        <h3>导入策略</h3>
+        <p>从本地或安全U盘导入 .bin 策略文件</p>
+        <div class="transfer-hint">支持本装置和其他装置导出的策略（需版本兼容）</div>
         <el-button
-          type="primary"
           data-testid="import-policy"
           :loading="isTransferring"
           :disabled="isTransferring"
@@ -372,7 +377,7 @@ async function handleImport(): Promise<void> {
         >
           导入策略
         </el-button>
-      </el-card>
+      </section>
     </div>
 
     <ProgressDialog
@@ -384,28 +389,89 @@ async function handleImport(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
-.policy-actions {
+@use '@/styles/tokens' as *;
+
+.policy-transfer-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: $spacing-5;
+  gap: 24px;
+  margin-top: 26px;
 }
 
-.policy-card {
-  height: 100%;
+.policy-transfer-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 284px;
+  padding: 24px 26px 26px;
+  background: var(--andi-white);
+  border: $border-width-base solid var(--andi-border);
+  border-radius: 8px;
 
-  h2 {
-    margin: 0 0 $spacing-3;
+  h3 {
+    margin: 0;
+    color: var(--andi-text);
+    font-size: 18px;
+    font-weight: $font-weight-semibold;
+    line-height: 1.35;
   }
 
   p {
-    min-height: 48px;
-    margin: 0 0 $spacing-5;
-    color: $text-secondary;
+    margin: 8px 0 18px;
+    color: var(--andi-text-light);
+    font-size: 15px;
+    line-height: 1.6;
   }
 }
 
+.transfer-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  color: var(--andi-blue);
+  font-size: 32px;
+  line-height: 1;
+  background: var(--andi-blue-light);
+  border-radius: 9px;
+}
+
+.transfer-icon-import {
+  color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.transfer-hint {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 40px;
+  margin-bottom: 18px;
+  padding: 8px 14px;
+  color: var(--andi-text-light);
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+  background: #f0f2f7;
+  border-radius: 6px;
+
+  code {
+    color: var(--andi-blue-dark);
+    font-family: Consolas, 'SF Mono', monospace;
+    font-size: 14px;
+    font-weight: $font-weight-semibold;
+  }
+}
+
+.transfer-danger {
+  margin: 0 0 18px;
+  color: #d32f2f;
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+}
+
 @media (max-width: 900px) {
-  .policy-actions {
+  .policy-transfer-grid {
     grid-template-columns: 1fr;
   }
 }

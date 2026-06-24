@@ -1,7 +1,9 @@
 $app-window-max-width: 1120px;
+$app-window-min-width: 1024px;
 $app-window-min-height: 680px;
 $app-header-height: 48px;
 $app-sidebar-width: 190px;
+$app-footer-height: 28px;
 $app-content-padding-y: 20px;
 $app-content-padding-x: 24px;
 
@@ -17,6 +19,7 @@ $brand-header-start: #004b9a;
 $brand-header-end: #0066cc;
 
 $white: #fff;
+$black: #000;
 $text-primary: #333;
 $text-secondary: #666;
 $text-muted: #999;
@@ -26,25 +29,45 @@ $success: #2e7d32;
 $success-bg: #e8f5e9;
 $warning: #e65100;
 $warning-bg: #fff8e1;
+$info: #909399;
+$info-bg: #f4f4f5;
 $purple: #7b1fa2;
 $purple-bg: #f3e5f5;
 
 $font-size-brand-cn: 12px;
 $font-size-brand-en: 9px;
-$font-size-page-title: 16px;
-$font-size-card-title: 13px;
+$font-size-xs: 9px;
+$font-size-sm: 11px;
 $font-size-body: 12px;
 $font-size-control: 12px;
+$font-size-card-title: 13px;
+$font-size-md: 13px;
+$font-size-lg: 14px;
+$font-size-xl: 16px;
+$font-size-page-title: 16px;
+$font-size-page-title-large: 22px;
 $font-size-hint: 11px;
 $font-size-table-head: 11px;
 $line-height-base: 1.5;
 
 $font-weight-regular: 400;
 $font-weight-medium: 500;
+$font-weight-semibold: 600;
 $font-weight-bold: 700;
 
+$spacing-1: 4px;
+$spacing-2: 6px;
+$spacing-3: 8px;
+$spacing-4: 10px;
+$spacing-5: 12px;
+$spacing-6: 16px;
+$spacing-7: 20px;
+$spacing-8: 24px;
+
+$border-width-base: 1px;
 $radius-control: 4px;
 $radius-card: 6px;
+$radius-card-lg: 8px;
 $radius-window: 8px;
 $radius-dialog: 8px;
 $shadow-control-focus: 0 0 0 2px rgb(0 86 179 / 12%);
@@ -53,3 +76,11 @@ $shadow-window: 0 2px 8px rgb(0 0 0 / 7%);
 $shadow-dialog: 0 8px 30px rgb(0 0 0 / 18%);
 $transition-fast: 120ms ease;
 $transition-base: 160ms ease;
+
+$sidebar-active-border-width: 3px;
+$connection-dot-size: 8px;
+$window-control-color: rgb(255 255 255 / 70%);
+$window-control-hover-bg: rgb(255 255 255 / 12%);
+$window-control-close-hover-bg: #e81123;
+$window-control-light-color: $text-muted;
+$window-control-light-hover-bg: rgb(0 0 0 / 6%);

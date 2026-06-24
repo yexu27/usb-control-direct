@@ -28,6 +28,42 @@ async function login(page: Page): Promise<void> {
   await page.getByTestId('login-submit').click()
 }
 
+async function expectRoundedTable(page: Page, selector: string): Promise<void> {
+  const radius = await page.locator(selector).evaluate((element) => {
+    return window.getComputedStyle(element).borderRadius
+  })
+  expect(Number.parseFloat(radius)).toBeGreaterThanOrEqual(8)
+}
+
+async function expectWithinMainContent(page: Page, selector: string): Promise<void> {
+  const box = await page.locator(selector).boundingBox()
+  const contentBox = await page.locator('.main-content').boundingBox()
+  expect(box).not.toBeNull()
+  expect(contentBox).not.toBeNull()
+  if (box == null || contentBox == null) {
+    return
+  }
+  expect(box.x).toBeGreaterThanOrEqual(contentBox.x)
+  expect(box.x + box.width).toBeLessThanOrEqual(contentBox.x + contentBox.width)
+}
+
+async function expectHorizontalGap(page: Page, leftSelector: string, rightSelector: string): Promise<void> {
+  const leftBox = await page.locator(leftSelector).boundingBox()
+  const rightBox = await page.locator(rightSelector).boundingBox()
+  expect(leftBox).not.toBeNull()
+  expect(rightBox).not.toBeNull()
+  if (leftBox == null || rightBox == null) {
+    return
+  }
+  expect(rightBox.x - (leftBox.x + leftBox.width)).toBeGreaterThanOrEqual(8)
+}
+
+async function expectNoEllipsis(page: Page, selector: string): Promise<void> {
+  const text = await page.locator(selector).innerText()
+  expect(text).not.toContain('...')
+  expect(text).not.toContain('…')
+}
+
 test.describe('管理端 UI 视觉契约', () => {
   test('登录页卡片宽度对齐原型尺寸', async () => {
     const { app, page } = await launchApp()
@@ -89,6 +125,79 @@ test.describe('管理端 UI 视觉契约', () => {
       }
 
       await expect(content).toHaveCSS('overflow-y', /auto|scroll/)
+    } finally {
+      await app?.close()
+      await device.stop()
+    }
+  })
+
+  test('用户管理确认原型表格保持圆角且无旧分页输入', async () => {
+    const device = new MockDevice({ ...DEFAULT_SCENARIO })
+    let app: ElectronApplication | null = null
+    await device.start()
+    try {
+      const launched = await launchApp()
+      app = launched.app
+      const page = launched.page
+
+      await login(page)
+      await expect(page).toHaveURL(/#\/users$/)
+      await expect(page.getByText('三权分立: 系统管理员 / 操作员 / 审计员')).toBeVisible()
+      await expectRoundedTable(page, '[data-testid="users-table-shell"]')
+      await expect(page.getByText('Go to')).toHaveCount(0)
+    } finally {
+      await app?.close()
+      await device.stop()
+    }
+  })
+
+  test('日志管理确认原型不显示旧分页和右上角角色 badge', async () => {
+    const device = new MockDevice({ ...DEFAULT_SCENARIO, role: 'auditor' })
+    let app: ElectronApplication | null = null
+    await device.start()
+    try {
+      const launched = await launchApp()
+      app = launched.app
+      const page = launched.page
+
+      await page.locator('[data-testid="login-username"]').fill('audit')
+      await page.locator('[data-testid="login-password"]').fill('audit@123')
+      await page.locator('[data-testid="login-ip"]').fill('127.0.0.1')
+      await page.getByTestId('login-submit').click()
+      await expect(page).toHaveURL(/#\/logs$/)
+
+      await expect(page.getByRole('heading', { name: '日志管理' })).toBeVisible()
+      await expect(page.getByTestId('logs-prototype-shell')).toBeVisible()
+      await expect(page.getByTestId('logs-prototype-pagination')).toBeVisible()
+      await expect(page.getByText('Go to')).toHaveCount(0)
+      await expect(page.getByText('20/page')).toHaveCount(0)
+      await expect(page.getByTestId('logs-role-badge')).toHaveCount(0)
+      await expectRoundedTable(page, '[data-testid="logs-table-shell"]')
+
+      for (const tabTestId of ['logs-tab-usb_audit', 'logs-tab-malware', 'logs-tab-operation']) {
+        await page.getByTestId(tabTestId).click()
+        await expectWithinMainContent(page, '[data-testid="log-keyword"]')
+        await expectWithinMainContent(page, '.filter-start')
+        await expectWithinMainContent(page, '.filter-end')
+        await expectWithinMainContent(page, '[data-testid="log-search"]')
+        await expectWithinMainContent(page, '[data-testid="log-export"]')
+        await expectWithinMainContent(page, '[data-testid="log-clear"]')
+        await expectHorizontalGap(page, '[data-testid="log-keyword"]', '.filter-start')
+        await expectHorizontalGap(page, '.filter-start', '.filter-end')
+        await expectHorizontalGap(page, '.filter-end', '[data-testid="log-search"]')
+      }
+
+      await page.getByTestId('logs-tab-usb_audit').click()
+      await expectWithinMainContent(page, '.filter-select')
+      await expectHorizontalGap(page, '.filter-end', '.filter-select')
+      await expectHorizontalGap(page, '.filter-select', '[data-testid="log-search"]')
+      await expectNoEllipsis(page, '.filter-select .el-select__placeholder')
+
+      await page.getByTestId('logs-tab-malware').click()
+      await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+      await page.getByTestId('logs-tab-operation').click()
+      await expect(page.getByTestId('log-event-type')).toHaveCount(0)
     } finally {
       await app?.close()
       await device.stop()

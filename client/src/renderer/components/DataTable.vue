@@ -10,12 +10,14 @@ interface Props {
   page: number
   pageSize: number
   emptyText?: string
+  showDefaultPagination?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   error: '',
   emptyText: '暂无数据',
+  showDefaultPagination: true,
 })
 
 const emit = defineEmits<{
@@ -63,7 +65,7 @@ const emit = defineEmits<{
     </el-table>
 
     <el-pagination
-      v-if="!props.error && props.total > 0"
+      v-if="props.showDefaultPagination && !props.error && props.total > 0"
       class="app-table-pagination"
       data-testid="table-pagination"
       :current-page="props.page"

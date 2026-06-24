@@ -29,7 +29,26 @@ async function openMenu(page: Page, name: string): Promise<void> {
 }
 
 async function expectLatestMessage(page: Page, text: string | RegExp): Promise<void> {
-  await expect(page.locator('.el-message__content').filter({ hasText: text }).last()).toBeVisible()
+  const appToast = page.getByTestId('app-toast')
+  const legacyMessage = page.locator('.el-message__content').filter({ hasText: text }).last()
+  const visibleTarget = await Promise.race([
+    appToast.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'app-toast' as const).catch(() => null),
+    legacyMessage.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'legacy-message' as const).catch(() => null),
+  ])
+
+  if (visibleTarget === 'app-toast') {
+    await expect(appToast).toContainText(text)
+    const box = await appToast.boundingBox()
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth }))
+    expect(box).not.toBeNull()
+    if (box != null) {
+      const center = box.x + box.width / 2
+      expect(Math.abs(center - viewport.width / 2)).toBeLessThan(8)
+    }
+    return
+  }
+
+  await expect(legacyMessage).toBeVisible()
 }
 
 async function expectAppDialog(page: Page, title: string | RegExp, message: string | RegExp): Promise<void> {
@@ -47,6 +66,26 @@ async function closeAppDialog(page: Page): Promise<void> {
 
 function progressDialog(page: Page) {
   return page.getByTestId('progress-dialog')
+}
+
+async function expectSystemManagementLayout(page: Page): Promise<void> {
+  const systemCards = page.getByTestId('system-management-card')
+  await expect(page.getByTestId('system-card-grid')).toBeVisible()
+  await expect(systemCards).toHaveCount(4)
+  await expect(systemCards.nth(0)).toContainText('系统升级')
+  await expect(systemCards.nth(1)).toContainText('病毒库升级')
+  await expect(systemCards.nth(2)).toContainText('授权信息管理')
+  await expect(systemCards.nth(3)).toContainText('自定义设备描述')
+  await expect(page.getByText('安全U盘自动升级')).toHaveCount(0)
+  await expect(page.getByText('系统管理员')).toHaveCount(0)
+}
+
+async function expectUsersLayout(page: Page): Promise<void> {
+  await expect(page.getByText('三权分立: 系统管理员 / 操作员 / 审计员')).toBeVisible()
+  await expect(page.getByTestId('users-table-shell')).toBeVisible()
+  await expect(page.getByTestId('create-user-open')).toBeVisible()
+  await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
+  await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
 }
 
 async function withDevice(
@@ -74,7 +113,28 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await login(page, 'audit', 'audit@123')
         await expect(page).toHaveURL(/#\/logs$/)
         await expect(page.getByRole('heading', { name: '日志管理' })).toBeVisible()
-        await expect(page.getByText('USB审计日志', { exact: true })).toBeVisible()
+        await expect(page.getByTestId('logs-prototype-shell')).toBeVisible()
+        await expect(page.getByTestId('logs-prototype-pagination')).toBeVisible()
+        await expect(page.getByText(/显示 1-\d+，共 \d+ 条/)).toBeVisible()
+        await expect(page.getByText('Go to')).toHaveCount(0)
+        await expect(page.getByText('20/page')).toHaveCount(0)
+        await expect(page.getByTestId('logs-role-badge')).toHaveCount(0)
+        await expect(page.getByTestId('logs-tab-usb_audit')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '插拔类型' })).toBeVisible()
+
+        await page.getByTestId('logs-tab-malware').click()
+        await expect(page.getByTestId('logs-tab-malware')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '病毒' })).toBeVisible()
+        await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+        await page.getByTestId('logs-tab-operation').click()
+        await expect(page.getByTestId('logs-tab-operation')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '用户' })).toBeVisible()
+        await expect(page.getByText('操作日志类型')).toHaveCount(0)
+        await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+        await page.getByTestId('logs-tab-usb_audit').click()
+        await expect(page.getByTestId('logs-tab-usb_audit')).toHaveClass(/active/)
 
         await app.evaluate(({ dialog }, path) => {
           dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
@@ -103,6 +163,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await expect(page).toHaveURL(/#\/users$/)
         await openMenu(page, '系统管理')
         await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+        await expectSystemManagementLayout(page)
 
         await app.evaluate(({ dialog }, path) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
@@ -262,6 +323,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
     await withDevice(async (_device, _app, page) => {
       await login(page, 'admin', 'admin@123')
       await expect(page).toHaveURL(/#\/users$/)
+      await expectUsersLayout(page)
       await expect(page.getByText('admin', { exact: true })).toBeVisible()
       await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
 

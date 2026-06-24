@@ -1,33 +1,25 @@
-import { describe, expect, it, vi } from 'vitest'
-import { ElMessage } from 'element-plus'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { alertAction } from '@/utils/confirm-action'
+import { useAppToastStore } from '@/stores/app-toast'
 import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
-
-vi.mock('element-plus', async () => {
-  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
-  return {
-    ...actual,
-    ElMessage: {
-      success: vi.fn(),
-    },
-  }
-})
 
 vi.mock('@/utils/confirm-action', () => ({
   alertAction: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('operation-feedback', () => {
-  it('shows success toast at top center for 2 seconds', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('shows success toast through app toast store', () => {
     showSuccessToast('操作成功')
 
-    expect(ElMessage.success).toHaveBeenCalledWith({
-      message: '操作成功',
-      duration: 2000,
-      offset: 24,
-      showClose: false,
-      grouping: true,
-    })
+    const toast = useAppToastStore()
+    expect(toast.visible).toBe(true)
+    expect(toast.message).toBe('操作成功')
+    expect(toast.type).toBe('success')
   })
 
   it('shows centered error dialog', async () => {

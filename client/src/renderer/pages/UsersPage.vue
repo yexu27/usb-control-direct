@@ -279,32 +279,38 @@ async function submitResetPassword(): Promise<void> {
 
 <template>
   <div class="users-page app-page">
-    <header class="page-header app-page-header">
+    <header class="page-header app-page-header users-page-header">
       <div>
         <h1 class="app-page-title">用户管理</h1>
-        <p class="app-page-desc">管理系统管理员、操作员和审计员账号</p>
+        <p class="app-page-desc">三权分立: 系统管理员 / 操作员 / 审计员</p>
       </div>
+      <el-button
+        type="primary"
+        class="users-create-button"
+        data-testid="create-user-open"
+        @click="openCreateDialog"
+      >
+        + 新建用户
+      </el-button>
     </header>
     <ConnectionAlert />
 
-    <el-card shadow="never" class="users-card app-card">
+    <section
+      class="users-table-shell prototype-table-shell"
+      data-testid="users-table-shell"
+    >
       <DataTable
+        class="users-table prototype-table"
         :columns="columns"
         :data="users"
         :loading="isLoading"
         :error="errorMessage"
         :total="users.length"
         :page="1"
-        :page-size="20"
+        :page-size="10"
         empty-text="暂无用户"
+        :show-default-pagination="false"
       >
-        <template #filters>
-          <div class="user-toolbar app-filter-actions">
-            <el-button type="primary" data-testid="create-user-open" @click="openCreateDialog">
-              新建用户
-            </el-button>
-          </div>
-        </template>
         <template #role="{ row }">
           <el-tag
             class="app-role-badge"
@@ -348,7 +354,14 @@ async function submitResetPassword(): Promise<void> {
           </div>
         </template>
       </DataTable>
-    </el-card>
+    </section>
+    <nav class="prototype-pill-pagination users-pagination" aria-label="分页切换">
+      <span class="users-page-total">共 {{ users.length }} 条</span>
+      <span class="users-page-size">每页 10 条</span>
+      <span class="users-page-arrow">‹</span>
+      <span class="users-page-number">1</span>
+      <span class="users-page-arrow active">›</span>
+    </nav>
 
     <el-dialog v-model="createDialogVisible" title="新建用户" width="520px">
       <el-alert
@@ -461,6 +474,8 @@ async function submitResetPassword(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .users-page {
   display: flex;
   flex-direction: column;
@@ -470,25 +485,69 @@ async function submitResetPassword(): Promise<void> {
 .page-header {
   h1 {
     margin: 0;
-    color: $text-primary;
-    font-size: $font-xxl;
+    color: var(--andi-text);
+    font-size: $font-size-page-title-large;
     font-weight: $font-weight-semibold;
   }
 
   p {
     margin: $spacing-1 0 0;
-    color: $text-secondary;
+    color: var(--andi-text-light);
   }
 }
 
-.users-card {
-  border-color: $border-color;
+.users-page-header {
+  margin-bottom: 28px;
 }
 
-.user-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
+.users-create-button {
+  min-width: 112px;
+  min-height: 36px;
+  font-size: 14px;
+  font-weight: $font-weight-semibold;
+}
+
+.users-table-shell {
+  background: var(--andi-white);
+}
+
+.users-table :deep(.data-table-wrapper) {
+  gap: 0;
+}
+
+.users-page-size,
+.users-page-arrow,
+.users-page-number {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.users-page-size {
+  min-width: 88px;
+  padding: 0 12px;
+  background: #f9fbfd;
+  border: 1px solid #d8dee8;
+}
+
+.users-page-arrow {
+  width: 28px;
+  color: #b0b8c4;
+  background: var(--andi-white);
+  border: 1px solid #e3e8ef;
+}
+
+.users-page-arrow.active {
+  color: var(--andi-text-light);
+}
+
+.users-page-number {
+  width: 28px;
+  color: var(--andi-white);
+  font-weight: $font-weight-semibold;
+  background: var(--andi-blue);
+  box-shadow: 0 3px 8px rgba(0, 86, 179, 0.18);
 }
 
 .row-actions {

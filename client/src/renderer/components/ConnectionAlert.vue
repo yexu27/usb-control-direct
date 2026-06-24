@@ -16,6 +16,8 @@ const connection = useConnectionStore()
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .connection-alert {
   margin-bottom: $spacing-5;
 }

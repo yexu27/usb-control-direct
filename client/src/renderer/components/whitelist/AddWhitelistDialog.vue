@@ -189,9 +189,11 @@ defineExpose({ handleSubmit })
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .reason {
   margin-left: $spacing-3;
-  color: $color-danger;
+  color: var(--andi-danger);
 }
 
 .candidate-select {

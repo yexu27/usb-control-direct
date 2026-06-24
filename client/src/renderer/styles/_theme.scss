@@ -11,6 +11,7 @@
   --andi-header-start: #{$brand-header-start};
   --andi-header-end: #{$brand-header-end};
   --andi-white: #{$white};
+  --andi-black: #{$black};
   --andi-text: #{$text-primary};
   --andi-text-secondary: #{$text-secondary};
   --andi-text-light: #{$text-muted};
@@ -22,11 +23,15 @@
   --andi-success-bg: #{$success-bg};
   --andi-warning: #{$warning};
   --andi-warning-bg: #{$warning-bg};
+  --andi-info: #{$info};
+  --andi-info-bg: #{$info-bg};
   --andi-purple: #{$purple};
   --andi-purple-bg: #{$purple-bg};
   --andi-font-family: #{fonts.$font-family-base};
+  --andi-border-width: #{$border-width-base};
   --andi-radius-control: #{$radius-control};
   --andi-radius-card: #{$radius-card};
+  --andi-radius-card-lg: #{$radius-card-lg};
   --andi-radius-window: #{$radius-window};
   --andi-radius-dialog: #{$radius-dialog};
   --andi-shadow-control-focus: #{$shadow-control-focus};
@@ -35,4 +40,19 @@
   --andi-shadow-dialog: #{$shadow-dialog};
   --andi-transition-fast: #{$transition-fast};
   --andi-transition-base: #{$transition-base};
+  --andi-app-window-max-width: #{$app-window-max-width};
+  --andi-app-window-min-width: #{$app-window-min-width};
+  --andi-app-window-min-height: #{$app-window-min-height};
+  --andi-app-header-height: #{$app-header-height};
+  --andi-app-sidebar-width: #{$app-sidebar-width};
+  --andi-app-footer-height: #{$app-footer-height};
+  --andi-app-content-padding-y: #{$app-content-padding-y};
+  --andi-app-content-padding-x: #{$app-content-padding-x};
+  --andi-sidebar-active-border-width: #{$sidebar-active-border-width};
+  --andi-connection-dot-size: #{$connection-dot-size};
+  --andi-window-control-color: #{$window-control-color};
+  --andi-window-control-hover-bg: #{$window-control-hover-bg};
+  --andi-window-control-close-hover-bg: #{$window-control-close-hover-bg};
+  --andi-window-control-light-color: #{$window-control-light-color};
+  --andi-window-control-light-hover-bg: #{$window-control-light-hover-bg};
 }

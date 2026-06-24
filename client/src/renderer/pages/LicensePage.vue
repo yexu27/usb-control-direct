@@ -296,6 +296,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .license-page {
   position: relative;
   display: flex;
@@ -325,20 +327,20 @@ onUnmounted(() => {
   justify-content: center;
   width: 36px;
   height: 28px;
-  color: $win-btn-light-color;
-  font-size: $font-base;
+  color: var(--andi-window-control-light-color);
+  font-size: $font-size-body;
   background: transparent;
   border: none;
   cursor: pointer;
 
   &:hover {
-    background: $win-btn-light-hover-bg;
+    background: var(--andi-window-control-light-hover-bg);
   }
 }
 
 .win-btn-close:hover {
-  color: $color-white;
-  background: $win-btn-close-hover-bg;
+  color: var(--andi-white);
+  background: var(--andi-window-control-close-hover-bg);
 }
 
 .license-card {
@@ -379,7 +381,7 @@ onUnmounted(() => {
 .license-description {
   margin: 0 0 $spacing-8;
   color: var(--andi-text-secondary);
-  font-size: $font-base;
+  font-size: $font-size-body;
   line-height: $line-height-base;
 }
 
@@ -398,7 +400,7 @@ onUnmounted(() => {
 .license-hint {
   margin: $spacing-7 0 0;
   color: var(--andi-text-secondary);
-  font-size: $font-sm;
+  font-size: $font-size-sm;
 }
 
 .machine-code-content {
@@ -410,8 +412,8 @@ onUnmounted(() => {
   p {
     align-self: flex-start;
     margin: 0;
-    color: $text-secondary;
-    font-size: $font-base;
+    color: var(--andi-text-light);
+    font-size: $font-size-body;
   }
 }
 
@@ -419,8 +421,8 @@ onUnmounted(() => {
   width: 200px;
   height: 200px;
   object-fit: contain;
-  border: $border-width solid $border-color;
-  border-radius: $border-radius-lg;
+  border: $border-width-base solid var(--andi-border);
+  border-radius: $radius-card;
 }
 
 .file-selector {
@@ -433,7 +435,7 @@ onUnmounted(() => {
   color: var(--andi-text-secondary);
   background: var(--andi-white);
   border: 1px dashed var(--andi-border);
-  border-radius: $border-radius-lg;
+  border-radius: $radius-card;
   cursor: pointer;
   gap: $spacing-2;
 
@@ -443,7 +445,7 @@ onUnmounted(() => {
   }
 
   small {
-    color: $text-secondary;
+    color: var(--andi-text-light);
   }
 }
 

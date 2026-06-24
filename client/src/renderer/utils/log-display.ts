@@ -71,29 +71,28 @@ export const OPERATION_LOG_CATEGORY_OPTIONS: DisplayOption<OperationLogCategory>
 export function getLogColumns(logType: LogType): DataTableColumn[] {
   if (logType === 'usb_audit') {
     return [
-      { prop: 'time', label: '时间', width: 170 },
+      { prop: 'time', label: '时间', width: 190 },
       { prop: 'deviceName', label: '设备名称', minWidth: 160 },
-      { prop: 'serialNumber', label: '序列号', minWidth: 180 },
-      { prop: 'eventType', label: '事件类型', width: 120 },
-      { prop: 'content', label: '内容', minWidth: 240 },
+      { prop: 'serialNumber', label: '序列号', minWidth: 210, slot: 'serialNumber' },
+      { prop: 'eventType', label: '插拔类型', width: 140, slot: 'eventType' },
+      { prop: 'content', label: '内容', minWidth: 260 },
     ]
   }
 
   if (logType === 'malware') {
     return [
-      { prop: 'time', label: '时间', width: 170 },
-      { prop: 'deviceName', label: '设备名称', minWidth: 160 },
-      { prop: 'serialNumber', label: '序列号', minWidth: 180 },
-      { prop: 'content', label: '内容', minWidth: 240 },
+      { prop: 'time', label: '时间', width: 190 },
+      { prop: 'deviceName', label: '设备名称', minWidth: 150 },
+      { prop: 'serialNumber', label: '序列号', minWidth: 210, slot: 'serialNumber' },
+      { prop: 'content', label: '内容', minWidth: 360 },
       { prop: 'virus', label: '病毒', minWidth: 160 },
     ]
   }
 
   return [
-    { prop: 'time', label: '时间', width: 170 },
-    { prop: 'username', label: '用户', width: 140 },
-    { prop: 'operationType', label: '操作日志类型', width: 160 },
-    { prop: 'content', label: '内容', minWidth: 280 },
+    { prop: 'time', label: '时间', width: 260 },
+    { prop: 'username', label: '用户', width: 180 },
+    { prop: 'content', label: '内容', minWidth: 420 },
   ]
 }
 

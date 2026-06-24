@@ -225,6 +225,8 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .login-page {
   position: relative;
   display: flex;
@@ -254,20 +256,20 @@ onMounted(() => {
   justify-content: center;
   width: 36px;
   height: 28px;
-  color: $win-btn-light-color;
-  font-size: $font-base;
+  color: var(--andi-window-control-light-color);
+  font-size: $font-size-body;
   background: transparent;
   border: none;
   cursor: pointer;
 
   &:hover {
-    background: $win-btn-light-hover-bg;
+    background: var(--andi-window-control-light-hover-bg);
   }
 }
 
 .win-btn-close:hover {
-  color: $color-white;
-  background: $win-btn-close-hover-bg;
+  color: var(--andi-white);
+  background: var(--andi-window-control-close-hover-bg);
 }
 
 .login-card {
@@ -305,7 +307,7 @@ onMounted(() => {
   width: 56px;
   height: 56px;
   margin: 0 auto $spacing-5;
-  color: $color-white;
+  color: var(--andi-white);
   background: linear-gradient(135deg, var(--andi-header-start), var(--andi-header-end));
   border-radius: 10px;
 
@@ -334,15 +336,15 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   margin-top: $spacing-6;
-  color: $text-secondary;
-  font-size: $font-sm;
+  color: var(--andi-text-light);
+  font-size: $font-size-sm;
   gap: $spacing-2;
 }
 
 .connection-dot {
   width: $connection-dot-size;
   height: $connection-dot-size;
-  background: $color-warning;
+  background: var(--andi-warning);
   border-radius: 50%;
   animation: pulse 1.5s infinite;
 }

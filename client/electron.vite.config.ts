@@ -46,12 +46,5 @@ export default defineConfig({
         resolvers: [ElementPlusResolver()],
       }),
     ],
-    css: {
-      preprocessorOptions: {
-        scss: {
-          additionalData: `@use "@/styles/variables" as *;`,
-        },
-      },
-    },
   },
 })

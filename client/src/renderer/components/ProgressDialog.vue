@@ -32,6 +32,8 @@ const props = withDefaults(defineProps<Props>(), {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .progress-content {
   display: flex;
   align-items: center;
