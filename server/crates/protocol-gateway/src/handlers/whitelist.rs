@@ -1,6 +1,7 @@
 //! S05 白名单协议 handler。
 
 use prost::Message;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::mapping::{
@@ -24,6 +25,7 @@ const RSP_COMMON: u32 = 0xFF00;
 
 /// CMD_LIST_WHITELIST (0x0100)。
 pub fn handle_list_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到白名单列表查询请求");
     let _cmd = match CmdListWhitelist::decode(payload) {
         Ok(c) => c,
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
@@ -35,8 +37,14 @@ pub fn handle_list_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     };
 
     let list = match mgr.query_all() {
-        Ok(l) => l,
-        Err(e) => return error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+        Ok(l) => {
+            debug!(count = l.len(), "白名单列表查询成功");
+            l
+        }
+        Err(e) => {
+            warn!(reason = %e, "白名单列表查询失败");
+            return error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string());
+        }
     };
 
     let devices: Vec<WhitelistDevice> = list
@@ -102,6 +110,7 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     };
 
     let serial_number = cmd.serial_number.clone();
+    debug!(sn = %serial_number, method = %cmd.add_method, "收到白名单添加请求");
     let description = (!cmd.description.is_empty()).then(|| cmd.description.clone());
     let add_result = if add_method == 0 {
         let dm = match ctx.device_manager.as_ref() {
@@ -196,13 +205,18 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match add_result {
         Ok(_id) => {
+            info!(sn = %serial_number, method = cmd.add_method, "白名单添加成功");
             write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 0, None);
             success_response(ctx.seq_id)
         }
         Err(WhitelistError::AlreadyExists(_)) => {
+            warn!(sn = %serial_number, "白名单添加失败：设备已存在");
             error_response(ctx.seq_id, ResultCode::AlreadyExists, "该设备已在白名单中")
         }
-        Err(e) => error_response(ctx.seq_id, e.to_result_code(), &e.to_string()),
+        Err(e) => {
+            warn!(sn = %serial_number, reason = %e, "白名单添加失败");
+            error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
+        }
     }
 }
 
@@ -213,6 +227,8 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
     };
 
+    debug!(sn = %cmd.serial_number, "收到白名单删除请求");
+
     let mgr = match ctx.whitelist_manager.as_ref() {
         Some(m) => m,
         None => return error_response(ctx.seq_id, ResultCode::InternalError, "白名单服务未初始化"),
@@ -220,6 +236,7 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
 
     match mgr.remove(&cmd.serial_number) {
         Ok(()) => {
+            info!(sn = %cmd.serial_number, "白名单删除成功");
             write_audit_log(
                 ctx,
                 "whitelist_remove",
@@ -230,7 +247,10 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             );
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(ctx.seq_id, e.to_result_code(), &e.to_string()),
+        Err(e) => {
+            warn!(sn = %cmd.serial_number, reason = %e, "白名单删除失败");
+            error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
+        }
     }
 }
 
@@ -240,6 +260,8 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         Ok(c) => c,
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
     };
+
+    debug!(sn = %cmd.serial_number, "收到白名单更新请求");
 
     let mgr = match ctx.whitelist_manager.as_ref() {
         Some(m) => m,
@@ -269,6 +291,7 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
 
     match mgr.update(&cmd.serial_number, permission, description) {
         Ok(()) => {
+            info!(sn = %cmd.serial_number, "白名单更新成功");
             write_audit_log(
                 ctx,
                 "whitelist_update",
@@ -279,7 +302,10 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             );
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(ctx.seq_id, e.to_result_code(), &e.to_string()),
+        Err(e) => {
+            warn!(sn = %cmd.serial_number, reason = %e, "白名单更新失败");
+            error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
+        }
     }
 }
 
