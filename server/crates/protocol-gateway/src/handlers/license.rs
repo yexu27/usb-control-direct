@@ -1,7 +1,7 @@
 //! 授权管理 handler（0x0005/0x0007）。
 
 use prost::Message;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -149,12 +149,12 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Ok(info) => {
             info!(user = %session.username, expire = info.expire_time, "授权文件校验成功");
             if let Err(_e) = storage.config_set("auth_status", "authorized") {
-                warn!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
+                error!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
                 log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
             }
             if let Err(_e) = storage.config_set("auth_expire_time", &info.expire_time.to_string()) {
-                warn!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
+                error!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
                 log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权过期时间持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权过期时间持久化失败");
             }
