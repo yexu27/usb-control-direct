@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
@@ -11,6 +12,11 @@ import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
+
+const fileAccessPageSource = readFileSync(
+  'src/renderer/pages/FileAccessPage.vue',
+  'utf8',
+)
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -190,6 +196,11 @@ describe('FileAccessPage', () => {
     expect(wrapper.text()).toContain('勾选后立即启用，取消勾选立即禁用')
     expect(wrapper.find('[data-testid="file-policy-bottom-note"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="blacklist-table-shell"]').exists()).toBe(true)
+  })
+
+  it('文件类型黑名单表格跟选择框起始位置对齐，不缩进到文案区', () => {
+    expect(fileAccessPageSource).not.toContain('margin: 22px 0 0 48px')
+    expect(fileAccessPageSource).toContain('margin: 22px 0 0')
   })
 
   it.each([

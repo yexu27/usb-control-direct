@@ -69,7 +69,7 @@ describe('MainLayout', () => {
     currentRoute.path = '/file-access'
   })
 
-  it('展示品牌与系统名称，不暴露装置 IP、用户名或角色', () => {
+  it('展示品牌、系统名称与当前登录用户名，不暴露装置 IP 或角色', () => {
     setSession('operator')
     const connection = useConnectionStore()
     connection.deviceIp = '19.19.19.16'
@@ -81,12 +81,11 @@ describe('MainLayout', () => {
     expect(wrapper.get('[data-testid="product-name"]').text()).toBe('USB安全管理系统')
     expect(wrapper.find('[data-testid="device-ip"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('19.19.19.16')
-    expect(wrapper.text()).not.toContain('operator')
     expect(wrapper.text()).not.toContain('操作员')
     const trigger = wrapper.get('[data-testid="user-menu-trigger"]')
     expect(trigger.element.tagName).toBe('BUTTON')
-    expect(trigger.attributes('aria-label')).toBe('用户菜单')
-    expect(trigger.text()).toBe('')
+    expect(trigger.attributes('aria-label')).toBe('用户菜单：operator')
+    expect(trigger.get('[data-testid="current-username"]').text()).toBe('operator')
     expect(trigger.attributes('title')).toBeUndefined()
   })
 

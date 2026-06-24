@@ -122,9 +122,12 @@ function handleClose(): void {
             type="button"
             class="user-menu-trigger"
             data-testid="user-menu-trigger"
-            aria-label="用户菜单"
+            :aria-label="`用户菜单：${session.username}`"
           >
             <el-icon aria-hidden="true"><User /></el-icon>
+            <span class="current-username" data-testid="current-username">
+              {{ session.username }}
+            </span>
           </button>
           <template #dropdown>
             <el-dropdown-menu>

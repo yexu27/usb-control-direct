@@ -157,8 +157,23 @@ body,
 }
 
 .user-menu-trigger {
-  width: 32px;
+  max-width: 164px;
+  min-width: 32px;
+  gap: 6px;
+  padding: 0 8px;
   font-size: 16px;
+}
+
+.current-username {
+  min-width: 0;
+  max-width: 112px;
+  overflow: hidden;
+  color: rgb(255 255 255 / 88%);
+  font-size: 13px;
+  font-weight: $font-weight-medium;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .win-controls {

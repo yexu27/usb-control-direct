@@ -19,6 +19,7 @@ const whitelistStore = useWhitelistStore()
 const defaultPolicyFileNamePreview = computed(() => defaultPolicyFileName(new Date(2026, 5, 9, 13, 35, 36)))
 
 const isTransferring = ref(false)
+const activeTransferAction = ref<'export' | 'import' | null>(null)
 const progressTitle = ref('')
 const progressMessage = ref('')
 let operationEpoch = 0
@@ -44,13 +45,14 @@ onBeforeUnmount(() => {
   operationOwner = null
 })
 
-function beginOperation(): PolicyOperation | null {
+function beginOperation(action: 'export' | 'import'): PolicyOperation | null {
   if (operationOwner != null) {
     return null
   }
   const owner = Symbol('policy-transfer')
   operationOwner = owner
   isTransferring.value = true
+  activeTransferAction.value = action
   return {
     owner,
     epoch: operationEpoch,
@@ -75,6 +77,7 @@ function finishOperation(operation: PolicyOperation): void {
   if (operationOwner === operation.owner) {
     operationOwner = null
     isTransferring.value = false
+    activeTransferAction.value = null
     progressTitle.value = ''
     progressMessage.value = ''
   }
@@ -137,7 +140,7 @@ async function revokeSelectedFileAccess(filePath: string): Promise<void> {
 }
 
 async function handleExport(): Promise<void> {
-  const operation = beginOperation()
+  const operation = beginOperation('export')
   if (operation == null) {
     return
   }
@@ -221,7 +224,7 @@ async function handleExport(): Promise<void> {
 }
 
 async function handleImport(): Promise<void> {
-  const operation = beginOperation()
+  const operation = beginOperation('import')
   if (operation == null) {
     return
   }
@@ -354,13 +357,14 @@ async function handleImport(): Promise<void> {
         <div class="transfer-hint">默认文件名：<code>{{ defaultPolicyFileNamePreview }}</code></div>
         <div class="transfer-danger">导出的策略文件为加密格式</div>
         <el-button
+          class="policy-transfer-button"
           type="primary"
           data-testid="export-policy"
-          :loading="isTransferring"
+          :loading="activeTransferAction === 'export'"
           :disabled="isTransferring"
           @click="handleExport"
         >
-          导出策略
+          导出
         </el-button>
       </section>
 
@@ -370,12 +374,13 @@ async function handleImport(): Promise<void> {
         <p>从本地或安全U盘导入 .bin 策略文件</p>
         <div class="transfer-hint">支持本装置和其他装置导出的策略（需版本兼容）</div>
         <el-button
+          class="policy-transfer-button"
           data-testid="import-policy"
-          :loading="isTransferring"
+          :loading="activeTransferAction === 'import'"
           :disabled="isTransferring"
           @click="handleImport"
         >
-          导入策略
+          导入
         </el-button>
       </section>
     </div>
@@ -468,6 +473,14 @@ async function handleImport(): Promise<void> {
   color: #d32f2f;
   font-size: 14px;
   font-weight: $font-weight-semibold;
+}
+
+.policy-transfer-button {
+  width: 72px;
+  min-height: 36px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: $font-weight-medium;
 }
 
 @media (max-width: 900px) {

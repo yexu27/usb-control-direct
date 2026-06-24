@@ -355,7 +355,7 @@ function changePageSize(nextPageSize: number): void {
 }
 
 .blacklist-panel {
-  margin: 22px 0 0 48px;
+  margin: 22px 0 0;
   overflow: hidden;
   background: var(--andi-white);
   border: $border-width-base solid var(--andi-border);

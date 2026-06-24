@@ -112,6 +112,17 @@ describe('PoliciesPage', () => {
     expect(wrapper.text()).not.toContain('操作员')
   })
 
+  it('策略导入导出按钮使用原型短文案和页面局部尺寸样式', () => {
+    const wrapper = mountPage()
+    const exportButton = wrapper.get('[data-testid="export-policy"]')
+    const importButton = wrapper.get('[data-testid="import-policy"]')
+
+    expect(exportButton.text()).toBe('导出')
+    expect(importButton.text()).toBe('导入')
+    expect(exportButton.classes()).toContain('policy-transfer-button')
+    expect(importButton.classes()).toContain('policy-transfer-button')
+  })
+
   it('按确认原型渲染策略导入导出卡片', () => {
     const wrapper = mountPage()
 
@@ -173,6 +184,44 @@ describe('PoliciesPage', () => {
 
     expect(exportPolicy).not.toHaveBeenCalled()
     expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  it('导出进行中仅导出按钮显示 loading，导入按钮只禁用', async () => {
+    const pendingSave = deferred<{ canceled: boolean }>()
+    saveFile.mockReturnValue(pendingSave.promise)
+    const wrapper = mountPage()
+
+    await wrapper.get('[data-testid="export-policy"]').trigger('click')
+    await nextTick()
+
+    const exportButton = wrapper.get('[data-testid="export-policy"]')
+    const importButton = wrapper.get('[data-testid="import-policy"]')
+    expect(exportButton.attributes('loading')).toBe('true')
+    expect(exportButton.attributes('disabled')).toBeDefined()
+    expect(importButton.attributes('loading')).not.toBe('true')
+    expect(importButton.attributes('disabled')).toBeDefined()
+
+    pendingSave.resolve({ canceled: true })
+    await flushPromises()
+  })
+
+  it('导入进行中仅导入按钮显示 loading，导出按钮只禁用', async () => {
+    const pendingOpen = deferred<{ canceled: boolean, filePaths: string[] }>()
+    openFile.mockReturnValue(pendingOpen.promise)
+    const wrapper = mountPage()
+
+    await wrapper.get('[data-testid="import-policy"]').trigger('click')
+    await nextTick()
+
+    const exportButton = wrapper.get('[data-testid="export-policy"]')
+    const importButton = wrapper.get('[data-testid="import-policy"]')
+    expect(importButton.attributes('loading')).toBe('true')
+    expect(importButton.attributes('disabled')).toBeDefined()
+    expect(exportButton.attributes('loading')).not.toBe('true')
+    expect(exportButton.attributes('disabled')).toBeDefined()
+
+    pendingOpen.resolve({ canceled: true, filePaths: [] })
+    await flushPromises()
   })
 
   it('导出只写一次且成功后不额外撤权', async () => {
