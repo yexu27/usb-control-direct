@@ -2,6 +2,8 @@
 
 use prost::Message;
 
+use tracing::{debug, info, warn};
+
 use common::code::ResultCode;
 use common::proto::{
     CmdDeleteLogs, CmdExportLogs, CmdQueryLogs, MalwareLogEntry, OperationLogEntry,
@@ -33,6 +35,8 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
+    debug!(log_type = %cmd.log_type, page = cmd.page, "收到日志查询请求");
+
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
         None => {
@@ -52,6 +56,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match log_type {
         LogType::UsbAudit => match storage.usb_audit_query_paged(&params) {
             Ok((items, total)) => {
+                debug!(log_type = %cmd.log_type, total = total, "日志查询成功");
                 let entries: Vec<UsbAuditLogEntry> = items.iter().map(map_usb_audit).collect();
                 let rsp = RspQueryLogs {
                     success: true,
@@ -67,10 +72,14 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
+            Err(_e) => {
+                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
+            }
         },
         LogType::Malware => match storage.malware_query_paged(&params) {
             Ok((items, total)) => {
+                debug!(log_type = %cmd.log_type, total = total, "日志查询成功");
                 let entries: Vec<MalwareLogEntry> = items.iter().map(map_malware).collect();
                 let rsp = RspQueryLogs {
                     success: true,
@@ -86,10 +95,14 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
+            Err(_e) => {
+                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
+            }
         },
         LogType::Operation => match storage.operation_log_query_paged(&params) {
             Ok((items, total)) => {
+                debug!(log_type = %cmd.log_type, total = total, "日志查询成功");
                 let entries: Vec<OperationLogEntry> =
                     items.iter().map(map_operation).collect();
                 let rsp = RspQueryLogs {
@@ -106,7 +119,10 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 codec::encode_frame(RSP_QUERY_LOGS, ctx.seq_id, &rsp.encode_to_vec())
                     .unwrap_or_default()
             }
-            Err(_e) => query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败"),
+            Err(_e) => {
+                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
+            }
         },
     }
 }
@@ -124,6 +140,8 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Ok(s) => s,
         Err(code) => return export_error(ctx.seq_id, code, "会话状态异常"),
     };
+
+    debug!(user = %session.username, log_type = %cmd.log_type, "收到日志导出请求");
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
@@ -235,6 +253,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match log_audit::export::generate_zip(&csv_filename, &csv_content) {
         Ok(zip_data) => {
+            info!(user = %session.username, log_type = %cmd.log_type, size = zip_data.len(), "日志导出成功");
             log_operation(ctx, session, "log_management", "export", &cmd.log_type, 0, None);
             let rsp = RspExportLogs {
                 success: true,
@@ -247,6 +266,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 .unwrap_or_default()
         }
         Err(e) => {
+            warn!(user = %session.username, log_type = %cmd.log_type, reason = %e, "日志导出失败");
             log_operation(
                 ctx,
                 session,
@@ -274,6 +294,8 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Ok(s) => s,
         Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
     };
+
+    debug!(user = %session.username, log_type = %cmd.log_type, "收到日志清理请求");
 
     let log_type = match LogType::parse(&cmd.log_type) {
         Some(t) => t,
@@ -324,6 +346,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match delete_result {
         Ok(count) => {
+            info!(user = %session.username, log_type = %cmd.log_type, deleted = count, "日志清理成功");
             log_operation(
                 ctx,
                 session,
@@ -336,6 +359,7 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(user = %session.username, log_type = %cmd.log_type, reason = %e, "日志清理失败");
             log_operation(
                 ctx,
                 session,
