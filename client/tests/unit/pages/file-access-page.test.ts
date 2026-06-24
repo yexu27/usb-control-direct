@@ -156,10 +156,11 @@ describe('FileAccessPage', () => {
       expect.stringContaining('介质自动读取功能控制'),
       expect.stringContaining('文件类型访问控制'),
     ])
-    expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
-      'dll', 'exe', 'PE', 'ELF',
-    ])
-    expect(wrapper.get('[data-testid="blacklist-panel"]').text()).toContain('文件类型黑名单')
+    expect(wrapper.findAll('[data-testid="executable-type"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('可执行程序指对以下程序进行控制：dll、exe、PE、ELF')
+    expect(wrapper.text()).toContain('系统内置4种可执行程序类型')
+    expect(wrapper.get('[data-testid="blacklist-table-shell"]').text()).toContain('文件类型黑名单')
+    expect(wrapper.get('[data-testid="file-policy-bottom-note"]').text()).toContain('勾选后立即启用')
     expect(wrapper.text()).not.toContain('23种')
     const connectionAlert = wrapper.find('[data-testid="connection-alert"]')
     expect(connectionAlert.element.previousElementSibling?.tagName).toBe('HEADER')
@@ -174,9 +175,21 @@ describe('FileAccessPage', () => {
     expect(wrapper.text()).toContain('介质自动读取功能控制')
     expect(wrapper.text()).toContain('文件类型访问控制')
     expect(wrapper.text()).toContain('文件类型黑名单')
-    expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
-      'dll', 'exe', 'PE', 'ELF',
-    ])
+    expect(wrapper.findAll('[data-testid="executable-type"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('可执行程序指对以下程序进行控制：dll、exe、PE、ELF')
+    expect(wrapper.text()).toContain('系统内置4种可执行程序类型')
+    expect(wrapper.text()).toContain('勾选后立即启用，取消勾选立即禁用')
+  })
+
+  it('按确认原型渲染文件访问控制说明和黑名单表格', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('可执行程序指对以下程序进行控制：dll、exe、PE、ELF')
+    expect(wrapper.findAll('[data-testid="executable-type"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('系统内置4种可执行程序类型')
+    expect(wrapper.text()).toContain('勾选后立即启用，取消勾选立即禁用')
+    expect(wrapper.find('[data-testid="file-policy-bottom-note"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="blacklist-table-shell"]').exists()).toBe(true)
   })
 
   it.each([

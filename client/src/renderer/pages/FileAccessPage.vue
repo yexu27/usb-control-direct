@@ -183,17 +183,14 @@ function changePageSize(nextPageSize: number): void {
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">可执行程序访问控制</span>
               <span class="app-checkbox-desc">禁止访问移动存储设备中的可执行文件</span>
+              <span class="policy-detail">
+                可执行程序指对以下程序进行控制：dll、exe、PE、ELF。默认：未勾选（允许访问）。
+              </span>
+              <span class="policy-detail">
+                ⓘ 系统内置4种可执行程序类型，不可删除，只能通过上方复选框控制启用/禁用。
+              </span>
             </span>
           </label>
-          <div class="type-list" aria-label="可执行文件类型">
-            <span
-              v-for="type in ['dll', 'exe', 'PE', 'ELF']"
-              :key="type"
-              data-testid="executable-type"
-            >
-              {{ type }}
-            </span>
-          </div>
         </el-card>
       </section>
 
@@ -214,6 +211,9 @@ function changePageSize(nextPageSize: number): void {
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">介质自动读取功能控制</span>
               <span class="app-checkbox-desc">启用介质自动读取功能控制</span>
+              <span class="policy-detail">
+                介质自动读取指对U盘中 autorun 配置文件进行控制。启用后含 .sh 文件的U盘映射后，.sh文件内容显示为空（不可读）；禁用后 .sh 文件可正常读写。仅对U盘根目录下的 .sh 后缀文件生效。默认：未勾选（禁用）。
+              </span>
             </span>
           </label>
         </el-card>
@@ -236,12 +236,15 @@ function changePageSize(nextPageSize: number): void {
             <span class="app-checkbox-copy file-policy-copy">
               <span class="app-checkbox-title">文件类型访问控制</span>
               <span class="app-checkbox-desc">启用文件类型访问控制</span>
-              <span class="policy-help">
-                通过后缀类型管理移动存储设备中的文件。启用后禁止访问黑名单中对应后缀类型的文件。
+              <span class="policy-detail">
+                通过后缀类型管理移动存储设备中的文件。启用并添加文件类型黑名单后，移动存储设备完成映射后禁止访问黑名单中对应后缀类型的文件。默认：未勾选。
               </span>
             </span>
           </label>
-          <div class="blacklist-panel" data-testid="blacklist-panel">
+          <div
+            class="blacklist-panel prototype-table-shell"
+            data-testid="blacklist-table-shell"
+          >
             <div class="blacklist-panel-header">
               <span>文件类型黑名单</span>
               <el-button
@@ -250,10 +253,11 @@ function changePageSize(nextPageSize: number): void {
                 :disabled="isAdding"
                 @click="openAddDialog"
               >
-                添加黑名单
+                + 添加
               </el-button>
             </div>
             <DataTable
+              class="blacklist-table prototype-table"
               :columns="columns"
               :data="pageRows"
               :loading="filePolicy.isLoading"
@@ -262,13 +266,13 @@ function changePageSize(nextPageSize: number): void {
               :page="page"
               :page-size="pageSize"
               empty-text="暂无黑名单条目"
+              :show-default-pagination="false"
               @page-change="changePage"
               @page-size-change="changePageSize"
             >
               <template #actions="{ row }">
                 <el-button
-                  link
-                  type="danger"
+                  class="prototype-outline-action prototype-outline-danger"
                   :data-extension="row.extension"
                   :disabled="isRemoving(row.extension)"
                   :loading="isRemoving(row.extension)"
@@ -281,6 +285,9 @@ function changePageSize(nextPageSize: number): void {
           </div>
         </el-card>
       </section>
+    </div>
+    <div class="policy-bottom-note" data-testid="file-policy-bottom-note">
+      ⓘ 勾选后立即启用，取消勾选立即禁用；添加或删除黑名单后，需重新拔插或重新映射后生效。
     </div>
 
     <AddBlacklistDialog
@@ -338,33 +345,11 @@ function changePageSize(nextPageSize: number): void {
   gap: 16px;
 }
 
-.file-policy-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.policy-help {
+.policy-detail {
   color: $text-secondary;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.type-list {
-  display: flex;
-  gap: 12px;
-  margin: 22px 0 0 48px;
-
-  span {
-    min-width: 48px;
-    padding: 9px 14px;
-    color: $text-secondary;
-    font-size: 14px;
-    text-align: center;
-    background: $bg-white;
-    border: $border-width solid $border-color;
-    border-radius: 6px;
-  }
+  font-size: 13px;
+  font-weight: $font-weight-medium;
+  line-height: 1.55;
 }
 
 .blacklist-panel {
@@ -385,5 +370,19 @@ function changePageSize(nextPageSize: number): void {
   font-weight: $font-weight-semibold;
   background: $bg-sidebar;
   border-bottom: $border-width solid $border-color;
+}
+
+.blacklist-table :deep(.data-table-wrapper) {
+  gap: 0;
+}
+
+.policy-bottom-note {
+  display: flex;
+  align-items: center;
+  margin-top: 14px;
+  color: var(--andi-text-light);
+  font-size: 13px;
+  font-weight: $font-weight-medium;
+  gap: 6px;
 }
 </style>
