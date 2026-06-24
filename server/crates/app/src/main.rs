@@ -35,7 +35,7 @@ use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
 /// 数据库路径。
-const DB_PATH: &str = "/var/lib/usb-control/data.db";
+const DB_PATH: &str = "/var/lib/usb-control/device.db";
 /// TLS 证书路径。
 const CERT_PATH: &str = "/etc/usb-control/certs/server.crt";
 /// TLS 私钥路径。
