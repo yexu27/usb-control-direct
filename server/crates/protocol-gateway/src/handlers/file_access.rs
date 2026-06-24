@@ -1,6 +1,7 @@
 //! S04 文件访问控制策略协议 handler。
 
 use prost::Message;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -25,6 +26,8 @@ const VALID_POLICY_KEYS: &[&str] = &[
 
 /// CMD_GET_FILE_POLICY (0x0200)。
 pub fn handle_get_file_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到文件策略查询请求");
+
     let _cmd = match CmdGetFilePolicy::decode(payload) {
         Ok(c) => c,
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
@@ -84,6 +87,8 @@ pub fn handle_update_file_policy_switch(ctx: &RequestContext, payload: &[u8]) ->
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
     };
 
+    debug!(key = %cmd.policy_key, enabled = cmd.enabled, "收到文件策略开关更新请求");
+
     if !VALID_POLICY_KEYS.contains(&cmd.policy_key.as_str()) {
         return error_response(
             ctx.seq_id,
@@ -99,10 +104,14 @@ pub fn handle_update_file_policy_switch(ctx: &RequestContext, payload: &[u8]) ->
 
     match storage.policy_update(&cmd.policy_key, cmd.enabled) {
         Ok(()) => {
+            info!(key = %cmd.policy_key, enabled = cmd.enabled, "文件策略开关更新成功");
             write_audit_log(ctx, "file_policy", "update", Some(&cmd.policy_key), 0, None);
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+        Err(e) => {
+            warn!(key = %cmd.policy_key, reason = %e, "文件策略开关更新失败");
+            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+        }
     }
 }
 
@@ -117,6 +126,8 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
         Ok(extension) => extension,
         Err(code) => return error_response(ctx.seq_id, code, "文件后缀格式错误"),
     };
+
+    debug!(ext = %extension, "收到黑名单后缀添加请求");
 
     let storage = match ctx.storage() {
         Some(s) => s,
@@ -143,14 +154,18 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
 
     match storage.blacklist_insert(&extension, description) {
         Ok(_id) => {
+            info!(ext = %extension, "黑名单后缀添加成功");
             write_audit_log(ctx, "file_blacklist", "add", Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(
-            ctx.seq_id,
-            map_blacklist_insert_error(&e),
-            &e.to_string(),
-        ),
+        Err(e) => {
+            warn!(ext = %extension, reason = %e, "黑名单后缀添加失败");
+            error_response(
+                ctx.seq_id,
+                map_blacklist_insert_error(&e),
+                &e.to_string(),
+            )
+        }
     }
 }
 
@@ -165,6 +180,8 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
         Ok(extension) => extension,
         Err(code) => return error_response(ctx.seq_id, code, "文件后缀格式错误"),
     };
+
+    debug!(ext = %extension, "收到黑名单后缀删除请求");
 
     let storage = match ctx.storage() {
         Some(s) => s,
@@ -185,10 +202,14 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
 
     match storage.blacklist_delete(&extension) {
         Ok(()) => {
+            info!(ext = %extension, "黑名单后缀删除成功");
             write_audit_log(ctx, "file_blacklist", "remove", Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
-        Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+        Err(e) => {
+            warn!(ext = %extension, reason = %e, "黑名单后缀删除失败");
+            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+        }
     }
 }
 
