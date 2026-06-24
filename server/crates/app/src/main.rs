@@ -186,8 +186,9 @@ async fn main() {
 
     let cert_path = PathBuf::from(CERT_PATH);
     let key_path = PathBuf::from(KEY_PATH);
-    let tls_acceptor =
+    let (tls_acceptor, cert_fingerprint) =
         create_tls_acceptor(&cert_path, &key_path).expect("TLS 配置初始化失败");
+    info!(fingerprint = %cert_fingerprint, "TLS 证书 SHA-256 指纹");
 
     let conn_mgr = ConnectionManager::new();
 

@@ -12,7 +12,18 @@ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::TlsAcceptor;
 
+use sha2::{Digest, Sha256};
+
 use crate::error::GatewayError;
+
+/// 计算 DER 编码证书的 SHA-256 指纹。
+fn compute_fingerprint(cert_der: &[u8]) -> String {
+    let hash = Sha256::digest(cert_der);
+    hash.iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join(":")
+}
 
 /// 从 PEM 文件加载证书链。
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, GatewayError> {
@@ -46,8 +57,15 @@ fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>, GatewayError>
 /// 参数:
 ///   - `cert_path`: 证书 PEM 文件路径。
 ///   - `key_path`: 私钥 PEM 文件路径。
-pub fn create_tls_acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor, GatewayError> {
+///
+/// 返回:
+///   - `TlsAcceptor` 和叶证书的 SHA-256 指纹（冒号分隔十六进制）。
+pub fn create_tls_acceptor(
+    cert_path: &Path,
+    key_path: &Path,
+) -> Result<(TlsAcceptor, String), GatewayError> {
     let certs = load_certs(cert_path)?;
+    let fingerprint = compute_fingerprint(certs[0].as_ref());
     let key = load_private_key(key_path)?;
 
     let config = ServerConfig::builder()
@@ -55,7 +73,7 @@ pub fn create_tls_acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAccep
         .with_single_cert(certs, key)
         .map_err(|e| GatewayError::TlsConfig(format!("TLS 配置构建失败: {}", e)))?;
 
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    Ok((TlsAcceptor::from(Arc::new(config)), fingerprint))
 }
 
 #[cfg(test)]
@@ -85,6 +103,10 @@ mod tests {
         let (cert_file, key_file) = generate_self_signed();
         let result = create_tls_acceptor(cert_file.path(), key_file.path());
         assert!(result.is_ok());
+        let (_acceptor, fingerprint) = result.unwrap();
+        // SHA-256 指纹格式: 32 字节 × 3 - 1 = 95 字符（XX:XX:...）
+        assert_eq!(fingerprint.len(), 95);
+        assert!(fingerprint.contains(':'));
     }
 
     #[test]
