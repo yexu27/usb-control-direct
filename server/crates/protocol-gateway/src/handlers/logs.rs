@@ -2,7 +2,7 @@
 
 use prost::Message;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -73,7 +73,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                     .unwrap_or_default()
             }
             Err(_e) => {
-                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                error!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
                 query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
             }
         },
@@ -96,7 +96,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                     .unwrap_or_default()
             }
             Err(_e) => {
-                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                error!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
                 query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
             }
         },
@@ -120,7 +120,7 @@ pub fn handle_query_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                     .unwrap_or_default()
             }
             Err(_e) => {
-                warn!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
+                error!(log_type = %cmd.log_type, reason = %_e, "日志查询失败");
                 query_error(ctx.seq_id, ResultCode::LogQueryFailed, "日志查询失败")
             }
         },
