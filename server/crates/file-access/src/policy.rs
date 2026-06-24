@@ -3,6 +3,8 @@
 //! L1=病毒标记 → L2=可执行控制 → L3=类型黑名单 → L4=自运行控制 → L5=写保护
 //! 短路求值：任一级别命中即返回 Deny。
 
+use tracing::{debug, trace, warn};
+
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
 
 /// 评估文件的访问决策。
@@ -21,12 +23,14 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
 
     // L1: 病毒标记（无开关，始终生效）
     if entry.is_virus {
+        debug!(file = %entry.virtual_name, level = "L1", "文件被标记为病毒");
         return AccessDecision::Deny("L1:病毒文件禁止访问".to_string());
     }
 
     // L2: 可执行控制
     if snapshot.exec_control_enabled {
         if let Some(exec_type) = &entry.exec_type {
+            debug!(file = %entry.virtual_name, level = "L2", exec_type = ?exec_type, "文件被识别为可执行文件");
             return AccessDecision::Deny(format!(
                 "L2:可执行文件控制({:?})",
                 exec_type
@@ -39,6 +43,7 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
         let extension_with_dot = format!(".{}", entry.extension);
         if let Ok(normalized) = storage::normalize_extension(&extension_with_dot) {
             if snapshot.blacklist_extensions.contains(&normalized) {
+                debug!(file = %entry.virtual_name, level = "L3", ext = %normalized, "文件后缀在黑名单中");
                 return AccessDecision::Deny(format!(
                     "L3:文件类型黑名单({})",
                     normalized
@@ -50,17 +55,21 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
     // L4: 自运行控制
     if snapshot.auto_read_control_enabled {
         if entry.is_autorun_inf {
+            debug!(file = %entry.virtual_name, level = "L4", "文件为 autorun.inf");
             return AccessDecision::Deny("L4:自运行控制(autorun.inf)".to_string());
         }
         if entry.is_autorun_target {
+            debug!(file = %entry.virtual_name, level = "L4", "文件为 autorun 引用目标");
             return AccessDecision::Deny("L4:自运行控制(autorun引用文件)".to_string());
         }
         if entry.is_root_shell_script {
+            debug!(file = %entry.virtual_name, level = "L4", "文件为根目录 shell 脚本");
             return AccessDecision::Deny("L4:自运行控制(根目录shell脚本)".to_string());
         }
     }
 
     // L5: 写保护（通过 f_mass_storage ro=1 在 gadget 层面实现，不在此处判断）
+    trace!(file = %entry.virtual_name, "策略判定通过，允许访问");
     AccessDecision::Allow
 }
 
