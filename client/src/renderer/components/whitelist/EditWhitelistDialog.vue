@@ -124,6 +124,8 @@ defineExpose({ handleSubmit })
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .dialog-error {
   margin-bottom: $spacing-4;
 }
