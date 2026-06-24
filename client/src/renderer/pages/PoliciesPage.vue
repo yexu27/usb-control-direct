@@ -345,9 +345,9 @@ async function handleImport(): Promise<void> {
     </header>
     <ConnectionAlert />
 
-    <div class="policy-actions">
-      <el-card shadow="never" class="policy-card app-card">
-        <h2>导出策略</h2>
+    <div class="policy-transfer-grid" data-testid="policy-transfer-grid">
+      <section class="policy-transfer-card" data-testid="policy-export-card">
+        <h3>导出策略</h3>
         <p>将当前装置策略备份为加密 .bin 文件。</p>
         <el-button
           type="primary"
@@ -358,10 +358,10 @@ async function handleImport(): Promise<void> {
         >
           导出策略
         </el-button>
-      </el-card>
+      </section>
 
-      <el-card shadow="never" class="policy-card app-card">
-        <h2>导入策略</h2>
+      <section class="policy-transfer-card" data-testid="policy-import-card">
+        <h3>导入策略</h3>
         <p>整体覆盖当前白名单和文件访问策略，仅支持 .bin 文件。</p>
         <el-button
           type="primary"
@@ -372,7 +372,7 @@ async function handleImport(): Promise<void> {
         >
           导入策略
         </el-button>
-      </el-card>
+      </section>
     </div>
 
     <ProgressDialog
@@ -384,28 +384,37 @@ async function handleImport(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
-.policy-actions {
+.policy-transfer-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: $spacing-5;
+  gap: 24px;
 }
 
-.policy-card {
-  height: 100%;
+.policy-transfer-card {
+  min-height: 220px;
+  padding: 36px 42px;
+  background: $bg-white;
+  border: $border-width solid $border-color;
+  border-radius: 6px;
 
-  h2 {
-    margin: 0 0 $spacing-3;
+  h3 {
+    margin: 0 0 18px;
+    color: $text-primary;
+    font-size: 24px;
+    font-weight: $font-weight-semibold;
   }
 
   p {
     min-height: 48px;
-    margin: 0 0 $spacing-5;
+    margin: 0 0 48px;
     color: $text-secondary;
+    font-size: 16px;
+    line-height: 1.6;
   }
 }
 
 @media (max-width: 900px) {
-  .policy-actions {
+  .policy-transfer-grid {
     grid-template-columns: 1fr;
   }
 }

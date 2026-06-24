@@ -80,6 +80,15 @@ async function expectUsbDevicesLayout(page: Page): Promise<void> {
   await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
 }
 
+async function expectPolicyTransferLayout(page: Page): Promise<void> {
+  await expect(page.getByTestId('policy-transfer-grid')).toBeVisible()
+  await expect(page.getByTestId('policy-export-card')).toContainText('导出策略')
+  await expect(page.getByTestId('policy-export-card')).toContainText('加密 .bin 文件')
+  await expect(page.getByTestId('policy-import-card')).toContainText('导入策略')
+  await expect(page.getByTestId('policy-import-card')).toContainText('仅支持 .bin 文件')
+  await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
+}
+
 async function withOperator(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -188,6 +197,7 @@ test.describe('操作员三页面业务闭环', () => {
       let exportedPath = ''
       try {
         await openMenu(page, '策略管理')
+        await expectPolicyTransferLayout(page)
         await app.evaluate(({ dialog }, dir) => {
           dialog.showSaveDialog = async (_window, options) => ({
             canceled: false, filePath: `${dir}/${String(options.defaultPath)}`,
