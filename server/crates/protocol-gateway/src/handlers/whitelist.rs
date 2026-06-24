@@ -210,7 +210,7 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             success_response(ctx.seq_id)
         }
         Err(WhitelistError::AlreadyExists(_)) => {
-            warn!(sn = %serial_number, "白名单添加失败：设备已存在");
+            info!(sn = %serial_number, "白名单添加失败：设备已存在");
             error_response(ctx.seq_id, ResultCode::AlreadyExists, "该设备已在白名单中")
         }
         Err(e) => {
