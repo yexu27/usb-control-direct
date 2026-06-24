@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::Path;
 
 use evdev::{Device, InputEventKind, Key, RelativeAxisType};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::error::HidAccessError;
 use crate::hid_report::{clamp_i8, MouseReport};
@@ -84,7 +84,7 @@ impl MouseForwarder {
                     wheel: clamp_i8(wheel),
                 };
 
-                debug!(?report, "写鼠标 HID report");
+                trace!(report = ?report, "写鼠标 HID report");
 
                 if let Err(e) = write_mouse_report(&self.hidg_device, &report) {
                     warn!(dev = %input_dev_path.display(), ?e, "写鼠标 report 失败，结束转发");
