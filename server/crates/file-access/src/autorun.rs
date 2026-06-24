@@ -3,6 +3,8 @@
 //! 解析 INI 格式的 autorun.inf 内容，提取引用的可执行文件路径。
 //! 用于 L4 自运行控制策略。
 
+use tracing::debug;
+
 /// 解析 autorun.inf 内容，提取引用的可执行文件路径。
 ///
 /// 识别的键：
@@ -16,6 +18,8 @@
 /// 返回:
 ///   - 去重后的可执行文件路径列表（保留原始路径大小写和子目录）。
 pub fn parse_autorun_targets(content: &str) -> Vec<String> {
+    debug!("开始解析 autorun.inf 内容");
+
     let mut targets = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -42,6 +46,7 @@ pub fn parse_autorun_targets(content: &str) -> Vec<String> {
 
         let exe_path = extract_executable_path(value);
         if !exe_path.is_empty() && seen.insert(exe_path.clone()) {
+            debug!(target = %exe_path, "autorun.inf 提取到目标");
             targets.push(exe_path);
         }
     }
