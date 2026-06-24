@@ -65,17 +65,21 @@ async function closeAppDialog(page: Page): Promise<void> {
 
 async function expectFileAccessLayout(page: Page): Promise<void> {
   await expect(page.getByTestId('file-policy-card')).toHaveCount(3)
-  await expect(page.getByTestId('executable-type')).toHaveText(['dll', 'exe', 'PE', 'ELF'])
+  await expect(page.getByText('可执行程序指对以下程序进行控制：dll、exe、PE、ELF')).toBeVisible()
+  await expect(page.getByTestId('executable-type')).toHaveCount(0)
   await expect(page.getByText('23种')).toHaveCount(0)
   await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
-  await expect(page.getByTestId('blacklist-panel')).toBeVisible()
+  await expect(page.getByTestId('blacklist-table-shell')).toBeVisible()
+  await expect(page.getByTestId('file-policy-bottom-note')).toContainText('勾选后立即启用')
 }
 
 async function expectUsbDevicesLayout(page: Page): Promise<void> {
-  await expect(page.getByTestId('usb-whitelist-card')).toBeVisible()
+  await expect(page.getByTestId('usb-table-panel')).toBeVisible()
+  await expect(page.getByText('管理受信任移动存储设备白名单')).toBeVisible()
   await expect(page.getByText('受信任普通移动存储设备白名单')).toBeVisible()
   await expect(page.getByTestId('add-device-trigger')).toBeVisible()
   await expect(page.getByTestId('add-management-trigger')).toBeVisible()
+  await expect(page.getByText('白名单设备重新插入后经过扫描审计方可使用')).toBeVisible()
   await expect(page.getByText('安全U盘自由使用')).toHaveCount(0)
   await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
 }
@@ -83,9 +87,10 @@ async function expectUsbDevicesLayout(page: Page): Promise<void> {
 async function expectPolicyTransferLayout(page: Page): Promise<void> {
   await expect(page.getByTestId('policy-transfer-grid')).toBeVisible()
   await expect(page.getByTestId('policy-export-card')).toContainText('导出策略')
-  await expect(page.getByTestId('policy-export-card')).toContainText('加密 .bin 文件')
+  await expect(page.getByTestId('policy-export-card')).toContainText('默认文件名：')
+  await expect(page.getByTestId('policy-export-card')).toContainText('导出的策略文件为加密格式')
   await expect(page.getByTestId('policy-import-card')).toContainText('导入策略')
-  await expect(page.getByTestId('policy-import-card')).toContainText('仅支持 .bin 文件')
+  await expect(page.getByTestId('policy-import-card')).toContainText('支持本装置和其他装置导出的策略')
   await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
 }
 
@@ -177,14 +182,10 @@ test.describe('操作员三页面业务闭环', () => {
     })
   })
 
-  test('白名单修改与删除后列表刷新', async () => {
+  test('白名单删除后列表刷新', async () => {
     await withOperator(async (_device, _app, page) => {
       await openMenu(page, 'U盘设备控制')
-      await page.getByTestId('edit-WL-EXISTING-001').click()
-      await page.locator('[data-testid="whitelist-edit-description-input"]').fill('已修改')
-      await page.getByText('读写', { exact: true }).last().click()
-      await page.getByTestId('whitelist-edit-submit').click()
-      await expect(page.getByText('已修改', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('edit-WL-EXISTING-001')).toHaveCount(0)
       await page.getByTestId('remove-WL-EXISTING-001').click()
       await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
       await expect(page.getByText('WL-EXISTING-001', { exact: true })).toHaveCount(0)
