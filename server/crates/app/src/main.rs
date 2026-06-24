@@ -61,24 +61,20 @@ async fn main() {
 
     let db_path = PathBuf::from(DB_PATH);
 
-    let storage_main = Storage::open(&db_path).expect("数据库初始化失败（main）");
-    let storage_auth = Storage::open(&db_path).expect("数据库初始化失败（auth）");
-    let storage_audit = Storage::open(&db_path).expect("数据库初始化失败（audit）");
-    let storage_whitelist = Storage::open(&db_path).expect("数据库初始化失败（whitelist）");
-    let storage_policy = Arc::new(Storage::open(&db_path).expect("数据库初始化失败（policy）"));
-    let storage_file_access = Storage::open(&db_path).expect("数据库初始化失败（file_access）");
+    let storage = Arc::new(
+        Storage::open_with_pool_size(&db_path, 8).expect("数据库初始化失败"),
+    );
 
-    let auth_service = Arc::new(AuthService::new(storage_auth, SessionManager::new()));
-    let audit_service = Arc::new(AuditService::new(storage_audit, &db_path));
+    let auth_service = Arc::new(AuthService::new(Arc::clone(&storage), SessionManager::new()));
+    let audit_service = Arc::new(AuditService::new(Arc::clone(&storage), &db_path));
     let whitelist_manager = Arc::new(
-        WhitelistManager::new(storage_whitelist).expect("白名单管理器初始化失败"),
+        WhitelistManager::new(Arc::clone(&storage)).expect("白名单管理器初始化失败"),
     );
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-    let storage = Arc::new(storage_main);
 
     let key_provider = Arc::new(FileKeyProvider::new(POLICY_KEY_DIR));
     let policy_service = Arc::new(PolicyService::new(
-        Arc::clone(&storage_policy),
+        Arc::clone(&storage),
         key_provider,
         Arc::clone(&whitelist_manager),
     ));
@@ -129,7 +125,7 @@ async fn main() {
     ));
 
     let file_access_engine = Arc::new(FileAccessEngine::new(
-        storage_file_access,
+        Arc::clone(&storage),
         Arc::clone(&audit_service),
         "/dev/nbd0",
     ));
