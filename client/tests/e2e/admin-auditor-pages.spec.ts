@@ -29,7 +29,26 @@ async function openMenu(page: Page, name: string): Promise<void> {
 }
 
 async function expectLatestMessage(page: Page, text: string | RegExp): Promise<void> {
-  await expect(page.locator('.el-message__content').filter({ hasText: text }).last()).toBeVisible()
+  const appToast = page.getByTestId('app-toast')
+  const legacyMessage = page.locator('.el-message__content').filter({ hasText: text }).last()
+  const visibleTarget = await Promise.race([
+    appToast.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'app-toast' as const).catch(() => null),
+    legacyMessage.waitFor({ state: 'visible', timeout: 2_000 }).then(() => 'legacy-message' as const).catch(() => null),
+  ])
+
+  if (visibleTarget === 'app-toast') {
+    await expect(appToast).toContainText(text)
+    const box = await appToast.boundingBox()
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth }))
+    expect(box).not.toBeNull()
+    if (box != null) {
+      const center = box.x + box.width / 2
+      expect(Math.abs(center - viewport.width / 2)).toBeLessThan(8)
+    }
+    return
+  }
+
+  await expect(legacyMessage).toBeVisible()
 }
 
 async function expectAppDialog(page: Page, title: string | RegExp, message: string | RegExp): Promise<void> {
