@@ -30,6 +30,7 @@ describe('log display utils', () => {
     expect(getLogColumns('operation').map((column) => column.label)).toEqual([
       '时间',
       '用户',
+      '操作日志类型',
       '内容',
     ])
   })

@@ -90,9 +90,10 @@ export function getLogColumns(logType: LogType): DataTableColumn[] {
   }
 
   return [
-    { prop: 'time', label: '时间', width: 260 },
-    { prop: 'username', label: '用户', width: 180 },
-    { prop: 'content', label: '内容', minWidth: 420 },
+    { prop: 'time', label: '时间', width: 190 },
+    { prop: 'username', label: '用户', width: 160 },
+    { prop: 'logCategory', label: '操作日志类型', width: 160 },
+    { prop: 'content', label: '内容', minWidth: 360 },
   ]
 }
 

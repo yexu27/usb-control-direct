@@ -78,6 +78,62 @@ const POLICY_HEADER = Buffer.concat([POLICY_MAGIC, POLICY_VERSION])
 const POLICY_HEADER_CRLF = Buffer.from('USBPOLICY\r\nVERSION:1\r\n', 'ascii')
 const CREATED_AT = 1_767_225_600
 
+interface MockLogFilter {
+  keyword: string
+  eventType: string
+  logCategory: string
+  actionType: string
+}
+
+function stringifyLogValue(value: unknown): string {
+  if (value == null) {
+    return ''
+  }
+  if (value instanceof Uint8Array) {
+    return ''
+  }
+  return String(value)
+}
+
+function matchesKeyword(entry: Record<string, unknown>, keyword: string): boolean {
+  const normalizedKeyword = keyword.trim().toLowerCase()
+  if (normalizedKeyword === '') {
+    return true
+  }
+  return Object.values(entry).some((value) =>
+    stringifyLogValue(value).toLowerCase().includes(normalizedKeyword),
+  )
+}
+
+export function filterMockLogsForQuery<TEntry extends object>(
+  entries: TEntry[],
+  filter: MockLogFilter,
+): TEntry[] {
+  return entries.filter((entry) => {
+    const logEntry = entry as Record<string, unknown>
+    if (!matchesKeyword(logEntry, filter.keyword)) {
+      return false
+    }
+    if (filter.eventType !== '' && logEntry.eventType !== filter.eventType) {
+      return false
+    }
+    if (filter.logCategory !== '' && logEntry.logCategory !== filter.logCategory) {
+      return false
+    }
+    if (filter.actionType !== '' && logEntry.actionType !== filter.actionType) {
+      return false
+    }
+    return true
+  })
+}
+
+function paginateMockLogs<TEntry>(entries: TEntry[], page: number, pageSize: number): TEntry[] {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.trunc(page) : 1
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.trunc(pageSize) : entries.length
+  const start = (safePage - 1) * safePageSize
+  return entries.slice(start, start + safePageSize)
+}
+
 function initialPolicy(): StoredPolicy {
   return {
     whitelist: [{
@@ -121,6 +177,14 @@ export class MockDevice {
     eventType: 'mapped',
     result: 'allowed',
     detail: '白名单设备映射成功',
+  }, {
+    id: 2,
+    eventTime: 1_767_225_611,
+    deviceSn: 'USB-AUDIT-002',
+    deviceName: 'Blocked USB',
+    eventType: 'whitelist_denied',
+    result: 'denied',
+    detail: '未授权设备禁止接入',
   }]
   private malwareLogs = [{
     id: 1,
@@ -132,6 +196,16 @@ export class MockDevice {
     virusName: 'EICAR-Test-File',
     processResult: 'blocked',
     detail: '发现病毒并阻断',
+  }, {
+    id: 2,
+    scanTime: 1_767_225_621,
+    deviceSn: 'USB-MALWARE-002',
+    deviceName: 'Clean USB',
+    filePath: '/mnt/usb/readme.txt',
+    scanResult: 'clean',
+    virusName: '',
+    processResult: 'allowed',
+    detail: '扫描通过',
   }]
   private operationLogs = [{
     id: 1,
@@ -143,6 +217,16 @@ export class MockDevice {
     target: 'new_operator',
     result: '0',
     detail: '新建用户成功',
+  }, {
+    id: 2,
+    opTime: 1_767_225_631,
+    username: 'audit',
+    role: 'auditor',
+    logCategory: 'login_auth',
+    actionType: 'login',
+    target: 'audit',
+    result: '0',
+    detail: '审计员登录成功',
   }]
   private connectedDevices = [{
     serialNumber: 'DEVICE-ADDABLE-001', deviceName: 'Device-side USB', vid: '0781', pid: '5591',
@@ -446,15 +530,34 @@ export class MockDevice {
 
   private queryLogsResponse(payload: Uint8Array): MockResponse {
     const command = usb_control.CmdQueryLogs.decode(payload)
+    const filter = {
+      keyword: command.keyword,
+      eventType: command.eventType,
+      logCategory: command.logCategory,
+      actionType: command.actionType,
+    }
+    const usbAuditEntries = command.logType === 'usb_audit'
+      ? filterMockLogsForQuery(this.usbAuditLogs, filter)
+      : []
+    const malwareEntries = command.logType === 'malware'
+      ? filterMockLogsForQuery(this.malwareLogs, filter)
+      : []
+    const operationEntries = command.logType === 'operation'
+      ? filterMockLogsForQuery(this.operationLogs, filter)
+      : []
     return {
       msgType: 0x0401,
       messageClass: usb_control.RspQueryLogs,
       body: {
         success: true,
-        total: this.logCount(command.logType),
-        usbAuditEntries: command.logType === 'usb_audit' ? this.usbAuditLogs : [],
-        malwareEntries: command.logType === 'malware' ? this.malwareLogs : [],
-        operationEntries: command.logType === 'operation' ? this.operationLogs : [],
+        total: this.filteredLogCount(command.logType, {
+          usbAuditEntries,
+          malwareEntries,
+          operationEntries,
+        }),
+        usbAuditEntries: paginateMockLogs(usbAuditEntries, command.page, command.pageSize),
+        malwareEntries: paginateMockLogs(malwareEntries, command.page, command.pageSize),
+        operationEntries: paginateMockLogs(operationEntries, command.page, command.pageSize),
         resultCode: 0,
         errorMessage: '',
       },
@@ -484,15 +587,22 @@ export class MockDevice {
     return this.commonSuccessResponse()
   }
 
-  private logCount(logType: string): number {
+  private filteredLogCount(
+    logType: string,
+    entries: {
+      usbAuditEntries: unknown[]
+      malwareEntries: unknown[]
+      operationEntries: unknown[]
+    },
+  ): number {
     if (logType === 'usb_audit') {
-      return this.usbAuditLogs.length
+      return entries.usbAuditEntries.length
     }
     if (logType === 'malware') {
-      return this.malwareLogs.length
+      return entries.malwareEntries.length
     }
     if (logType === 'operation') {
-      return this.operationLogs.length
+      return entries.operationEntries.length
     }
     return 0
   }

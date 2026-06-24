@@ -46,10 +46,17 @@ const DataTableStub = defineComponent({
     }, [
       slots.filters?.(),
       h('div', { 'data-testid': 'columns' }, props.columns.map((column: { label: string }) => column.label).join('|')),
-      props.data.map((row: { id: string; content: string; serialNumber?: string; eventType?: string }) =>
+      props.data.map((row: {
+        id: string
+        content: string
+        serialNumber?: string
+        eventType?: string
+        logCategory?: string
+      }) =>
         h('div', { key: row.id, 'data-testid': 'log-row' }, [
           row.serialNumber != null ? slots.serialNumber?.({ row }) : null,
           row.eventType != null ? slots.eventType?.({ row }) : null,
+          row.logCategory != null ? h('span', row.logCategory) : null,
           h('span', row.content),
         ]),
       ),
@@ -70,6 +77,24 @@ const ElTabPaneStub = defineComponent({
   template: '<button type="button">{{ label }}</button>',
 })
 
+const ElInputStub = defineComponent({
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+})
+
+const ElDatePickerStub = defineComponent({
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  template: '<input v-bind="$attrs" :value="String(modelValue)" @change="$emit(\'update:modelValue\', new Date(1767225600000))" />',
+})
+
+const ElSelectStub = defineComponent({
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
+})
+
 function mountPage() {
   return mount(LogsPage, {
     global: {
@@ -81,10 +106,10 @@ function mountPage() {
         ElTabs: ElTabsStub,
         ElTabPane: ElTabPaneStub,
         ElCard: { template: '<section><slot /></section>' },
-        ElInput: { template: '<input data-testid="keyword-input" />' },
-        ElDatePicker: { template: '<input data-testid="date-picker" />' },
-        ElSelect: { template: '<select><slot /></select>' },
-        ElOption: { template: '<option>{{ label }}</option>', props: ['label', 'value'] },
+        ElInput: ElInputStub,
+        ElDatePicker: ElDatePickerStub,
+        ElSelect: ElSelectStub,
+        ElOption: { template: '<option :value="value">{{ label }}</option>', props: ['label', 'value'] },
         ElButton: { template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElTag: { template: '<span><slot /></span>' },
         ElDialog: { template: '<section><slot /><slot name="footer" /></section>' },
@@ -188,7 +213,66 @@ describe('LogsPage', () => {
     expect(wrapper.find('[data-testid="log-event-chip"]').exists()).toBe(true)
   })
 
-  it('操作日志按确认原型只展示时间、用户和内容列', async () => {
+  it('切换日志类型时清空搜索条件并恢复默认分页', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    wrapper.getComponent(DataTableStub).vm.$emit('page-size-change', 50)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
+    await flushPromises()
+
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      logType: 'operation',
+      keyword: '',
+      eventType: '',
+      logCategory: '',
+      page: 1,
+      pageSize: 20,
+    }))
+  })
+
+  it('USB审计日志搜索时带关键字和事件类型', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-search"]').trigger('click')
+    await flushPromises()
+
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      logType: 'usb_audit',
+      keyword: 'Kingston',
+      eventType: 'mapped',
+      logCategory: '',
+      page: 1,
+    }))
+  })
+
+  it('恶意代码检测日志搜索时只带关键字和时间条件', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="logs-tab-malware"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="log-keyword"]').setValue('EICAR')
+    await wrapper.get('[data-testid="log-search"]').trigger('click')
+    await flushPromises()
+
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      logType: 'malware',
+      keyword: 'EICAR',
+      eventType: '',
+      logCategory: '',
+      page: 1,
+    }))
+  })
+
+  it('操作日志展示类型列并格式化类型', async () => {
     vi.mocked(queryLogs).mockResolvedValue({
       success: true,
       total: 1,
@@ -210,7 +294,50 @@ describe('LogsPage', () => {
     await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|用户|内容')
+    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|用户|操作日志类型|内容')
+    expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户管理')
+  })
+
+  it('操作日志按类型筛选并在导出时携带相同类型', async () => {
+    vi.mocked(exportLogs).mockResolvedValue({
+      success: true,
+      zipData: new Uint8Array([1, 2, 3]),
+      suggestedFilename: 'OperationLog20260622120000.zip',
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+    vi.mocked(queryLogs).mockResolvedValue({
+      success: true,
+      total: 0,
+      usbAuditEntries: [],
+      malwareEntries: [],
+      operationEntries: [],
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="log-operation-category"]').setValue('user_management')
+    await wrapper.get('[data-testid="log-search"]').trigger('click')
+    await flushPromises()
+
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      logType: 'operation',
+      eventType: '',
+      logCategory: 'user_management',
+    }))
+
+    await wrapper.get('[data-testid="log-export"]').trigger('click')
+    await flushPromises()
+
+    expect(exportLogs).toHaveBeenCalledWith('token', expect.objectContaining({
+      logType: 'operation',
+      eventType: '',
+      logCategory: 'user_management',
+    }))
   })
 
   it('exports selected log type to user selected path', async () => {

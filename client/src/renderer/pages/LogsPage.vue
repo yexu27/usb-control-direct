@@ -6,7 +6,9 @@ import DataTable from '@/components/DataTable.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
 import {
   LOG_TABS,
+  OPERATION_LOG_CATEGORY_OPTIONS,
   USB_EVENT_TYPE_OPTIONS,
+  formatOperationLogCategory,
   type LogType,
   getLogColumns,
 } from '@/utils/log-display'
@@ -32,6 +34,7 @@ interface LogRow {
   deviceName?: string
   serialNumber?: string
   eventType?: string
+  logCategory?: string
   content: string
   virus?: string
   username?: string
@@ -43,6 +46,7 @@ const activeLogType = ref<LogType>('usb_audit')
 const dateRange = ref<[Date, Date]>(createDefaultRange())
 const keyword = ref('')
 const selectedEventType = ref('')
+const selectedOperationLogCategory = ref('')
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE)
 const rows = ref<LogRow[]>([])
@@ -58,6 +62,7 @@ const activeTabLabel = computed(() => {
 })
 const columns = computed(() => getLogColumns(activeLogType.value))
 const showUsbEventFilter = computed(() => activeLogType.value === 'usb_audit')
+const showOperationLogCategoryFilter = computed(() => activeLogType.value === 'operation')
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const startTime = computed({
   get: () => dateRange.value[0],
@@ -121,9 +126,9 @@ function buildQueryInput(): LogQueryInput {
     endTime: dateToUnixSeconds(dateRange.value[1]),
     keyword: keyword.value.trim(),
     eventType: activeLogType.value === 'usb_audit' ? selectedEventType.value : '',
+    logCategory: activeLogType.value === 'operation' ? selectedOperationLogCategory.value : '',
     page: page.value,
     pageSize: pageSize.value,
-    logCategory: '',
     actionType: '',
   }
 }
@@ -184,6 +189,7 @@ function mapOperationRow(entry: usb_control.IOperationLogEntry): LogRow {
     id: String(entry.id ?? ''),
     time: formatUnixSeconds(entry.opTime ?? 0),
     username: entry.username ?? '',
+    logCategory: formatOperationLogCategory(entry.logCategory ?? ''),
     content: buildContent(entry.detail, entry.result, entry.failReason),
   }
 }
@@ -232,10 +238,18 @@ function selectLogType(logType: LogType): void {
   handleTabChange(logType)
 }
 
+function resetSearchState(): void {
+  dateRange.value = createDefaultRange()
+  keyword.value = ''
+  selectedEventType.value = ''
+  selectedOperationLogCategory.value = ''
+  page.value = 1
+  pageSize.value = PAGE_SIZE
+}
+
 function handleTabChange(tabName: string | number): void {
   activeLogType.value = tabName as LogType
-  page.value = 1
-  selectedEventType.value = ''
+  resetSearchState()
   void loadLogs()
 }
 
@@ -398,7 +412,7 @@ function disabledClearDate(date: Date): boolean {
         <template #filters>
           <div
             class="log-filter-bar"
-            :class="{ 'without-type-filter': !showUsbEventFilter }"
+            :class="{ 'without-type-filter': !showUsbEventFilter && !showOperationLogCategoryFilter }"
           >
             <el-input
               v-model="keyword"
@@ -433,6 +447,20 @@ function disabledClearDate(date: Date): boolean {
             >
               <el-option
                 v-for="option in USB_EVENT_TYPE_OPTIONS"
+                :key="option.value"
+                :label="option.value === '' ? '全部类型' : option.label"
+                :value="option.value"
+              />
+            </el-select>
+            <el-select
+              v-if="showOperationLogCategoryFilter"
+              v-model="selectedOperationLogCategory"
+              class="filter-select"
+              placeholder="全部类型"
+              data-testid="log-operation-category"
+            >
+              <el-option
+                v-for="option in OPERATION_LOG_CATEGORY_OPTIONS"
                 :key="option.value"
                 :label="option.value === '' ? '全部类型' : option.label"
                 :value="option.value"
