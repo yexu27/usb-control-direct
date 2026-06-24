@@ -116,6 +116,7 @@ fn spawn_log_level_watcher(reload_handle: reload::Handle<EnvFilter, impl tracing
 /// 返回:
 /// - `Vec<WorkerGuard>`，调用方必须持有到进程退出，
 ///   否则 non_blocking writer 会在 guard drop 时停止写入。
+#[must_use = "guard 必须持有到进程退出，否则日志文件写入会停止"]
 pub fn init_logging(log_dir: &Path) -> Vec<WorkerGuard> {
     std::fs::create_dir_all(log_dir).expect("日志目录创建失败");
 
