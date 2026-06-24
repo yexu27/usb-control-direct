@@ -20,11 +20,4 @@ export default defineConfig({
       '@': resolve(__dirname, 'src/renderer'),
     },
   },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        additionalData: `@use "@/styles/variables" as *;`,
-      },
-    },
-  },
 })
