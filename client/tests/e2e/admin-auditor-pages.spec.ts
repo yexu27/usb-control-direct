@@ -68,6 +68,18 @@ function progressDialog(page: Page) {
   return page.getByTestId('progress-dialog')
 }
 
+async function expectSystemManagementLayout(page: Page): Promise<void> {
+  const systemCards = page.getByTestId('system-management-card')
+  await expect(page.getByTestId('system-card-grid')).toBeVisible()
+  await expect(systemCards).toHaveCount(4)
+  await expect(systemCards.nth(0)).toContainText('系统升级')
+  await expect(systemCards.nth(1)).toContainText('病毒库升级')
+  await expect(systemCards.nth(2)).toContainText('授权信息管理')
+  await expect(systemCards.nth(3)).toContainText('自定义设备描述')
+  await expect(page.getByText('安全U盘自动升级')).toHaveCount(0)
+  await expect(page.getByText('系统管理员')).toHaveCount(0)
+}
+
 async function withDevice(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -122,6 +134,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await expect(page).toHaveURL(/#\/users$/)
         await openMenu(page, '系统管理')
         await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible()
+        await expectSystemManagementLayout(page)
 
         await app.evaluate(({ dialog }, path) => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })

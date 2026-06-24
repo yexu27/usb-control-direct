@@ -382,8 +382,8 @@ async function saveDeviceDescription(): Promise<void> {
     </header>
     <ConnectionAlert />
 
-    <div v-loading="isLoadingInfo" class="system-grid">
-      <section class="system-card" data-testid="system-management-card">
+    <div v-loading="isLoadingInfo" class="system-grid" data-testid="system-card-grid">
+      <section class="system-card system-card-upgrade" data-testid="system-management-card">
         <h3>系统升级</h3>
         <p class="system-card-meta">当前版本: {{ systemVersion }}</p>
         <div class="system-card-actions">
@@ -398,7 +398,7 @@ async function saveDeviceDescription(): Promise<void> {
         <p class="system-card-note">版本校验：升级包版本必须大于当前系统版本</p>
       </section>
 
-      <section class="system-card" data-testid="system-management-card">
+      <section class="system-card system-card-virusdb" data-testid="system-management-card">
         <h3>病毒库升级</h3>
         <p class="system-card-meta">当前: {{ virusDbVersion }} | 更新时间: {{ virusDbUpdatedAt }}</p>
         <div class="system-card-actions">
@@ -412,7 +412,7 @@ async function saveDeviceDescription(): Promise<void> {
         </div>
       </section>
 
-      <section class="system-card" data-testid="system-management-card">
+      <section class="system-card system-card-license" data-testid="system-management-card">
         <h3>授权信息管理</h3>
         <p class="auth-line">状态: <span>{{ authStatusText }}</span></p>
         <p class="system-card-meta">授权截止时间: {{ authExpireTime }}</p>
@@ -426,7 +426,7 @@ async function saveDeviceDescription(): Promise<void> {
         </div>
       </section>
 
-      <section class="system-card" data-testid="system-management-card">
+      <section class="system-card system-card-device-desc" data-testid="system-management-card">
         <h3>自定义设备描述</h3>
         <p class="system-card-meta device-description-line">
           当前: <code>{{ currentDeviceDescription }}</code>
@@ -510,48 +510,51 @@ async function saveDeviceDescription(): Promise<void> {
 .system-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 18px;
 }
 
 .system-card {
-  min-height: 160px;
-  padding: 18px;
+  min-height: 172px;
+  padding: 28px 36px;
   background: $bg-white;
   border: 1px solid $border-color;
   border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 
   h3 {
-    margin: 0 0 6px;
+    margin: 0 0 12px;
     color: $text-primary;
-    font-size: 13px;
+    font-size: 18px;
     font-weight: $font-weight-semibold;
   }
 }
 
 .system-card-meta {
-  margin: 0 0 10px;
+  margin: 0 0 16px;
   color: $text-secondary;
-  font-size: 11px;
-  font-weight: $font-weight-semibold;
+  font-size: 15px;
+  font-weight: $font-weight-medium;
 }
 
 .system-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 12px;
 }
 
 .system-card-note {
-  margin: 6px 0 0;
-  color: $text-secondary;
-  font-size: 10px;
-  font-weight: $font-weight-semibold;
+  margin: 14px 0 0;
+  color: var(--andi-text-light);
+  font-size: 13px;
+  font-weight: $font-weight-medium;
 }
 
 .auth-line {
-  margin: 0 0 2px;
+  margin: 0 0 10px;
   color: $text-primary;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: $font-weight-medium;
 
   span {
     color: #2e7d32;
@@ -560,26 +563,28 @@ async function saveDeviceDescription(): Promise<void> {
 }
 
 .device-description-line {
-  margin-bottom: 2px;
+  margin-bottom: 8px;
 
   code {
-    padding: 1px 5px;
+    padding: 2px 6px;
     color: $brand-primary-dark;
     font-family: 'SF Mono', Consolas, monospace;
-    font-size: 11px;
+    font-size: 15px;
     background: #f0f2f5;
-    border-radius: 3px;
+    border-radius: 4px;
   }
 }
 
 .device-description-warning {
-  margin: 0 0 10px;
-  padding: 4px 8px;
+  max-width: 620px;
+  margin: 8px 0 18px;
+  padding: 10px 14px;
   color: #e65100;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: $font-weight-semibold;
+  line-height: 1.6;
   background: #fff8e1;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .device-description-dialog {
@@ -598,9 +603,9 @@ async function saveDeviceDescription(): Promise<void> {
 }
 
 .system-card :deep(.el-button) {
-  min-height: 30px;
-  padding: 5px 10px;
-  font-size: 11px;
+  min-height: 38px;
+  padding: 8px 18px;
+  font-size: 15px;
   font-weight: $font-weight-semibold;
   border-radius: 4px;
 }
