@@ -24,7 +24,7 @@ use crate::write_back::WriteBackManager;
 /// S04 文件访问控制引擎。
 pub struct FileAccessEngine {
     /// 数据库。
-    storage: Storage,
+    storage: Arc<Storage>,
     /// 审计服务。
     audit: Arc<AuditService>,
     /// NBD 设备路径。
@@ -46,7 +46,7 @@ impl FileAccessEngine {
     ///   - storage: 数据库实例。
     ///   - audit: 审计服务。
     ///   - nbd_device: NBD 设备路径（如 /dev/nbd0）。
-    pub fn new(storage: Storage, audit: Arc<AuditService>, nbd_device: &str) -> Self {
+    pub fn new(storage: Arc<Storage>, audit: Arc<AuditService>, nbd_device: &str) -> Self {
         FileAccessEngine {
             storage,
             audit,

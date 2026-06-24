@@ -3,6 +3,7 @@
 //! 时间戳由 audit 层注入，不依赖调用方。
 
 use std::path::Path;
+use std::sync::Arc;
 
 use tracing::{debug, info, warn};
 
@@ -76,13 +77,13 @@ fn nix_statvfs(path: &Path) -> Result<DiskStat, AuditError> {
 
 /// 日志审计服务。
 pub struct AuditService {
-    storage: Storage,
+    storage: Arc<Storage>,
     db_path: std::path::PathBuf,
 }
 
 impl AuditService {
     /// 创建审计服务。
-    pub fn new(storage: Storage, db_path: &Path) -> Self {
+    pub fn new(storage: Arc<Storage>, db_path: &Path) -> Self {
         AuditService {
             storage,
             db_path: db_path.to_path_buf(),

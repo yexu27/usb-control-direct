@@ -4,7 +4,7 @@
 //! 缓存在构造时从数据库全量加载，后续随写操作同步更新，无需定期刷新。
 
 use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 
 use storage::model::{UsbWhitelist, UsbWhitelistInsert, WhitelistCacheSnapshotEntry};
 use storage::{Storage, StorageError};
@@ -56,7 +56,7 @@ pub struct AddWhitelistRequest {
 /// 构造后即可用，缓存在 [`WhitelistManager::new`] 时从数据库全量加载。
 pub struct WhitelistManager {
     /// 存储层句柄。
-    storage: Storage,
+    storage: Arc<Storage>,
     /// 串行化白名单增删改与策略全量导入。
     mutation_lock: Mutex<()>,
     /// 序列号 → 缓存条目，用于快速判断是否在白名单中。
@@ -72,7 +72,7 @@ impl WhitelistManager {
     /// 返回:
     /// - 成功时返回初始化完成的 [`WhitelistManager`]；
     /// - 数据库读取失败时返回 [`WhitelistError`]。
-    pub fn new(storage: Storage) -> Result<Self, WhitelistError> {
+    pub fn new(storage: Arc<Storage>) -> Result<Self, WhitelistError> {
         info!("初始化白名单管理器");
         let manager = WhitelistManager {
             storage,
@@ -370,7 +370,7 @@ mod tests {
     /// 创建临时数据库并返回 WhitelistManager。
     fn make_manager() -> (NamedTempFile, WhitelistManager) {
         let tmp = NamedTempFile::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
+        let storage = Arc::new(Storage::open(tmp.path()).unwrap());
         let manager = WhitelistManager::new(storage).unwrap();
         (tmp, manager)
     }
@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn reload_cache_repopulates_from_db() {
         let tmp = NamedTempFile::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
+        let storage = Arc::new(Storage::open(tmp.path()).unwrap());
         let manager = WhitelistManager::new(storage).unwrap();
 
         manager.add(make_request("SN008")).unwrap();

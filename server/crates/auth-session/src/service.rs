@@ -2,6 +2,8 @@
 //!
 //! 组合 password 模块和 SessionManager，提供登录、锁定、改密码等完整业务接口。
 
+use std::sync::Arc;
+
 use tracing::{debug, info, warn};
 
 use storage::Storage;
@@ -29,13 +31,13 @@ pub struct LoginResult {
 
 /// 鉴权业务服务。
 pub struct AuthService {
-    storage: Storage,
+    storage: Arc<Storage>,
     session_mgr: SessionManager,
 }
 
 impl AuthService {
     /// 创建鉴权服务。
-    pub fn new(storage: Storage, session_mgr: SessionManager) -> Self {
+    pub fn new(storage: Arc<Storage>, session_mgr: SessionManager) -> Self {
         AuthService {
             storage,
             session_mgr,
