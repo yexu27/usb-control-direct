@@ -89,7 +89,7 @@ function mountPage() {
       stubs: {
         ConnectionAlert: { template: '<aside />' },
         DataTable: DataTableStub,
-        ElCard: { template: '<section><slot /></section>' },
+        ElCard: { template: '<section v-bind="$attrs"><slot /></section>' },
         ElButton: { emits: ['click'], template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot /><slot name="footer" /></section>' },
         ElAlert: { props: ['title'], template: '<strong v-bind="$attrs">{{ title }}</strong>' },
@@ -126,6 +126,7 @@ describe('UsersPage', () => {
       users: [
         { username: 'admin', role: 'admin', status: 'active', isBuiltin: true, createdAt: 0 },
         { username: 'zhang_wei', role: 'operator', status: 'locked', isBuiltin: false, createdAt: 1_767_225_610 },
+        { username: 'audit_user', role: 'auditor', status: 'active', isBuiltin: true, createdAt: 1_767_225_610 },
       ],
     } as never)
   })
@@ -136,14 +137,20 @@ describe('UsersPage', () => {
     await flushPromises()
 
     expect(listUsers).toHaveBeenCalledWith('token')
+    expect(wrapper.get('[data-testid="users-card"]').classes()).toContain('users-card')
+    expect(wrapper.get('[data-testid="create-user-open"]').text()).toContain('新建用户')
     expect(wrapper.text()).toContain('用户管理')
     expect(wrapper.text()).toContain('admin')
     expect(wrapper.text()).toContain('zhang_wei')
+    expect(wrapper.text()).toContain('系统管理员')
+    expect(wrapper.text()).toContain('操作员')
+    expect(wrapper.text()).toContain('审计员')
     expect(wrapper.text()).toContain('内置')
     expect(wrapper.text()).toContain('锁定')
-    expect(wrapper.findAll('.app-role-badge')).toHaveLength(2)
+    expect(wrapper.findAll('.app-role-badge')).toHaveLength(3)
     expect(wrapper.find('.app-role-admin').exists()).toBe(true)
     expect(wrapper.find('.app-role-operator').exists()).toBe(true)
+    expect(wrapper.find('.app-role-auditor').exists()).toBe(true)
     expect(wrapper.find('[data-testid="delete-user-admin"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="delete-user-zhang_wei"]').exists()).toBe(true)
   })

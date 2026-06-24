@@ -287,7 +287,7 @@ async function submitResetPassword(): Promise<void> {
     </header>
     <ConnectionAlert />
 
-    <el-card shadow="never" class="users-card app-card">
+    <el-card shadow="never" class="users-card app-card" data-testid="users-card">
       <DataTable
         :columns="columns"
         :data="users"
@@ -483,6 +483,10 @@ async function submitResetPassword(): Promise<void> {
 
 .users-card {
   border-color: $border-color;
+}
+
+.users-card :deep(.el-card__body) {
+  padding: 24px 28px;
 }
 
 .user-toolbar {

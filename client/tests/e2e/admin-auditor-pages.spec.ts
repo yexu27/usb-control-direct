@@ -80,6 +80,13 @@ async function expectSystemManagementLayout(page: Page): Promise<void> {
   await expect(page.getByText('系统管理员')).toHaveCount(0)
 }
 
+async function expectUsersLayout(page: Page): Promise<void> {
+  await expect(page.getByTestId('users-card')).toBeVisible()
+  await expect(page.getByTestId('create-user-open')).toBeVisible()
+  await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
+  await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
+}
+
 async function withDevice(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -294,6 +301,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
     await withDevice(async (_device, _app, page) => {
       await login(page, 'admin', 'admin@123')
       await expect(page).toHaveURL(/#\/users$/)
+      await expectUsersLayout(page)
       await expect(page.getByText('admin', { exact: true })).toBeVisible()
       await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
 
