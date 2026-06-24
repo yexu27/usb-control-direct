@@ -1,6 +1,7 @@
 //! 用户管理 handler（0x0600/0x0602/0x0603/0x0604）。
 
 use prost::Message;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::mapping::{role_int_to_str, role_str_to_int};
@@ -21,6 +22,7 @@ const RSP_COMMON: u32 = 0xFF00;
 
 /// CMD_LIST_USERS (0x0600) handler。
 pub fn handle_list_users(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到查询用户列表请求");
     let _cmd = match CmdListUsers::decode(payload) {
         Ok(c) => c,
         Err(_) => {
@@ -30,17 +32,22 @@ pub fn handle_list_users(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match ctx.auth_service.list_users() {
         Ok(users) => {
+            debug!(count = users.len(), "用户列表查询成功");
             let items: Vec<UserItem> = users.iter().map(map_user_item).collect();
             let rsp = RspListUsers { users: items };
             codec::encode_frame(RSP_LIST_USERS, ctx.seq_id, &rsp.encode_to_vec())
                 .unwrap_or_default()
         }
-        Err(e) => error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string()),
+        Err(e) => {
+            warn!(reason = %e, "用户列表查询失败");
+            error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
+        }
     }
 }
 
 /// CMD_CREATE_USER (0x0602) handler。
 pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到创建用户请求");
     let cmd = match CmdCreateUser::decode(payload) {
         Ok(c) => c,
         Err(_) => {
@@ -65,10 +72,12 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         .create_user(&cmd.username, role, &cmd.password, &cmd.confirm_password)
     {
         Ok(_id) => {
+            info!(user = %cmd.username, "用户创建成功");
             log_operation(ctx, session, "user_management", "create", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(user = %cmd.username, reason = %e, "用户创建失败");
             let code = e.to_result_code();
             log_operation(
                 ctx,
@@ -86,6 +95,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
 /// CMD_DELETE_USER (0x0603) handler。
 pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到删除用户请求");
     let cmd = match CmdDeleteUser::decode(payload) {
         Ok(c) => c,
         Err(_) => {
@@ -103,10 +113,12 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         .delete_user(&cmd.username, session.user_id)
     {
         Ok(()) => {
+            info!(target_user = %cmd.username, "用户删除成功");
             log_operation(ctx, session, "user_management", "delete", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(target_user = %cmd.username, reason = %e, "用户删除失败");
             let code = e.to_result_code();
             log_operation(
                 ctx,
@@ -124,6 +136,7 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
 /// CMD_RESET_PASSWORD (0x0604) handler。
 pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到重置密码请求");
     let cmd = match CmdResetPassword::decode(payload) {
         Ok(c) => c,
         Err(_) => {
@@ -141,10 +154,12 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         .reset_password(&cmd.username, &cmd.new_password, &cmd.confirm_password)
     {
         Ok(()) => {
+            info!(target_user = %cmd.username, "密码重置成功");
             log_operation(ctx, session, "user_management", "reset_password", &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(target_user = %cmd.username, reason = %e, "密码重置失败");
             let code = e.to_result_code();
             log_operation(
                 ctx,
