@@ -528,6 +528,8 @@ function disabledClearDate(date: Date): boolean {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .logs-page {
   display: flex;
   flex-direction: column;
@@ -539,7 +541,7 @@ function disabledClearDate(date: Date): boolean {
 
   h1 {
     margin: 0;
-    color: $text-primary;
+    color: var(--andi-text);
     font-size: 26px;
     font-weight: $font-weight-semibold;
     line-height: 1.2;
@@ -547,7 +549,7 @@ function disabledClearDate(date: Date): boolean {
 
   p {
     margin: 6px 0 0;
-    color: $text-secondary;
+    color: var(--andi-text-light);
     font-size: 16px;
     font-weight: $font-weight-medium;
   }
@@ -580,7 +582,7 @@ function disabledClearDate(date: Date): boolean {
   border: 0;
   border-right: 1px solid #d8dee8;
   background: transparent;
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-family: var(--andi-font-family);
   font-size: 16px;
   font-weight: $font-weight-semibold;
@@ -590,9 +592,9 @@ function disabledClearDate(date: Date): boolean {
     color 120ms ease;
 
   &.active {
-    border-right-color: $brand-primary;
-    background: $brand-primary;
-    color: $bg-white;
+    border-right-color: var(--andi-blue);
+    background: var(--andi-blue);
+    color: var(--andi-white);
   }
 
   &:last-child {
@@ -606,7 +608,7 @@ function disabledClearDate(date: Date): boolean {
 
   &:not(.active):hover {
     background: #f9fbff;
-    color: $brand-primary;
+    color: var(--andi-blue);
   }
 }
 
@@ -640,7 +642,7 @@ function disabledClearDate(date: Date): boolean {
   height: 42px;
   padding: 0 16px;
   background: #eef2f7;
-  color: $text-regular;
+  color: var(--andi-text-secondary);
   font-size: 15px;
   font-weight: $font-weight-semibold;
 }
@@ -648,14 +650,14 @@ function disabledClearDate(date: Date): boolean {
 .logs-table :deep(td.el-table__cell) {
   height: 48px;
   padding: 0 16px;
-  background: $bg-white;
-  color: $text-primary;
+  background: var(--andi-white);
+  color: var(--andi-text);
   font-size: 16px;
 }
 
 .logs-table :deep(.el-table__body tr.el-table__row--striped td.el-table__cell),
 .logs-table :deep(.el-table__body tr:hover > td.el-table__cell) {
-  background: $bg-white;
+  background: var(--andi-white);
 }
 
 .log-filter-bar {
@@ -737,18 +739,18 @@ function disabledClearDate(date: Date): boolean {
 }
 
 .filter-actions :deep(.el-button--primary) {
-  background: $brand-primary;
-  border-color: $brand-primary;
+  background: var(--andi-blue);
+  border-color: var(--andi-blue);
 }
 
 .logs-clear-button {
   color: #e53935;
-  background: $bg-white;
+  background: var(--andi-white);
   border-color: #ff8f8f;
 
   &:hover,
   &:focus {
-    color: $bg-white;
+    color: var(--andi-white);
     background: #e53935;
     border-color: #e53935;
   }
@@ -760,7 +762,7 @@ function disabledClearDate(date: Date): boolean {
   align-items: center;
   min-height: 22px;
   padding: 0 8px;
-  border-radius: $border-radius;
+  border-radius: $radius-control;
   font-size: 15px;
   font-weight: $font-weight-semibold;
   line-height: 1;
@@ -768,28 +770,28 @@ function disabledClearDate(date: Date): boolean {
 
 .log-serial-chip {
   background: #f0f2f5;
-  color: $brand-primary-dark;
+  color: var(--andi-blue-dark);
 }
 
 .log-event-chip {
   &.success {
-    background: rgba($color-success, 0.12);
-    color: $color-success;
+    background: color-mix(in srgb, var(--andi-success) 12%, transparent);
+    color: var(--andi-success);
   }
 
   &.danger {
-    background: rgba($color-danger, 0.12);
-    color: $color-danger;
+    background: color-mix(in srgb, var(--andi-danger) 12%, transparent);
+    color: var(--andi-danger);
   }
 
   &.warning {
-    background: rgba($color-warning, 0.12);
-    color: $color-warning;
+    background: color-mix(in srgb, var(--andi-warning) 12%, transparent);
+    color: var(--andi-warning);
   }
 
   &.info {
-    background: rgba($color-info, 0.12);
-    color: $color-info;
+    background: color-mix(in srgb, var(--andi-info) 12%, transparent);
+    color: var(--andi-info);
   }
 }
 
@@ -799,7 +801,7 @@ function disabledClearDate(date: Date): boolean {
   justify-content: space-between;
   padding: 0;
   border-top: 0;
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-size: 15px;
 }
 
@@ -812,22 +814,22 @@ function disabledClearDate(date: Date): boolean {
   min-width: 30px;
   height: 30px;
   border: 1px solid #d8dee8;
-  border-radius: $border-radius;
-  background: $bg-white;
-  color: $text-primary;
+  border-radius: $radius-control;
+  background: var(--andi-white);
+  color: var(--andi-text);
   font-size: 15px;
   cursor: pointer;
 
   &.active {
-    border-color: $brand-primary;
-    background: $brand-primary;
-    color: $color-white;
+    border-color: var(--andi-blue);
+    background: var(--andi-blue);
+    color: var(--andi-white);
   }
 
   &:not(.active):hover,
   &:focus-visible {
-    border-color: $brand-primary;
-    color: $brand-primary;
+    border-color: var(--andi-blue);
+    color: var(--andi-blue);
   }
 }
 
@@ -838,7 +840,7 @@ function disabledClearDate(date: Date): boolean {
 
   p {
     margin: 0;
-    color: $text-regular;
+    color: var(--andi-text-secondary);
   }
 }
 
