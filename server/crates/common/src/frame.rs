@@ -4,6 +4,7 @@
 //! 计算由 P01 协议层在写入/读取流时执行（写时算 payload CRC，读时校验）。
 
 use crate::error::CommonError;
+use tracing::debug;
 
 /// 协议帧魔数 "USBC" = 0x55534243。
 pub const FRAME_MAGIC: u32 = 0x55534243;
@@ -75,6 +76,7 @@ impl FrameHeader {
     /// - payload_len 超过 `MAX_PAYLOAD_LEN`
     pub fn decode(input: &[u8]) -> Result<Self, CommonError> {
         if input.len() < FRAME_HEADER_LEN {
+            debug!(len = input.len(), "帧头长度不足");
             return Err(CommonError::InvalidFrame(format!(
                 "header too short: {} bytes",
                 input.len()
@@ -82,6 +84,7 @@ impl FrameHeader {
         }
         let magic = u32::from_be_bytes(input[0..4].try_into().unwrap());
         if magic != FRAME_MAGIC {
+            debug!(magic = format_args!("0x{:08X}", magic), "帧魔数不匹配");
             return Err(CommonError::InvalidFrame(format!(
                 "magic mismatch: 0x{:08X}",
                 magic
@@ -91,12 +94,19 @@ impl FrameHeader {
         let seq_id = u32::from_be_bytes(input[8..12].try_into().unwrap());
         let payload_len = u32::from_be_bytes(input[12..16].try_into().unwrap());
         if payload_len > MAX_PAYLOAD_LEN {
+            debug!(payload_len = payload_len, max = MAX_PAYLOAD_LEN, "Payload 长度超限");
             return Err(CommonError::InvalidFrame(format!(
                 "payload too large: {} bytes",
                 payload_len
             )));
         }
         let crc32 = u32::from_be_bytes(input[16..20].try_into().unwrap());
+        debug!(
+            msg_type = format_args!("0x{:04X}", msg_type),
+            seq_id = seq_id,
+            payload_len = payload_len,
+            "帧头解码成功"
+        );
         Ok(FrameHeader {
             magic,
             msg_type,
