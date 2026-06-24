@@ -4,6 +4,8 @@
 
 use std::path::Path;
 
+use tracing::{debug, info, warn};
+
 use storage::model::{
     LogRetentionEventInsert, MalwareLogInsert, OperationLogInsert, UsbAuditLogInsert,
 };
@@ -119,6 +121,11 @@ impl AuditService {
     /// 检查存储使用率，超过 80% 时删除当前类别最旧 1 条日志。
     fn maybe_overwrite(&self, category: LogCategory) -> Result<(), AuditError> {
         let usage = get_storage_usage_percent(&self.db_path)?;
+        if usage > STORAGE_THRESHOLD_PERCENT {
+            warn!(usage = %usage, "日志存储使用率超过 80% 阈值");
+        }
+        debug!(usage = %usage, category = %category.as_str(), "日志存储使用率");
+
         if usage < STORAGE_THRESHOLD_PERCENT {
             return Ok(());
         }
@@ -132,6 +139,7 @@ impl AuditService {
 
         match deleted_time {
             Some(time) => {
+                info!(category = %category.as_str(), deleted_event_time = time, "日志存储空间不足，删除最旧日志");
                 let retention = LogRetentionEventInsert {
                     trigger_time: now,
                     log_category: category.as_str().into(),
