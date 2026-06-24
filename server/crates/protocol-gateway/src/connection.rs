@@ -10,7 +10,7 @@ use prost::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 
