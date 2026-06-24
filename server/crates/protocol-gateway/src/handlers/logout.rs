@@ -1,6 +1,7 @@
 //! CMD_LOGOUT (0x0009) handler。
 
 use prost::Message;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{CmdLogout, RspCommon};
@@ -14,9 +15,12 @@ const RSP_COMMON: u32 = 0xFF00;
 
 /// 登出 handler。
 pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!(source_ip = %ctx.source_ip, "收到登出请求");
+
     let cmd = match CmdLogout::decode(payload) {
         Ok(c) => c,
         Err(_) => {
+            debug!(source_ip = %ctx.source_ip, "登出请求 protobuf 解码失败");
             return make_rsp(ctx.seq_id, false, ResultCode::ValidationFailed, "消息解码失败")
         }
     };
@@ -46,9 +50,11 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             };
             let _ = ctx.audit_service.log_operation(&mut log);
 
+            info!(user = %info.username, source_ip = %ctx.source_ip, "用户登出成功");
             make_rsp(ctx.seq_id, true, ResultCode::Success, "")
         }
         Err(e) => {
+            warn!(source_ip = %ctx.source_ip, reason = %e, "用户登出失败");
             let code = e.to_result_code();
             make_rsp(ctx.seq_id, false, code, &format!("{}", e))
         }
