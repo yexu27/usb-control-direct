@@ -12,7 +12,7 @@ use std::io::Write;
 use std::path::Path;
 
 use evdev::{Device, InputEventKind};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::error::HidAccessError;
 use crate::hid_report::{keycode_to_hid, KeyboardReport};
@@ -40,6 +40,7 @@ impl KeyboardInterceptor {
     /// 返回 Ok 表示键盘正常拔出或映射结束，Err 表示不可恢复的错误。
     pub fn run(&mut self, input_dev_path: &Path) -> Result<(), HidAccessError> {
         let mut dev = Device::open(input_dev_path).map_err(|e| {
+            error!(dev = %input_dev_path.display(), reason = %e, "evdev 设备打开失败");
             HidAccessError::Internal(format!(
                 "打开 input 设备 {} 失败: {}",
                 input_dev_path.display(),
