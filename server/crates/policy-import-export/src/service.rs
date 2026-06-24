@@ -338,7 +338,7 @@ mod tests {
             })
             .unwrap();
         let whitelist_manager = Arc::new(
-            WhitelistManager::new(Storage::open(file.path()).unwrap()).unwrap(),
+            WhitelistManager::new(Arc::new(Storage::open(file.path()).unwrap())).unwrap(),
         );
         let service = PolicyService::new(
             storage.clone(),
@@ -371,7 +371,7 @@ mod tests {
             source_storage,
             Arc::new(TestKeyProvider(keys.clone())),
             Arc::new(
-                WhitelistManager::new(Storage::open(source_file.path()).unwrap()).unwrap(),
+                WhitelistManager::new(Arc::new(Storage::open(source_file.path()).unwrap())).unwrap(),
             ),
         );
         let policy_data = source_service.export_policy().unwrap();
@@ -382,7 +382,7 @@ mod tests {
             target_storage.clone(),
             Arc::new(TestKeyProvider(keys)),
             Arc::new(
-                WhitelistManager::new(Storage::open(target_file.path()).unwrap()).unwrap(),
+                WhitelistManager::new(Arc::new(Storage::open(target_file.path()).unwrap())).unwrap(),
             ),
         );
         target_service.import_policy(&policy_data).unwrap();
@@ -415,7 +415,7 @@ mod tests {
             storage.clone(),
             Arc::new(UnusedKeyProvider),
             Arc::new(
-                WhitelistManager::new(Storage::open(file.path()).unwrap()).unwrap(),
+                WhitelistManager::new(Arc::new(Storage::open(file.path()).unwrap())).unwrap(),
             ),
         );
         let original_whitelist: Vec<_> = storage

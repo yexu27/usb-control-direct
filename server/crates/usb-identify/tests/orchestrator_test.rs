@@ -32,6 +32,15 @@ fn test_storage_info(serial: &str) -> UsbDeviceInfo {
     }
 }
 
+fn setup_services(
+    db_path: &std::path::Path,
+) -> (Arc<AuditService>, Arc<WhitelistManager>) {
+    let storage = Arc::new(Storage::open(db_path).unwrap());
+    let audit = Arc::new(AuditService::new(Arc::clone(&storage), db_path));
+    let whitelist = Arc::new(WhitelistManager::new(storage).unwrap());
+    (audit, whitelist)
+}
+
 fn test_keyboard_info() -> UsbDeviceInfo {
     UsbDeviceInfo {
         sys_path: "/sys/devices/test_kb".into(),
@@ -68,13 +77,7 @@ fn test_mouse_info() -> UsbDeviceInfo {
 async fn test_storage_whitelist_denied() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
-    let audit = Arc::new(AuditService::new(
-        Storage::open(&db_path).unwrap(),
-        &db_path,
-    ));
-    let whitelist = Arc::new(
-        WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap(),
-    );
+    let (audit, whitelist) = setup_services(&db_path);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
@@ -90,13 +93,7 @@ async fn test_storage_whitelist_denied() {
 async fn test_keyboard_added() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
-    let audit = Arc::new(AuditService::new(
-        Storage::open(&db_path).unwrap(),
-        &db_path,
-    ));
-    let whitelist = Arc::new(
-        WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap(),
-    );
+    let (audit, whitelist) = setup_services(&db_path);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
@@ -112,13 +109,7 @@ async fn test_keyboard_added() {
 async fn test_mouse_added() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
-    let audit = Arc::new(AuditService::new(
-        Storage::open(&db_path).unwrap(),
-        &db_path,
-    ));
-    let whitelist = Arc::new(
-        WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap(),
-    );
+    let (audit, whitelist) = setup_services(&db_path);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
@@ -134,13 +125,7 @@ async fn test_mouse_added() {
 async fn test_unsupported_device_blocked() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
-    let audit = Arc::new(AuditService::new(
-        Storage::open(&db_path).unwrap(),
-        &db_path,
-    ));
-    let whitelist = Arc::new(
-        WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap(),
-    );
+    let (audit, whitelist) = setup_services(&db_path);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
@@ -169,13 +154,7 @@ async fn test_unsupported_device_blocked() {
 async fn test_device_removed() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
-    let audit = Arc::new(AuditService::new(
-        Storage::open(&db_path).unwrap(),
-        &db_path,
-    ));
-    let whitelist = Arc::new(
-        WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap(),
-    );
+    let (audit, whitelist) = setup_services(&db_path);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));

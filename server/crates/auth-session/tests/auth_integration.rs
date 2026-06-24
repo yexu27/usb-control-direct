@@ -1,5 +1,7 @@
 //! S08 鉴权服务集成测试。
 
+use std::sync::Arc;
+
 use auth_session::password;
 use auth_session::service::AuthService;
 use auth_session::session::SessionManager;
@@ -9,7 +11,7 @@ use tempfile::NamedTempFile;
 fn setup() -> (AuthService, tempfile::TempPath) {
     let tmp = NamedTempFile::new().unwrap();
     let path = tmp.into_temp_path();
-    let storage = Storage::open(&path).unwrap();
+    let storage = Arc::new(Storage::open(&path).unwrap());
 
     // 内置用户由 schema 自动插入
     let session_mgr = SessionManager::new();

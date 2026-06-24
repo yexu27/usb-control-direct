@@ -52,7 +52,7 @@ fn setup_storage() -> (Arc<Storage>, tempfile::TempDir) {
 
 fn setup_whitelist_manager(tmp_dir: &tempfile::TempDir) -> Arc<WhitelistManager> {
     let db_path = tmp_dir.path().join("test.db");
-    Arc::new(WhitelistManager::new(Storage::open(&db_path).unwrap()).unwrap())
+    Arc::new(WhitelistManager::new(Arc::new(Storage::open(&db_path).unwrap())).unwrap())
 }
 
 /// 向数据库插入测试白名单数据。

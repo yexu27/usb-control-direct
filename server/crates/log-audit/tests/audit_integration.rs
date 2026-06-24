@@ -1,5 +1,7 @@
 //! 日志审计集成测试。
 
+use std::sync::Arc;
+
 use log_audit::AuditService;
 use storage::model::*;
 use storage::Storage;
@@ -8,7 +10,7 @@ use tempfile::NamedTempFile;
 fn setup() -> (AuditService, tempfile::TempPath) {
     let tmp = NamedTempFile::new().unwrap();
     let path = tmp.into_temp_path();
-    let storage = Storage::open(&path).unwrap();
+    let storage = Arc::new(Storage::open(&path).unwrap());
     let service = AuditService::new(storage, &path);
     (service, path)
 }
@@ -90,7 +92,7 @@ fn log_operation_inserts_record() {
 fn concurrent_writes_no_loss() {
     let tmp = NamedTempFile::new().unwrap();
     let path = tmp.into_temp_path();
-    let storage = Storage::open(&path).unwrap();
+    let storage = Arc::new(Storage::open(&path).unwrap());
     let service = std::sync::Arc::new(AuditService::new(storage, &path));
 
     let mut handles = Vec::new();
