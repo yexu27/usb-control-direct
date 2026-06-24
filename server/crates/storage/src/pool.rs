@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 use rusqlite::{Connection, OpenFlags};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::StorageError;
 
@@ -45,7 +45,7 @@ impl Pool {
             .ok_or_else(|| StorageError::Validation("数据库路径包含非 UTF-8 字符".into()))?
             .to_owned();
 
-        info!(path = %path_str, "打开数据库");
+        debug!(path = %path_str, "打开数据库");
 
         let pool_size = if read_pool_size == 0 {
             DEFAULT_READ_POOL_SIZE
@@ -63,7 +63,7 @@ impl Pool {
             read_conns.push(conn);
         }
 
-        info!("数据库连接池初始化完成");
+        debug!("数据库连接池初始化完成");
 
         Ok(Self {
             write_conn: Mutex::new(write_conn),

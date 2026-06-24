@@ -3,7 +3,7 @@
 //! 与 `docs/architecture/08-数据库设计.md` 逐字对齐。
 
 use rusqlite::Connection;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::error::StorageError;
 
@@ -26,7 +26,7 @@ fn set_schema_version(conn: &Connection, version: i32) -> Result<(), StorageErro
 ///
 /// 仅在 user_version == 0 时执行（首次建库）。
 pub fn migrate(conn: &Connection) -> Result<(), StorageError> {
-    info!("开始数据库 schema 迁移");
+    debug!("开始数据库 schema 迁移");
 
     let version = get_schema_version(conn)?;
     if version >= CURRENT_SCHEMA_VERSION {
@@ -39,7 +39,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StorageError> {
         set_schema_version(conn, CURRENT_SCHEMA_VERSION)?;
     }
 
-    info!("数据库 schema 迁移完成");
+    debug!("数据库 schema 迁移完成");
     Ok(())
 }
 
