@@ -77,12 +77,12 @@ const removeOwnership = ref(new Set<string>())
 const loadEpochs: Record<AddSource, number> = { device: 0, management: 0 }
 
 const columns: DataTableColumn[] = [
-  { prop: 'serialNumber', label: '序列号', minWidth: 180 },
+  { prop: 'serialNumber', label: '序列号', minWidth: 180, slot: 'serialNumber' },
   { prop: 'description', label: '描述', minWidth: 200 },
-  { prop: 'permissionLabel', label: '权限', width: 100 },
+  { prop: 'permissionLabel', label: '权限', width: 100, slot: 'permissionLabel' },
   { prop: 'addMethodLabel', label: '添加方式', width: 130 },
   { prop: 'createdAtLabel', label: '添加时间', width: 180 },
-  { prop: 'actions', label: '操作', width: 150, slot: 'actions' },
+  { prop: 'actions', label: '操作', width: 120, slot: 'actions' },
 ]
 
 function pad(value: number): string {
@@ -419,15 +419,15 @@ function changePageSize(nextPageSize: number): void {
     <header class="page-header app-page-header">
       <div>
         <h1 class="app-page-title">U盘设备控制</h1>
-        <p class="app-page-desc">管理允许通过 USB 管控装置访问的 U 盘设备。</p>
+        <p class="app-page-desc">管理受信任移动存储设备白名单</p>
       </div>
     </header>
     <ConnectionAlert />
-    <el-card shadow="never" class="usb-whitelist-card app-card" data-testid="usb-whitelist-card">
-      <template #header>
-        <div class="usb-whitelist-card-header">
+    <section class="usb-section" aria-label="受信任普通移动存储设备白名单">
+      <div class="usb-panel" data-testid="usb-table-panel">
+        <div class="usb-panel-header">
           <h3>受信任普通移动存储设备白名单</h3>
-          <div class="usb-whitelist-actions">
+          <div class="usb-panel-actions">
             <el-button
               data-testid="add-device-trigger"
               :disabled="addSubmitting"
@@ -447,27 +447,42 @@ function changePageSize(nextPageSize: number): void {
             </el-button>
           </div>
         </div>
-      </template>
-      <DataTable
-        :columns="columns" :data="pageRows" :loading="whitelist.isLoading"
-        :error="tableError" :total="rows.length" :page="page" :page-size="pageSize"
-        empty-text="暂无数据" @page-change="changePage" @page-size-change="changePageSize"
-      >
-        <template #actions="{ row }">
-          <el-button
-            link type="primary" :data-testid="`edit-${row.serialNumber}`"
-            :disabled="editSubmitting" :loading="editSubmitting" @click="openEditDialog(row as WhitelistRow)"
-          >
-            修改
-          </el-button>
-          <el-button
-            link type="danger" :data-testid="`remove-${row.serialNumber}`"
-            :disabled="removeOwnership.has(row.serialNumber)" :loading="removeOwnership.has(row.serialNumber)"
-            @click="handleRemove(row.serialNumber)"
-          >删除</el-button>
-        </template>
-      </DataTable>
-    </el-card>
+        <DataTable
+          class="usb-table prototype-table"
+          :columns="columns" :data="pageRows" :loading="whitelist.isLoading"
+          :error="tableError" :total="rows.length" :page="page" :page-size="pageSize"
+          empty-text="暂无数据" @page-change="changePage" @page-size-change="changePageSize"
+        >
+          <template #serialNumber="{ row }">
+            <span class="serial-chip">{{ row.serialNumber }}</span>
+          </template>
+          <template #permissionLabel="{ row }">
+            <span
+              :class="[
+                'permission-chip',
+                row.permission === 'readwrite' ? 'permission-rw' : 'permission-ro',
+              ]"
+            >
+              {{ row.permissionLabel }}
+            </span>
+          </template>
+          <template #actions="{ row }">
+            <el-button
+              class="prototype-outline-action prototype-outline-danger"
+              :data-testid="`remove-${row.serialNumber}`"
+              :disabled="removeOwnership.has(row.serialNumber)"
+              :loading="removeOwnership.has(row.serialNumber)"
+              @click="handleRemove(row.serialNumber)"
+            >
+              删除
+            </el-button>
+          </template>
+        </DataTable>
+      </div>
+      <div class="usb-bottom-note">
+        白名单设备重新插入后经过扫描审计方可使用。未授权设备显示黄色指示灯常亮。添加完成后需重新拔插U盘生效。
+      </div>
+    </section>
     <AddWhitelistDialog
       :key="`${addSource}-${addEpoch}`"
       :visible="addVisible" :source="addSource" :candidates="candidates"
@@ -499,27 +514,82 @@ function changePageSize(nextPageSize: number): void {
   color: $text-secondary;
 }
 
-.usb-whitelist-card {
-  border-color: $border-color;
+.usb-section {
+  margin-top: 28px;
 }
 
-.usb-whitelist-card-header {
+.usb-panel {
+  overflow: hidden;
+  background: $bg-white;
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.06);
+}
+
+.usb-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 64px;
+  padding: 0 18px 0 20px;
+  background: $bg-sidebar;
+  border-bottom: 1px solid #dce2ea;
   gap: 16px;
 }
 
-.usb-whitelist-card-header h3 {
+.usb-panel-header h3 {
   margin: 0;
   color: $text-primary;
   font-size: 18px;
   font-weight: $font-weight-semibold;
 }
 
-.usb-whitelist-actions {
+.usb-panel-actions {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.usb-table :deep(.data-table-wrapper) {
+  gap: 0;
+}
+
+.serial-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  color: $brand-primary-dark;
+  font-family: Consolas, 'SF Mono', monospace;
+  font-weight: $font-weight-semibold;
+  background: #f0f2f5;
+  border-radius: 4px;
+}
+
+.permission-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: $font-weight-semibold;
+}
+
+.permission-rw {
+  color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.permission-ro {
+  color: #e65100;
+  background: #fff8e1;
+}
+
+.usb-bottom-note {
+  margin-top: 12px;
+  color: var(--andi-text-light);
+  font-size: 13px;
+  font-weight: $font-weight-medium;
 }
 </style>

@@ -72,7 +72,10 @@ function mountPage() {
         <div v-if="error" data-testid="table-error">{{ error }}</div>
         <span data-testid="columns">{{ columns.map(c => c.label).join('|') }}</span><slot name="filters"/>
         <div v-for="row in data" :key="row.serialNumber" data-testid="row">
-          {{ row.serialNumber }} {{ row.description }} {{ row.permissionLabel }} {{ row.addMethodLabel }} {{ row.createdAtLabel }}
+          <slot name="serialNumber" :row="row">{{ row.serialNumber }}</slot>
+          {{ row.description }}
+          <slot name="permissionLabel" :row="row">{{ row.permissionLabel }}</slot>
+          {{ row.addMethodLabel }} {{ row.createdAtLabel }}
           <slot name="actions" :row="row"/>
         </div><button data-testid="page2" @click="$emit('page-change', 2)">2</button>
       </div>`,
@@ -128,13 +131,29 @@ describe('UsbDevicesPage', () => {
   it('展示白名单卡片标题并按原型设置按钮主次', () => {
     const wrapper = mountPage()
 
-    expect(wrapper.get('[data-testid="usb-whitelist-card"]').classes()).toContain('usb-whitelist-card')
+    expect(wrapper.get('[data-testid="usb-table-panel"]').classes()).toContain('usb-panel')
     expect(wrapper.text()).toContain('受信任普通移动存储设备白名单')
+    expect(wrapper.text()).toContain('管理受信任移动存储设备白名单')
+    expect(wrapper.text()).toContain('白名单设备重新插入后经过扫描审计方可使用')
     expect(wrapper.get('[data-testid="add-device-trigger"]').text()).toContain('装置端添加')
     expect(wrapper.get('[data-testid="add-management-trigger"]').text()).toContain('管理端添加')
     expect(wrapper.get('[data-testid="add-device-trigger"]').attributes('data-button-type')).toBeUndefined()
     expect(wrapper.get('[data-testid="add-management-trigger"]').attributes('data-button-type')).toBe('primary')
     expect(wrapper.text()).not.toContain('安全U盘自由使用')
+    expect(wrapper.find('[data-testid="edit-SN-0"]').exists()).toBe(false)
+  })
+
+  it('按确认原型渲染白名单面板、标签和底部说明', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('管理受信任移动存储设备白名单')
+    expect(wrapper.find('[data-testid="usb-table-panel"]').exists()).toBe(true)
+    expect(wrapper.find('.serial-chip').exists()).toBe(true)
+    expect(wrapper.find('.permission-chip').exists()).toBe(true)
+    expect(wrapper.text()).toContain('白名单设备重新插入后经过扫描审计方可使用')
+    expect(wrapper.text()).toContain('未授权设备显示黄色指示灯常亮')
+    expect(wrapper.text()).toContain('添加完成后需重新拔插U盘生效')
   })
 
   it('管理端枚举原始执行错误映射为稳定中文且不泄露路径命令', async () => {
@@ -390,42 +409,6 @@ describe('UsbDevicesPage', () => {
     expect(showSuccessToast).not.toHaveBeenCalled()
   })
 
-  it('修改只信任当前目标serial，关闭后的旧submit不操作', async () => {
-    const store = useWhitelistStore()
-    const update = vi.spyOn(store, 'updateWhitelist').mockResolvedValue()
-    const wrapper = mountPage()
-    await wrapper.find('[data-testid="edit-SN-0"]').trigger('click')
-    const dialog = wrapper.getComponent(EditDialogStub)
-    dialog.vm.$emit('submit', {
-      serialNumber: 'SN-19', description: '', permission: 'readwrite',
-    }); await flushPromises()
-    expect(update).toHaveBeenCalledWith('token', 'SN-0', 'readwrite', '')
-    expect(showSuccessToast).toHaveBeenCalledWith('修改成功，重新拔插后生效')
-
-    dialog.vm.$emit('update:visible', false)
-    dialog.vm.$emit('submit', { serialNumber: 'SN-1', description: '迟到', permission: 'readonly' })
-    await flushPromises()
-    expect(update).toHaveBeenCalledTimes(1)
-  })
-
-  it('修改请求期间拒绝切换目标，断线后迟到完成不污染当前弹窗', async () => {
-    const updateRequest = createDeferred<void>()
-    vi.spyOn(useWhitelistStore(), 'updateWhitelist').mockReturnValue(updateRequest.promise)
-    const wrapper = mountPage()
-    await wrapper.find('[data-testid="edit-SN-0"]').trigger('click')
-    const dialog = wrapper.getComponent(EditDialogStub)
-    dialog.vm.$emit('submit', { description: '', permission: 'readwrite' })
-    await nextTick()
-
-    await wrapper.find('[data-testid="edit-SN-1"]').trigger('click')
-    expect(dialog.props('serialNumber')).toBe('SN-0')
-    useConnectionStore().updateStatus('DISCONNECTED')
-    updateRequest.resolve()
-    await flushPromises()
-    expect(dialog.props('visible')).toBe(true)
-    expect(showSuccessToast).not.toHaveBeenCalled()
-  })
-
   it('删除成功确认明确serial并显示成功文案', async () => {
     const store = useWhitelistStore()
     const remove = vi.spyOn(store, 'removeWhitelist').mockResolvedValue()
@@ -478,23 +461,4 @@ describe('UsbDevicesPage', () => {
     expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改白名单')
   })
 
-  it('修改失败不假成功，断线写操作均不调用store', async () => {
-    const store = useWhitelistStore()
-    const update = vi.spyOn(store, 'updateWhitelist').mockRejectedValue(new Error('内部路径泄露'))
-    const wrapper = mountPage()
-    await wrapper.find('[data-testid="edit-SN-0"]').trigger('click')
-    wrapper.getComponent(EditDialogStub).vm.$emit('submit', {
-      serialNumber: 'SN-19', description: 'x', permission: 'readonly',
-    }); await flushPromises()
-    expect(update).toHaveBeenCalledWith('token', 'SN-0', 'readonly', 'x')
-    expect(wrapper.getComponent(EditDialogStub).props('errorMessage')).toBe('内部路径泄露')
-    expect(showSuccessToast).not.toHaveBeenCalled()
-    useConnectionStore().updateStatus('DISCONNECTED')
-    await wrapper.get('[data-testid="add-device-trigger"]').trigger('click'); await flushPromises()
-    wrapper.getComponent(AddDialogStub).vm.$emit('submit', {
-      candidate: managementCandidate, description: '', permission: 'readonly',
-    }); await flushPromises()
-    expect(update).toHaveBeenCalledTimes(1)
-    expect(getConnectedDevices).not.toHaveBeenCalled()
-  })
 })
