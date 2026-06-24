@@ -28,6 +28,13 @@ async function login(page: Page): Promise<void> {
   await page.getByTestId('login-submit').click()
 }
 
+async function expectRoundedTable(page: Page, selector: string): Promise<void> {
+  const radius = await page.locator(selector).evaluate((element) => {
+    return window.getComputedStyle(element).borderRadius
+  })
+  expect(Number.parseFloat(radius)).toBeGreaterThanOrEqual(8)
+}
+
 test.describe('管理端 UI 视觉契约', () => {
   test('登录页卡片宽度对齐原型尺寸', async () => {
     const { app, page } = await launchApp()
@@ -89,6 +96,26 @@ test.describe('管理端 UI 视觉契约', () => {
       }
 
       await expect(content).toHaveCSS('overflow-y', /auto|scroll/)
+    } finally {
+      await app?.close()
+      await device.stop()
+    }
+  })
+
+  test('用户管理确认原型表格保持圆角且无旧分页输入', async () => {
+    const device = new MockDevice({ ...DEFAULT_SCENARIO })
+    let app: ElectronApplication | null = null
+    await device.start()
+    try {
+      const launched = await launchApp()
+      app = launched.app
+      const page = launched.page
+
+      await login(page)
+      await expect(page).toHaveURL(/#\/users$/)
+      await expect(page.getByText('三权分立: 系统管理员 / 操作员 / 审计员')).toBeVisible()
+      await expectRoundedTable(page, '[data-testid="users-table-shell"]')
+      await expect(page.getByText('Go to')).toHaveCount(0)
     } finally {
       await app?.close()
       await device.stop()
