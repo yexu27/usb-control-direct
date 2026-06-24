@@ -7,6 +7,7 @@ use rand::Rng;
 use smcrypto::sm2;
 use smcrypto::sm3;
 use smcrypto::sm4;
+use tracing::debug;
 
 use crate::error::PolicyError;
 
@@ -23,8 +24,11 @@ pub const IV_LEN: usize = 16;
 /// 返回:
 /// - 加密后的密文字节序列。
 pub fn sm4_cbc_encrypt(key: &[u8], iv: &[u8], plaintext: &[u8]) -> Vec<u8> {
+    debug!(size = plaintext.len(), "开始加密策略数据");
     let cipher = sm4::CryptSM4CBC::new(key, iv);
-    cipher.encrypt_cbc(plaintext)
+    let result = cipher.encrypt_cbc(plaintext);
+    debug!(encrypted_size = result.len(), "策略数据加密完成");
+    result
 }
 
 /// SM4-CBC 解密。
@@ -37,6 +41,8 @@ pub fn sm4_cbc_encrypt(key: &[u8], iv: &[u8], plaintext: &[u8]) -> Vec<u8> {
 /// 返回:
 /// - 成功时返回解密后的明文；失败时返回 [`PolicyError::DecryptError`]。
 pub fn sm4_cbc_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, PolicyError> {
+    debug!(size = ciphertext.len(), "开始解密策略数据");
+
     if ciphertext.is_empty() {
         return Err(PolicyError::DecryptError("密文为空".into()));
     }
@@ -50,6 +56,7 @@ pub fn sm4_cbc_decrypt(key: &[u8], iv: &[u8], ciphertext: &[u8]) -> Result<Vec<u
             if plaintext.is_empty() {
                 return Err(PolicyError::DecryptError("解密结果为空，密文可能已损坏".into()));
             }
+            debug!(decrypted_size = plaintext.len(), "策略数据解密完成");
             Ok(plaintext)
         }
         Err(_) => Err(PolicyError::DecryptError("解密过程异常".into())),

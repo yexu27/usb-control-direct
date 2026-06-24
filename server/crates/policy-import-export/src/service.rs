@@ -4,6 +4,8 @@
 //! 导出流程：读取 DB → JSON 序列化 → SM4 加密 → SM3 摘要 → SM2 签名 → 组装 .bin
 //! 导入流程：解析 .bin → SM2 验签 → SM3 校验 → SM4 解密 → JSON 反序列化 → 写入 DB
 
+use tracing::{debug, info};
+
 use std::sync::Arc;
 
 use storage::model::UsbWhitelistInsert;
@@ -59,6 +61,8 @@ impl PolicyService {
     /// 返回:
     /// - 成功时返回 .bin 文件字节序列；失败时返回 [`PolicyError`]。
     pub fn export_policy(&self) -> Result<Vec<u8>, PolicyError> {
+        info!("开始导出策略配置");
+
         // 加载密钥
         let keys = self.key_provider.load_keys()?;
 
@@ -105,6 +109,9 @@ impl PolicyService {
         // 组装 .bin
         let bin = format::assemble_bin(&iv, &ciphertext, &digest, &signature)?;
 
+        debug!(size = bin.len(), "策略数据导出完成");
+        info!("策略配置导出成功");
+
         Ok(bin)
     }
 
@@ -124,6 +131,8 @@ impl PolicyService {
     /// 返回:
     /// - 成功时返回 `()`；失败时返回 [`PolicyError`]。
     pub fn import_policy(&self, bin_data: &[u8]) -> Result<(), PolicyError> {
+        info!(size = bin_data.len(), "开始导入策略配置");
+
         // 加载密钥
         let keys = self.key_provider.load_keys()?;
 
@@ -149,11 +158,15 @@ impl PolicyService {
         // SM4 解密
         let plaintext = crypto::sm4_cbc_decrypt(&keys.sm4_key, &parsed.iv, &parsed.ciphertext)?;
 
+        debug!("策略数据解密验证通过");
+
         // 反序列化策略内容
         let content = format::deserialize_policy(&plaintext)?;
 
         // 写入数据库
         self.apply_policy(&content)?;
+
+        info!("策略配置导入成功");
 
         Ok(())
     }
