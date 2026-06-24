@@ -1,6 +1,7 @@
 //! CMD_GET_CONNECTED_DEVICES handler。
 
 use prost::Message;
+use tracing::debug;
 
 use common::code::ResultCode;
 use common::proto::{CmdGetConnectedDevices, ConnectedDevice, RspConnectedDevices};
@@ -14,6 +15,8 @@ const RSP_CONNECTED_DEVICES: u32 = 0x0103;
 
 /// CMD_GET_CONNECTED_DEVICES (0x0102)。
 pub fn handle_get_connected_devices(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到已连接设备查询请求");
+
     let _cmd = match CmdGetConnectedDevices::decode(payload) {
         Ok(c) => c,
         Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
@@ -68,6 +71,8 @@ pub fn handle_get_connected_devices(ctx: &RequestContext, payload: &[u8]) -> Vec
             })
         })
         .collect();
+
+    debug!(count = devices.len(), "已连接设备查询成功");
 
     let rsp = RspConnectedDevices { devices };
     codec::encode_frame(RSP_CONNECTED_DEVICES, ctx.seq_id, &rsp.encode_to_vec()).unwrap_or_default()
