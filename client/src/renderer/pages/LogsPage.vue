@@ -660,7 +660,7 @@ function disabledClearDate(date: Date): boolean {
 
 .log-filter-bar {
   display: grid;
-  grid-template-columns: 134px 168px 168px 86px minmax(0, 1fr);
+  grid-template-columns: 112px 168px 168px 108px minmax(0, 1fr);
   align-items: center;
   width: 100%;
   gap: 10px;
@@ -670,18 +670,30 @@ function disabledClearDate(date: Date): boolean {
   grid-template-columns: 208px 176px 176px minmax(0, 1fr);
 }
 
-.filter-keyword {
+.filter-keyword,
+.filter-start,
+.filter-end,
+.filter-select {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
-.filter-start,
-.filter-end {
+.filter-start.filter-start,
+.filter-end.filter-end,
+.filter-select.filter-select {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.filter-select {
+.logs-page :deep(.filter-start.el-date-editor.el-input),
+.logs-page :deep(.filter-end.el-date-editor.el-input),
+.logs-page :deep(.filter-select.el-select) {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .filter-keyword :deep(.el-input__wrapper),

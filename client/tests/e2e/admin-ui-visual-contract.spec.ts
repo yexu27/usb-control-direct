@@ -47,6 +47,23 @@ async function expectWithinMainContent(page: Page, selector: string): Promise<vo
   expect(box.x + box.width).toBeLessThanOrEqual(contentBox.x + contentBox.width)
 }
 
+async function expectHorizontalGap(page: Page, leftSelector: string, rightSelector: string): Promise<void> {
+  const leftBox = await page.locator(leftSelector).boundingBox()
+  const rightBox = await page.locator(rightSelector).boundingBox()
+  expect(leftBox).not.toBeNull()
+  expect(rightBox).not.toBeNull()
+  if (leftBox == null || rightBox == null) {
+    return
+  }
+  expect(rightBox.x - (leftBox.x + leftBox.width)).toBeGreaterThanOrEqual(8)
+}
+
+async function expectNoEllipsis(page: Page, selector: string): Promise<void> {
+  const text = await page.locator(selector).innerText()
+  expect(text).not.toContain('...')
+  expect(text).not.toContain('…')
+}
+
 test.describe('管理端 UI 视觉契约', () => {
   test('登录页卡片宽度对齐原型尺寸', async () => {
     const { app, page } = await launchApp()
@@ -165,10 +182,16 @@ test.describe('管理端 UI 视觉契约', () => {
         await expectWithinMainContent(page, '[data-testid="log-search"]')
         await expectWithinMainContent(page, '[data-testid="log-export"]')
         await expectWithinMainContent(page, '[data-testid="log-clear"]')
+        await expectHorizontalGap(page, '[data-testid="log-keyword"]', '.filter-start')
+        await expectHorizontalGap(page, '.filter-start', '.filter-end')
+        await expectHorizontalGap(page, '.filter-end', '[data-testid="log-search"]')
       }
 
       await page.getByTestId('logs-tab-usb_audit').click()
       await expectWithinMainContent(page, '.filter-select')
+      await expectHorizontalGap(page, '.filter-end', '.filter-select')
+      await expectHorizontalGap(page, '.filter-select', '[data-testid="log-search"]')
+      await expectNoEllipsis(page, '.filter-select .el-select__placeholder')
 
       await page.getByTestId('logs-tab-malware').click()
       await expect(page.getByTestId('log-event-type')).toHaveCount(0)

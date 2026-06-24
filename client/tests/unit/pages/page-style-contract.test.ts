@@ -83,7 +83,7 @@ describe('page style contract', () => {
   it('LogsPage keeps log filter controls within the confirmed content width', () => {
     const source = readPage('LogsPage.vue')
 
-    expect(source).toContain('grid-template-columns: 134px 168px 168px 86px minmax(0, 1fr)')
+    expect(source).toContain('grid-template-columns: 112px 168px 168px 108px minmax(0, 1fr)')
     expect(source).toContain('grid-template-columns: 208px 176px 176px minmax(0, 1fr)')
     expect(source).toContain('gap: 10px')
     expect(source).toContain('font-size: 13px')
