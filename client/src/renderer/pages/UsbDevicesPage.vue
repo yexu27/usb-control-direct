@@ -501,6 +501,8 @@ function changePageSize(nextPageSize: number): void {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .usb-devices-page {
   display: flex;
   flex-direction: column;
@@ -511,7 +513,7 @@ function changePageSize(nextPageSize: number): void {
 }
 .page-header p {
   margin: $spacing-2 0 0;
-  color: $text-secondary;
+  color: var(--andi-text-light);
 }
 
 .usb-section {
@@ -520,7 +522,7 @@ function changePageSize(nextPageSize: number): void {
 
 .usb-panel {
   overflow: hidden;
-  background: $bg-white;
+  background: var(--andi-white);
   border: 1px solid #dce2ea;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.06);
@@ -532,14 +534,14 @@ function changePageSize(nextPageSize: number): void {
   justify-content: space-between;
   min-height: 64px;
   padding: 0 18px 0 20px;
-  background: $bg-sidebar;
+  background: var(--andi-sidebar);
   border-bottom: 1px solid #dce2ea;
   gap: 16px;
 }
 
 .usb-panel-header h3 {
   margin: 0;
-  color: $text-primary;
+  color: var(--andi-text);
   font-size: 18px;
   font-weight: $font-weight-semibold;
 }
@@ -559,7 +561,7 @@ function changePageSize(nextPageSize: number): void {
   align-items: center;
   min-height: 22px;
   padding: 0 7px;
-  color: $brand-primary-dark;
+  color: var(--andi-blue-dark);
   font-family: Consolas, 'SF Mono', monospace;
   font-weight: $font-weight-semibold;
   background: #f0f2f5;

@@ -389,6 +389,8 @@ async function handleImport(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .policy-transfer-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -402,13 +404,13 @@ async function handleImport(): Promise<void> {
   justify-content: flex-start;
   min-height: 284px;
   padding: 24px 26px 26px;
-  background: $bg-white;
-  border: $border-width solid $border-color;
+  background: var(--andi-white);
+  border: $border-width-base solid var(--andi-border);
   border-radius: 8px;
 
   h3 {
     margin: 0;
-    color: $text-primary;
+    color: var(--andi-text);
     font-size: 18px;
     font-weight: $font-weight-semibold;
     line-height: 1.35;
@@ -416,7 +418,7 @@ async function handleImport(): Promise<void> {
 
   p {
     margin: 8px 0 18px;
-    color: $text-secondary;
+    color: var(--andi-text-light);
     font-size: 15px;
     line-height: 1.6;
   }
@@ -428,10 +430,10 @@ async function handleImport(): Promise<void> {
   width: 48px;
   height: 48px;
   margin-bottom: 18px;
-  color: $brand-primary;
+  color: var(--andi-blue);
   font-size: 32px;
   line-height: 1;
-  background: $brand-primary-light;
+  background: var(--andi-blue-light);
   border-radius: 9px;
 }
 
@@ -447,14 +449,14 @@ async function handleImport(): Promise<void> {
   min-height: 40px;
   margin-bottom: 18px;
   padding: 8px 14px;
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-size: 14px;
   font-weight: $font-weight-semibold;
   background: #f0f2f7;
   border-radius: 6px;
 
   code {
-    color: $brand-primary-dark;
+    color: var(--andi-blue-dark);
     font-family: Consolas, 'SF Mono', monospace;
     font-size: 14px;
     font-weight: $font-weight-semibold;

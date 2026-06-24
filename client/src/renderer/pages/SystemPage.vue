@@ -487,6 +487,8 @@ async function saveDeviceDescription(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .system-page {
   display: flex;
   flex-direction: column;
@@ -496,14 +498,14 @@ async function saveDeviceDescription(): Promise<void> {
 .page-header {
   h1 {
     margin: 0;
-    color: $text-primary;
-    font-size: $font-xxl;
+    color: var(--andi-text);
+    font-size: $font-size-page-title-large;
     font-weight: $font-weight-semibold;
   }
 
   p {
     margin: $spacing-1 0 0;
-    color: $text-secondary;
+    color: var(--andi-text-light);
   }
 }
 
@@ -516,14 +518,14 @@ async function saveDeviceDescription(): Promise<void> {
 .system-card {
   min-height: 172px;
   padding: 28px 36px;
-  background: $bg-white;
-  border: 1px solid $border-color;
+  background: var(--andi-white);
+  border: 1px solid var(--andi-border);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 
   h3 {
     margin: 0 0 12px;
-    color: $text-primary;
+    color: var(--andi-text);
     font-size: 18px;
     font-weight: $font-weight-semibold;
   }
@@ -531,7 +533,7 @@ async function saveDeviceDescription(): Promise<void> {
 
 .system-card-meta {
   margin: 0 0 16px;
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-size: 15px;
   font-weight: $font-weight-medium;
 }
@@ -552,7 +554,7 @@ async function saveDeviceDescription(): Promise<void> {
 
 .auth-line {
   margin: 0 0 10px;
-  color: $text-primary;
+  color: var(--andi-text);
   font-size: 15px;
   font-weight: $font-weight-medium;
 
@@ -567,7 +569,7 @@ async function saveDeviceDescription(): Promise<void> {
 
   code {
     padding: 2px 6px;
-    color: $brand-primary-dark;
+    color: var(--andi-blue-dark);
     font-family: 'SF Mono', Consolas, monospace;
     font-size: 15px;
     background: #f0f2f5;
@@ -591,14 +593,14 @@ async function saveDeviceDescription(): Promise<void> {
   label {
     display: block;
     margin-bottom: 4px;
-    color: $text-secondary;
+    color: var(--andi-text-light);
     font-size: 12px;
   }
 }
 
 .dialog-hint {
   margin: 4px 0 0;
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-size: 11px;
 }
 
@@ -618,9 +620,9 @@ async function saveDeviceDescription(): Promise<void> {
 
   code {
     padding: $spacing-2 $spacing-3;
-    color: $brand-primary-dark;
-    background: $bg-sidebar;
-    border-radius: $border-radius;
+    color: var(--andi-blue-dark);
+    background: var(--andi-sidebar);
+    border-radius: $radius-control;
   }
 
   img {

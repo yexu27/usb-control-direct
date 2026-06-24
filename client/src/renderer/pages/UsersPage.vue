@@ -474,6 +474,8 @@ async function submitResetPassword(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .users-page {
   display: flex;
   flex-direction: column;
@@ -483,14 +485,14 @@ async function submitResetPassword(): Promise<void> {
 .page-header {
   h1 {
     margin: 0;
-    color: $text-primary;
-    font-size: $font-xxl;
+    color: var(--andi-text);
+    font-size: $font-size-page-title-large;
     font-weight: $font-weight-semibold;
   }
 
   p {
     margin: $spacing-1 0 0;
-    color: $text-secondary;
+    color: var(--andi-text-light);
   }
 }
 
@@ -506,7 +508,7 @@ async function submitResetPassword(): Promise<void> {
 }
 
 .users-table-shell {
-  background: $bg-white;
+  background: var(--andi-white);
 }
 
 .users-table :deep(.data-table-wrapper) {
@@ -532,19 +534,19 @@ async function submitResetPassword(): Promise<void> {
 .users-page-arrow {
   width: 28px;
   color: #b0b8c4;
-  background: $bg-white;
+  background: var(--andi-white);
   border: 1px solid #e3e8ef;
 }
 
 .users-page-arrow.active {
-  color: $text-secondary;
+  color: var(--andi-text-light);
 }
 
 .users-page-number {
   width: 28px;
-  color: $bg-white;
+  color: var(--andi-white);
   font-weight: $font-weight-semibold;
-  background: $brand-primary;
+  background: var(--andi-blue);
   box-shadow: 0 3px 8px rgba(0, 86, 179, 0.18);
 }
 

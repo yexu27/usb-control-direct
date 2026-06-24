@@ -300,6 +300,8 @@ function changePageSize(nextPageSize: number): void {
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
 .file-access-page {
   display: flex;
   flex-direction: column;
@@ -309,14 +311,14 @@ function changePageSize(nextPageSize: number): void {
 .page-header {
   h1 {
     margin: 0;
-    color: $text-primary;
-    font-size: $font-xxl;
+    color: var(--andi-text);
+    font-size: $font-size-page-title-large;
     font-weight: $font-weight-semibold;
   }
 
   p {
     margin: $spacing-1 0 0;
-    color: $text-secondary;
+    color: var(--andi-text-light);
   }
 }
 
@@ -332,7 +334,7 @@ function changePageSize(nextPageSize: number): void {
 
 .policy-card {
   width: 100%;
-  border-color: $border-color;
+  border-color: var(--andi-border);
 }
 
 .policy-card :deep(.el-card__body) {
@@ -346,7 +348,7 @@ function changePageSize(nextPageSize: number): void {
 }
 
 .policy-detail {
-  color: $text-secondary;
+  color: var(--andi-text-light);
   font-size: 13px;
   font-weight: $font-weight-medium;
   line-height: 1.55;
@@ -355,8 +357,8 @@ function changePageSize(nextPageSize: number): void {
 .blacklist-panel {
   margin: 22px 0 0 48px;
   overflow: hidden;
-  background: $bg-white;
-  border: $border-width solid $border-color;
+  background: var(--andi-white);
+  border: $border-width-base solid var(--andi-border);
   border-radius: 6px;
 }
 
@@ -366,10 +368,10 @@ function changePageSize(nextPageSize: number): void {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 16px;
-  color: $text-primary;
+  color: var(--andi-text);
   font-weight: $font-weight-semibold;
-  background: $bg-sidebar;
-  border-bottom: $border-width solid $border-color;
+  background: var(--andi-sidebar);
+  border-bottom: $border-width-base solid var(--andi-border);
 }
 
 .blacklist-table :deep(.data-table-wrapper) {
