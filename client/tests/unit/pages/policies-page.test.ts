@@ -104,9 +104,23 @@ describe('PoliciesPage', () => {
 
     expect(wrapper.get('[data-testid="policy-transfer-grid"]').classes()).toContain('policy-transfer-grid')
     expect(wrapper.get('[data-testid="policy-export-card"]').text()).toContain('导出策略')
-    expect(wrapper.get('[data-testid="policy-export-card"]').text()).toContain('加密 .bin 文件')
+    expect(wrapper.get('[data-testid="policy-export-card"]').text()).toContain('默认文件名：')
+    expect(wrapper.get('[data-testid="policy-export-card"]').text()).toContain('安全策略-20260609-133536.bin')
+    expect(wrapper.get('[data-testid="policy-export-card"]').text()).toContain('导出的策略文件为加密格式')
     expect(wrapper.get('[data-testid="policy-import-card"]').text()).toContain('导入策略')
-    expect(wrapper.get('[data-testid="policy-import-card"]').text()).toContain('仅支持 .bin 文件')
+    expect(wrapper.get('[data-testid="policy-import-card"]').text()).toContain('支持本装置和其他装置导出的策略（需版本兼容）')
+    expect(wrapper.text()).not.toContain('操作员')
+  })
+
+  it('按确认原型渲染策略导入导出卡片', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.text()).toContain('导入和导出安全策略配置')
+    expect(wrapper.text()).toContain('默认文件名：')
+    expect(wrapper.text()).toContain('安全策略-')
+    expect(wrapper.text()).toContain('导出的策略文件为加密格式')
+    expect(wrapper.text()).toContain('支持本装置和其他装置导出的策略（需版本兼容）')
+    expect(wrapper.text()).not.toContain('操作员')
   })
 
   it('按严格时间格式和 bin 过滤条件打开导出对话框', async () => {
