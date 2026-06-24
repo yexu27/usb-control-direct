@@ -4,7 +4,7 @@
 //! 读取时累积字节直到帧头 + payload 完整，写出时拼接帧头 + payload。
 
 use common::frame::{self, FrameHeader, FRAME_HEADER_LEN};
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::error::GatewayError;
 
@@ -19,7 +19,13 @@ pub fn try_decode_frame(buf: &[u8]) -> Result<Option<(FrameHeader, Vec<u8>, usiz
         return Ok(None);
     }
 
-    let header = FrameHeader::decode(buf)?;
+    let header = match FrameHeader::decode(buf) {
+        Ok(h) => h,
+        Err(e) => {
+            debug!(reason = %e, "帧解码失败");
+            return Err(e.into());
+        }
+    };
     let total_len = FRAME_HEADER_LEN + header.payload_len as usize;
 
     if buf.len() < total_len {
