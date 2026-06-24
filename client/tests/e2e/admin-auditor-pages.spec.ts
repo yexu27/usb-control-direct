@@ -81,7 +81,8 @@ async function expectSystemManagementLayout(page: Page): Promise<void> {
 }
 
 async function expectUsersLayout(page: Page): Promise<void> {
-  await expect(page.getByTestId('users-card')).toBeVisible()
+  await expect(page.getByText('三权分立: 系统管理员 / 操作员 / 审计员')).toBeVisible()
+  await expect(page.getByTestId('users-table-shell')).toBeVisible()
   await expect(page.getByTestId('create-user-open')).toBeVisible()
   await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
   await expect(page.getByTestId('page-role-badge')).toHaveCount(0)

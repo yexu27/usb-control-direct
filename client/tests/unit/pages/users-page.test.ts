@@ -37,7 +37,7 @@ let pinia: Pinia
 
 const DataTableStub = defineComponent({
   name: 'DataTable',
-  props: ['columns', 'data', 'total', 'page', 'pageSize', 'loading', 'error'],
+  props: ['columns', 'data', 'total', 'page', 'pageSize', 'loading', 'error', 'showDefaultPagination'],
   setup(props, { slots }) {
     return () => h('section', { 'data-testid': 'users-table' }, [
       slots.filters?.(),
@@ -137,9 +137,13 @@ describe('UsersPage', () => {
     await flushPromises()
 
     expect(listUsers).toHaveBeenCalledWith('token')
-    expect(wrapper.get('[data-testid="users-card"]').classes()).toContain('users-card')
+    expect(wrapper.get('[data-testid="users-table-shell"]').classes()).toContain('users-table-shell')
     expect(wrapper.get('[data-testid="create-user-open"]').text()).toContain('新建用户')
     expect(wrapper.text()).toContain('用户管理')
+    expect(wrapper.text()).toContain('三权分立: 系统管理员 / 操作员 / 审计员')
+    expect(wrapper.text()).toContain('共 3 条')
+    expect(wrapper.text()).toContain('每页 10 条')
+    expect(wrapper.text()).not.toContain('Go to')
     expect(wrapper.text()).toContain('admin')
     expect(wrapper.text()).toContain('zhang_wei')
     expect(wrapper.text()).toContain('系统管理员')
@@ -153,6 +157,18 @@ describe('UsersPage', () => {
     expect(wrapper.find('.app-role-auditor').exists()).toBe(true)
     expect(wrapper.find('[data-testid="delete-user-admin"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="delete-user-zhang_wei"]').exists()).toBe(true)
+  })
+
+  it('按确认原型渲染用户管理页标题、表格和胶囊分页', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('三权分立: 系统管理员 / 操作员 / 审计员')
+    expect(wrapper.find('[data-testid="users-table-shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="users-list-title"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('共 3 条')
+    expect(wrapper.text()).toContain('每页 10 条')
+    expect(wrapper.text()).not.toContain('Go to')
   })
 
   it('creates a user after validating username, password, and confirm password', async () => {
