@@ -1,7 +1,7 @@
 //! CMD_LOGIN (0x0001) handler。
 
 use prost::Message;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use auth_session::service::LoginResult;
 use common::code::ResultCode;
@@ -18,12 +18,18 @@ const RSP_LOGIN: u32 = 0x0002;
 
 /// 登录 handler。
 pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!(source_ip = %ctx.source_ip, "收到登录请求");
+
     let cmd = match CmdLogin::decode(payload) {
         Ok(c) => c,
-        Err(_) => return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败"),
+        Err(_) => {
+            debug!(source_ip = %ctx.source_ip, "登录请求 protobuf 解码失败");
+            return error_response(ctx.seq_id, ResultCode::ValidationFailed, "消息解码失败");
+        }
     };
 
     if cmd.username.is_empty() || cmd.password.is_empty() {
+        debug!(source_ip = %ctx.source_ip, "登录请求参数为空");
         return error_response(ctx.seq_id, ResultCode::ValidationFailed, "用户名或密码不能为空");
     }
 
@@ -91,6 +97,7 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             codec::encode_frame(RSP_LOGIN, ctx.seq_id, &payload).unwrap_or_default()
         }
         Err(e) => {
+            warn!(user = %cmd.username, source_ip = %ctx.source_ip, reason = %e, "用户登录失败");
             let code = e.to_result_code();
             let rsp = RspLogin {
                 success: false,
