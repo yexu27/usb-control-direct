@@ -5,6 +5,8 @@
 
 use std::io::Write;
 
+use tracing::{debug, error};
+
 use crate::error::AuditError;
 
 /// 生成 ZIP 文件字节流。
@@ -16,18 +18,30 @@ use crate::error::AuditError;
 /// 返回:
 /// - 成功时返回 ZIP 字节序列。
 pub fn generate_zip(filename: &str, csv_content: &str) -> Result<Vec<u8>, AuditError> {
+    debug!(filename = %filename, size = csv_content.len(), "开始生成日志导出 ZIP");
+
     let mut buf = Vec::new();
     {
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(filename, options)
-            .map_err(|e| AuditError::ExportFailed(e.to_string()))?;
+            .map_err(|e| {
+                error!(filename = %filename, reason = %e, "日志导出 ZIP 生成失败");
+                AuditError::ExportFailed(e.to_string())
+            })?;
         zip.write_all(csv_content.as_bytes())
-            .map_err(|e| AuditError::ExportFailed(e.to_string()))?;
+            .map_err(|e| {
+                error!(filename = %filename, reason = %e, "日志导出 ZIP 生成失败");
+                AuditError::ExportFailed(e.to_string())
+            })?;
         zip.finish()
-            .map_err(|e| AuditError::ExportFailed(e.to_string()))?;
+            .map_err(|e| {
+                error!(filename = %filename, reason = %e, "日志导出 ZIP 生成失败");
+                AuditError::ExportFailed(e.to_string())
+            })?;
     }
+    debug!(zip_size = buf.len(), "日志导出 ZIP 生成成功");
     Ok(buf)
 }
 
