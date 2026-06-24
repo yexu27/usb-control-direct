@@ -3,6 +3,8 @@
 //! 负责病毒库版本校验、zip 解压、文件替换和 clamd 重新加载。
 //! 升级失败时自动回滚至备份版本。
 
+use tracing::{debug, error, info};
+
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -47,6 +49,8 @@ impl VirusdbUpgradeManager {
         target_version: &str,
         current_version: &str,
     ) -> Result<(), LicenseUpgradeError> {
+        debug!(target_version = %target_version, current = %current_version, "校验病毒库升级包");
+
         if contains_digit_4(target_version) {
             return Err(LicenseUpgradeError::VersionNumberForbidden);
         }
@@ -54,6 +58,8 @@ impl VirusdbUpgradeManager {
         if !crate::system_upgrade::is_version_greater(target_version, current_version) {
             return Err(LicenseUpgradeError::VersionTooLow);
         }
+
+        info!(target_version = %target_version, "病毒库升级包校验通过");
 
         Ok(())
     }
@@ -69,7 +75,11 @@ impl VirusdbUpgradeManager {
     /// 返回:
     /// - 成功时返回 `()`；失败时返回 [`LicenseUpgradeError`]。
     pub fn apply_upgrade(&self, upgrade_data: &[u8]) -> Result<(), LicenseUpgradeError> {
+        info!("开始安装病毒库升级");
+
         let extracted_files = self.extract_zip(upgrade_data)?;
+
+        debug!("ZIP解压完成");
 
         if extracted_files.is_empty() {
             return Err(LicenseUpgradeError::VirusdbIntegrityError);
@@ -79,17 +89,23 @@ impl VirusdbUpgradeManager {
         self.backup_current(&backup_dir)?;
 
         if let Err(e) = self.replace_files(&extracted_files) {
+            error!(reason = %e, "病毒库升级安装失败");
             self.restore_from_backup(&backup_dir);
             return Err(e);
         }
 
         if let Err(e) = self.reload_clamd() {
+            error!(reason = %e, "病毒库升级安装失败");
             self.restore_from_backup(&backup_dir);
             return Err(e);
         }
 
+        debug!("clamd重载完成");
+
         // 升级成功，清理备份
         let _ = fs::remove_dir_all(&backup_dir);
+
+        info!("病毒库升级安装完成");
 
         Ok(())
     }

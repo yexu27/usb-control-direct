@@ -3,6 +3,8 @@
 //! 读取 CPU 序列号和 MAC 地址，经 SM3 哈希后 Base64 编码生成机器码，
 //! 并将机器码渲染为二维码 PNG 图片。
 
+use tracing::{debug, error, info};
+
 use std::io::Cursor;
 
 use base64::engine::general_purpose::STANDARD;
@@ -30,6 +32,8 @@ pub struct MachineCodeResult {
 /// 返回:
 /// - 成功时返回 [`MachineCodeResult`]；失败时返回 [`LicenseUpgradeError`]。
 pub fn generate_machine_code() -> Result<MachineCodeResult, LicenseUpgradeError> {
+    debug!("开始生成机器码");
+
     let cpu_serial = read_cpu_serial()?;
     let mac_address = read_mac_address()?;
 
@@ -41,6 +45,8 @@ pub fn generate_machine_code() -> Result<MachineCodeResult, LicenseUpgradeError>
     let machine_code = STANDARD.encode(hash_bytes);
 
     let qrcode_png = generate_qrcode_png(&machine_code)?;
+
+    info!("机器码生成成功");
 
     Ok(MachineCodeResult {
         machine_code,
@@ -81,6 +87,7 @@ pub fn generate_qrcode_png(data: &str) -> Result<Vec<u8>, LicenseUpgradeError> {
 /// - 成功时返回序列号字符串；失败时返回 [`LicenseUpgradeError::MachineCodeError`]。
 fn read_cpu_serial() -> Result<String, LicenseUpgradeError> {
     let content = std::fs::read_to_string("/proc/cpuinfo").map_err(|e| {
+        error!("CPU 序列号获取失败: {}", e);
         LicenseUpgradeError::MachineCodeError(format!("读取 /proc/cpuinfo 失败: {e}"))
     })?;
 
@@ -89,11 +96,13 @@ fn read_cpu_serial() -> Result<String, LicenseUpgradeError> {
         if let Some(rest) = line.strip_prefix("Serial") {
             let serial = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
             if !serial.is_empty() {
+                debug!("CPU 序列号获取成功");
                 return Ok(serial.to_string());
             }
         }
     }
 
+    error!("未找到 CPU Serial 信息");
     Err(LicenseUpgradeError::MachineCodeError(
         "未找到 CPU Serial 信息".into(),
     ))
@@ -111,11 +120,13 @@ fn read_mac_address() -> Result<String, LicenseUpgradeError> {
     let mut entries: Vec<String> = Vec::new();
 
     let dir_entries = std::fs::read_dir(net_dir).map_err(|e| {
+        error!("MAC 地址获取失败: {}", e);
         LicenseUpgradeError::MachineCodeError(format!("读取 /sys/class/net 失败: {e}"))
     })?;
 
     for entry in dir_entries {
         let entry = entry.map_err(|e| {
+            error!("MAC 地址获取失败: {}", e);
             LicenseUpgradeError::MachineCodeError(format!("遍历网卡目录失败: {e}"))
         })?;
 
@@ -140,11 +151,13 @@ fn read_mac_address() -> Result<String, LicenseUpgradeError> {
             let mac = mac.trim().to_string();
             // 跳过全零 MAC
             if !mac.is_empty() && mac != "00:00:00:00:00:00" {
+                debug!("MAC 地址获取成功");
                 return Ok(mac);
             }
         }
     }
 
+    error!("未找到有效的 MAC 地址");
     Err(LicenseUpgradeError::MachineCodeError(
         "未找到有效的 MAC 地址".into(),
     ))

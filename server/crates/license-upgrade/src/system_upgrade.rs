@@ -3,6 +3,8 @@
 //! 负责升级包校验、文件替换和服务重启。升级过程中会自动备份旧版本，
 //! 替换失败时回滚至备份版本。
 
+use tracing::{debug, error, info};
+
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -57,6 +59,8 @@ impl SystemUpgradeManager {
         target_version: &str,
         current_version: &str,
     ) -> Result<UpgradeValidation, LicenseUpgradeError> {
+        debug!(target_version = %target_version, current = %current_version, "校验系统升级包");
+
         if upgrade_data.is_empty() {
             return Err(LicenseUpgradeError::UpgradeFormatError);
         }
@@ -73,6 +77,8 @@ impl SystemUpgradeManager {
         if !is_version_greater(target_version, current_version) {
             return Err(LicenseUpgradeError::VersionTooLow);
         }
+
+        info!(target_version = %target_version, "系统升级包校验通过");
 
         Ok(UpgradeValidation {
             data: upgrade_data,
@@ -94,12 +100,15 @@ impl SystemUpgradeManager {
         &self,
         validation: UpgradeValidation,
     ) -> Result<(), LicenseUpgradeError> {
+        info!(target_version = %validation.target_version, "开始安装系统升级");
+
         let target_path = self.install_dir.join(&validation.target_version);
         let tmp_path = self.install_dir.join(format!("{}.tmp", &validation.target_version));
         let backup_path = self.install_dir.join(format!("{}.bak", &validation.target_version));
 
         // 写入临时文件
         fs::write(&tmp_path, &validation.data).map_err(|e| {
+            error!(target_version = %validation.target_version, reason = %e, "系统升级安装失败");
             LicenseUpgradeError::UpgradeApplyFailed(format!("写入临时文件失败: {e}"))
         })?;
 
@@ -107,11 +116,14 @@ impl SystemUpgradeManager {
         if target_path.exists() {
             if let Err(e) = fs::rename(&target_path, &backup_path) {
                 let _ = fs::remove_file(&tmp_path);
+                error!(target_version = %validation.target_version, reason = %e, "系统升级安装失败");
                 return Err(LicenseUpgradeError::UpgradeApplyFailed(format!(
                     "备份旧版本失败: {e}"
                 )));
             }
         }
+
+        debug!("系统升级包已备份");
 
         // 原子替换
         if let Err(e) = fs::rename(&tmp_path, &target_path) {
@@ -119,6 +131,7 @@ impl SystemUpgradeManager {
             if backup_path.exists() {
                 let _ = fs::rename(&backup_path, &target_path);
             }
+            error!(target_version = %validation.target_version, reason = %e, "系统升级安装失败");
             return Err(LicenseUpgradeError::UpgradeApplyFailed(format!(
                 "替换文件失败: {e}"
             )));
@@ -129,6 +142,8 @@ impl SystemUpgradeManager {
 
         // 清理备份
         let _ = fs::remove_file(&backup_path);
+
+        info!("系统升级安装完成");
 
         Ok(())
     }
