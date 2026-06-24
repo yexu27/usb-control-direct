@@ -82,7 +82,7 @@ const columns: DataTableColumn[] = [
   { prop: 'permissionLabel', label: '权限', width: 100, slot: 'permissionLabel' },
   { prop: 'addMethodLabel', label: '添加方式', width: 130 },
   { prop: 'createdAtLabel', label: '添加时间', width: 180 },
-  { prop: 'actions', label: '操作', width: 120, slot: 'actions' },
+  { prop: 'actions', label: '操作', width: 180, slot: 'actions' },
 ]
 
 function pad(value: number): string {
@@ -143,6 +143,15 @@ function canWrite(): boolean {
 }
 function validPermission(value: string): value is WhitelistPermission {
   return value === 'readonly' || value === 'readwrite'
+}
+function isWhitelistRow(row: unknown): row is WhitelistRow {
+  return (
+    typeof row === 'object' &&
+    row != null &&
+    'serialNumber' in row &&
+    'description' in row &&
+    'permission' in row
+  )
 }
 function mapManagementCandidates(devices: Awaited<ReturnType<typeof listManagementUsbStorageDevices>>): CandidateDevice[] {
   return devices.map((device) => {
@@ -322,6 +331,12 @@ function openEditDialog(row: WhitelistRow): void {
   editTarget.value = row
   editVisible.value = true
 }
+function openEditDialogFromTableRow(row: unknown): void {
+  if (!isWhitelistRow(row)) {
+    return
+  }
+  openEditDialog(row)
+}
 function changeEditVisible(visible: boolean): void {
   if (!visible) {
     editEpoch.value += 1
@@ -467,15 +482,26 @@ function changePageSize(nextPageSize: number): void {
             </span>
           </template>
           <template #actions="{ row }">
-            <el-button
-              class="prototype-outline-action prototype-outline-danger"
-              :data-testid="`remove-${row.serialNumber}`"
-              :disabled="removeOwnership.has(row.serialNumber)"
-              :loading="removeOwnership.has(row.serialNumber)"
-              @click="handleRemove(row.serialNumber)"
-            >
-              删除
-            </el-button>
+            <div class="usb-row-actions">
+              <el-button
+                class="prototype-outline-action"
+                :data-testid="`edit-${row.serialNumber}`"
+                :disabled="editSubmitting && editTarget?.serialNumber === row.serialNumber"
+                :loading="editSubmitting && editTarget?.serialNumber === row.serialNumber"
+                @click="openEditDialogFromTableRow(row)"
+              >
+                修改
+              </el-button>
+              <el-button
+                class="prototype-outline-action prototype-outline-danger"
+                :data-testid="`remove-${row.serialNumber}`"
+                :disabled="removeOwnership.has(row.serialNumber)"
+                :loading="removeOwnership.has(row.serialNumber)"
+                @click="handleRemove(row.serialNumber)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </DataTable>
       </div>
@@ -586,6 +612,12 @@ function changePageSize(nextPageSize: number): void {
 .permission-ro {
   color: #e65100;
   background: #fff8e1;
+}
+
+.usb-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .usb-bottom-note {

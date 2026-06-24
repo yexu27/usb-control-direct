@@ -25,7 +25,6 @@ import type { usb_control } from '../../shared/proto/usb_control'
 const session = useSessionStore()
 const connection = useConnectionStore()
 
-const DEFAULT_DEVICE_DESCRIPTION = '(AD USB protection dev)USB Device'
 const systemInfo = ref<usb_control.RspSystemInfo | null>(null)
 const isLoadingInfo = ref(false)
 const systemUpgrading = ref(false)
@@ -334,7 +333,7 @@ function validateDeviceDescription(value: string): string {
 }
 
 function openDeviceDescriptionDialog(): void {
-  deviceDescription.value = DEFAULT_DEVICE_DESCRIPTION
+  deviceDescription.value = systemInfo.value?.deviceDescription ?? ''
   deviceDescriptionDialogVisible.value = true
 }
 
@@ -361,7 +360,7 @@ async function saveDeviceDescription(): Promise<void> {
   deviceDescriptionSaving.value = true
   try {
     await updateDeviceDescription(session.token, nextDescription)
-    showSuccessToast('修改成功，重启设备后生效')
+    showSuccessToast('修改成功，重启 USB 管控装置后生效')
     deviceDescriptionDialogVisible.value = false
     await loadSystemInfo()
   } catch (error: unknown) {

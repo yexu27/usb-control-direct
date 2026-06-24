@@ -140,7 +140,67 @@ describe('UsbDevicesPage', () => {
     expect(wrapper.get('[data-testid="add-device-trigger"]').attributes('data-button-type')).toBeUndefined()
     expect(wrapper.get('[data-testid="add-management-trigger"]').attributes('data-button-type')).toBe('primary')
     expect(wrapper.text()).not.toContain('安全U盘自由使用')
-    expect(wrapper.find('[data-testid="edit-SN-0"]').exists()).toBe(false)
+  })
+
+  it('每行展示修改入口并打开编辑弹窗', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.get('[data-testid="edit-SN-0"]').trigger('click')
+
+    const editDialog = wrapper.getComponent(EditDialogStub)
+    expect(editDialog.props('visible')).toBe(true)
+    expect(editDialog.props('serialNumber')).toBe('SN-0')
+    expect(editDialog.props('currentDescription')).toBe('说明 0')
+    expect(editDialog.props('currentPermission')).toBe('readonly')
+  })
+
+  it('提交白名单修改后调用store并提示重新拔插生效', async () => {
+    const update = vi.spyOn(useWhitelistStore(), 'updateWhitelist').mockResolvedValue()
+    const wrapper = mountPage()
+    await wrapper.get('[data-testid="edit-SN-0"]').trigger('click')
+
+    wrapper.getComponent(EditDialogStub).vm.$emit('submit', {
+      description: '财务只读盘',
+      permission: 'readwrite',
+    })
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith('token', 'SN-0', 'readwrite', '财务只读盘')
+    expect(showSuccessToast).toHaveBeenCalledWith('修改成功，重新拔插后生效')
+    expect(wrapper.getComponent(EditDialogStub).props('visible')).toBe(false)
+  })
+
+  it('白名单修改失败展示错误并保留弹窗', async () => {
+    vi.spyOn(useWhitelistStore(), 'updateWhitelist').mockRejectedValue(new Error('权限修改失败'))
+    const wrapper = mountPage()
+    await wrapper.get('[data-testid="edit-SN-0"]').trigger('click')
+
+    wrapper.getComponent(EditDialogStub).vm.$emit('submit', {
+      description: '财务只读盘',
+      permission: 'readwrite',
+    })
+    await flushPromises()
+
+    const editDialog = wrapper.getComponent(EditDialogStub)
+    expect(editDialog.props('visible')).toBe(true)
+    expect(editDialog.props('errorMessage')).toBe('权限修改失败')
+    expect(showSuccessToast).not.toHaveBeenCalled()
+  })
+
+  it('断线时阻止提交白名单修改', async () => {
+    const update = vi.spyOn(useWhitelistStore(), 'updateWhitelist').mockResolvedValue()
+    const wrapper = mountPage()
+    await wrapper.get('[data-testid="edit-SN-0"]').trigger('click')
+    useConnectionStore().updateStatus('DISCONNECTED')
+
+    wrapper.getComponent(EditDialogStub).vm.$emit('submit', {
+      description: '财务只读盘',
+      permission: 'readwrite',
+    })
+    await flushPromises()
+
+    expect(update).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改白名单')
   })
 
   it('按确认原型渲染白名单面板、标签和底部说明', async () => {

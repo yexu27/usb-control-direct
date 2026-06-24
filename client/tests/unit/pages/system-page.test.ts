@@ -409,7 +409,7 @@ describe('SystemPage', () => {
     expect(wrapper.get('[data-testid="progress"]').attributes('data-visible')).toBe('false')
   })
 
-  it('opens device description dialog with the PRD default value and saves after confirmation', async () => {
+  it('打开设备描述弹窗时填入当前装置描述并保存', async () => {
     vi.mocked(updateDeviceDescription).mockResolvedValue(undefined)
     vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as never)
     const wrapper = mountPage()
@@ -419,7 +419,7 @@ describe('SystemPage', () => {
     await flushPromises()
 
     const input = wrapper.get('[data-testid="device-desc-input"]')
-    expect((input.element as HTMLInputElement).value).toBe('(AD USB protection dev)USB Device')
+    expect((input.element as HTMLInputElement).value).toBe('USB_DEVICE_OLD')
 
     await input.setValue('USB_DEVICE_01')
     await wrapper.get('[data-testid="device-desc-save"]').trigger('click')
@@ -431,5 +431,17 @@ describe('SystemPage', () => {
       expect.any(Object),
     )
     expect(updateDeviceDescription).toHaveBeenCalledWith('token', 'USB_DEVICE_01')
+    expect(showSuccessToast).toHaveBeenCalledWith('修改成功，重启 USB 管控装置后生效')
+  })
+
+  it('系统信息未加载时设备描述输入框为空', async () => {
+    vi.mocked(getSystemInfo).mockRejectedValueOnce(new Error('network error'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="device-desc-edit"]').trigger('click')
+
+    const input = wrapper.get('[data-testid="device-desc-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('')
   })
 })
