@@ -1,12 +1,39 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { shallowMount } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount } from '@vue/test-utils'
+import { ElMessage } from 'element-plus'
 import ConnectionAlert from '../../../src/renderer/components/ConnectionAlert.vue'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
+import { useSessionStore } from '../../../src/renderer/stores/session'
+
+const push = vi.hoisted(() => vi.fn())
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push }),
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: { success: vi.fn(), error: vi.fn() },
+}))
+
+function mountAlert() {
+  return mount(ConnectionAlert, {
+    global: {
+      stubs: {
+        ElAlert: { template: '<section><slot /></section>' },
+        ElButton: {
+          props: ['loading', 'disabled'],
+          template: '<button :disabled="disabled" data-testid="connection-reconnect" @click="$emit(\'click\')"><slot /></button>',
+        },
+      },
+    },
+  })
+}
 
 describe('ConnectionAlert', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   it('初始未连接时不显示断线提示', () => {
@@ -28,5 +55,66 @@ describe('ConnectionAlert', () => {
     expect(wrapper.get('el-alert-stub').attributes('title')).toBe(
       'USB 管控装置已断开连接，请检查网络或设备连接。',
     )
+  })
+
+  it('点击重新连接后恢复会话并提示成功', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(true)
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(reconnect).toHaveBeenCalledTimes(1)
+    expect(ElMessage.success).toHaveBeenCalledWith('USB 管控装置重新连接成功')
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('会话失效时清理后跳转登录页', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(false)
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith('/login')
+  })
+
+  it('建链失败时留在当前页并展示错误', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate')
+      .mockRejectedValue(new Error('USB 管控装置重新连接失败，请检查网络或设备连接。'))
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('USB 管控装置重新连接失败，请检查网络或设备连接。')
+  })
+
+  it('重连进行中时防止重复点击', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    let resolveReconnect!: (value: boolean) => void
+    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate')
+      .mockReturnValue(new Promise((resolve) => { resolveReconnect = resolve }))
+    const wrapper = mountAlert()
+    const button = wrapper.get('[data-testid="connection-reconnect"]')
+
+    await button.trigger('click')
+    await button.trigger('click')
+
+    expect(reconnect).toHaveBeenCalledTimes(1)
+    resolveReconnect(true)
+    await flushPromises()
   })
 })

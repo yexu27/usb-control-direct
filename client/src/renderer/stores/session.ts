@@ -186,6 +186,17 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function reconnectAndValidate(): Promise<boolean> {
+    if (token.value === '') {
+      return false
+    }
+    const reconnected = await useConnectionStore().reconnect()
+    if (!reconnected) {
+      throw new Error('USB 管控装置重新连接失败，请检查网络或设备连接。')
+    }
+    return validateSession()
+  }
+
   function startInactivityTimer(): void {
     stopInactivityTimer()
     inactivityTimer = setTimeout(() => {
@@ -218,6 +229,7 @@ export const useSessionStore = defineStore('session', () => {
     login,
     logout,
     validateSession,
+    reconnectAndValidate,
     clearSession,
     setSession,
     startInactivityTimer,

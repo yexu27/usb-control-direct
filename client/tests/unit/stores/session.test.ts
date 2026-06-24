@@ -7,6 +7,7 @@ import { useWhitelistStore } from '../../../src/renderer/stores/whitelist'
 import { login, logout, queryAuthStatus } from '../../../src/renderer/services/auth-service'
 import { listWhitelist } from '../../../src/renderer/services/whitelist-service'
 import { getFilePolicy } from '../../../src/renderer/services/file-policy-service'
+import { ServiceError } from '../../../src/renderer/services/send-command'
 import { usb_control } from '../../../src/shared/proto/usb_control'
 
 vi.mock('../../../src/renderer/services/auth-service', () => ({
@@ -394,5 +395,86 @@ describe('useSessionStore', () => {
 
     await expect(store.validateSession()).resolves.toBe(true)
     expect(applyStateEvent).toHaveBeenCalledWith('AUTH_SUCCESS')
+  })
+
+  it('断线后重新建链并校验当前会话', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: '',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
+    queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+      authorized: true,
+      expireTime: 123,
+      deviceDescription: 'USB_DEVICE',
+      authStatus: 'authorized',
+    }))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe(true)
+
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(queryAuthStatusMock).toHaveBeenCalledWith('token')
+    expect(store.deviceDescription).toBe('USB_DEVICE')
+    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
+      'AUTH_SUCCESS',
+      'LICENSE_AUTHORIZED',
+      'CONFIG_LOADED',
+    ])
+  })
+
+  it('重连后发现会话失效时清空状态并断开连接', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: '',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
+    queryAuthStatusMock.mockRejectedValue(new ServiceError('会话已失效', 0x1001, 'unauthenticated'))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe(false)
+
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(store.token).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
+  })
+
+  it('重新建链失败时保留当前会话状态', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
+    connect.mockRejectedValueOnce(new Error('connect failed'))
+
+    await expect(store.reconnectAndValidate()).rejects.toThrow(
+      'USB 管控装置重新连接失败，请检查网络或设备连接。',
+    )
+
+    expect(queryAuthStatusMock).not.toHaveBeenCalled()
+    expect(store.token).toBe('token')
+    expect(store.deviceDescription).toBe('USB_DEVICE')
+    expect(connection.deviceIp).toBe('19.19.19.16')
   })
 })
