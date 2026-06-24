@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::Path;
 
 use evdev::{Device, InputEventKind, Key, RelativeAxisType};
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 use crate::error::HidAccessError;
 use crate::hid_report::{clamp_i8, MouseReport};
