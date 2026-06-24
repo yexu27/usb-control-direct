@@ -3,7 +3,7 @@
 //! L1=病毒标记 → L2=可执行控制 → L3=类型黑名单 → L4=自运行控制 → L5=写保护
 //! 短路求值：任一级别命中即返回 Deny。
 
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
 
