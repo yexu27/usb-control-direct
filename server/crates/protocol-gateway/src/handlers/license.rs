@@ -1,7 +1,7 @@
 //! 授权管理 handler（0x0005/0x0007）。
 
 use prost::Message;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -35,6 +35,8 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         Ok(s) => s,
         Err(code) => return machine_code_error(ctx.seq_id, code, "会话状态异常"),
     };
+
+    debug!(user = %session.username, "收到授权管理请求");
 
     // 已授权状态下仅管理员可操作
     let storage = match ctx.storage() {
@@ -98,7 +100,9 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(code) => return license_error(ctx.seq_id, code, "会话状态异常"),
     };
 
-    // 已授权状态下仅管理员可操作
+    debug!(user = %session.username, "收到授权管理请求");
+
+    // 已授权状态下仅管理员可操作(license handler)
     let storage = match ctx.storage() {
         Some(s) => s,
         None => {
@@ -133,7 +137,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     // 获取当前机器码用于校验
     let machine_code = match license_upgrade::generate_machine_code() {
         Ok(ref result) => {
-            info!(mc = %result.machine_code, "服务端真实机器码");
+            debug!("服务端真实机器码已获取");
             result.machine_code.clone()
         }
         Err(_e) => {
@@ -145,10 +149,12 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Ok(info) => {
             info!(user = %session.username, expire = info.expire_time, "授权文件校验成功");
             if let Err(_e) = storage.config_set("auth_status", "authorized") {
+                warn!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
                 log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权状态持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
             }
             if let Err(_e) = storage.config_set("auth_expire_time", &info.expire_time.to_string()) {
+                warn!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
                 log_operation(ctx, session, "system_management", "upload_license", "授权文件", 1, Some("授权过期时间持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权过期时间持久化失败");
             }
@@ -164,7 +170,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 .unwrap_or_default()
         }
         Err(e) => {
-            info!(user = %session.username, error = %e, "授权文件校验失败");
+            warn!(user = %session.username, reason = %e, "授权文件校验失败");
             let code = e.to_result_code();
             log_operation(
                 ctx,
