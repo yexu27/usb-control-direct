@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { usb_control } from '../../../src/shared/proto/usb_control'
 import FileAccessPage from '../../../src/renderer/pages/FileAccessPage.vue'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
@@ -151,9 +151,16 @@ describe('FileAccessPage', () => {
     expect(cards).toHaveLength(3)
     expect(cards.every((card) => card.classes().includes('policy-card'))).toBe(true)
     expect(wrapper.findAll('.app-checkbox-row')).toHaveLength(3)
+    expect(cards.map((card) => card.text())).toEqual([
+      expect.stringContaining('可执行程序访问控制'),
+      expect.stringContaining('介质自动读取功能控制'),
+      expect.stringContaining('文件类型访问控制'),
+    ])
     expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
       'dll', 'exe', 'PE', 'ELF',
     ])
+    expect(wrapper.get('[data-testid="blacklist-panel"]').text()).toContain('文件类型黑名单')
+    expect(wrapper.text()).not.toContain('23种')
     const connectionAlert = wrapper.find('[data-testid="connection-alert"]')
     expect(connectionAlert.element.previousElementSibling?.tagName).toBe('HEADER')
     expect(wrapper.text()).not.toContain('操作员')
@@ -165,6 +172,7 @@ describe('FileAccessPage', () => {
     expect(wrapper.text()).toContain('管理移动存储设备的文件访问策略')
     expect(wrapper.text()).toContain('可执行程序访问控制')
     expect(wrapper.text()).toContain('介质自动读取功能控制')
+    expect(wrapper.text()).toContain('文件类型访问控制')
     expect(wrapper.text()).toContain('文件类型黑名单')
     expect(wrapper.findAll('[data-testid="executable-type"]').map((item) => item.text())).toEqual([
       'dll', 'exe', 'PE', 'ELF',
@@ -226,7 +234,7 @@ describe('FileAccessPage', () => {
     await execSwitch.trigger('click')
     await flushPromises()
     expect(setSwitch).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改策略')
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(execSwitch.attributes('data-checked')).toBe('false')
     expect(store.policy?.blacklist).toHaveLength(21)
   })
@@ -245,7 +253,7 @@ describe('FileAccessPage', () => {
     dialog.vm.$emit('submit', { extension: '.zip', description: '压缩包' })
     await flushPromises()
 
-    expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改策略')
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(add).not.toHaveBeenCalled()
     expect(dialog.props('visible')).toBe(true)
     expect(dialog.props('submitting')).toBe(false)
@@ -262,7 +270,7 @@ describe('FileAccessPage', () => {
     await deleteButton.trigger('click')
     await flushPromises()
 
-    expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改策略')
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(ElMessageBox.confirm).not.toHaveBeenCalled()
     expect(remove).not.toHaveBeenCalled()
   })
@@ -315,7 +323,7 @@ describe('FileAccessPage', () => {
     confirmDeferred.resolve('confirm')
     await flushPromises()
 
-    expect(ElMessage.warning).toHaveBeenCalledWith('装置已断开连接，无法修改策略')
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(remove).not.toHaveBeenCalled()
     expect(showSuccessToast).not.toHaveBeenCalled()
     expect(deleteButton.attributes('disabled')).toBeUndefined()

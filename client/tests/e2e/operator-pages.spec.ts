@@ -50,6 +50,27 @@ async function expectLatestMessage(page: Page, text: string | RegExp): Promise<v
   await expect(legacyMessage).toBeVisible()
 }
 
+async function expectAppDialog(page: Page, title: string | RegExp, message: string | RegExp): Promise<void> {
+  const dialog = page.locator('.app-confirm-message-box')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText(title)
+  await expect(dialog).toContainText(message)
+}
+
+async function closeAppDialog(page: Page): Promise<void> {
+  const dialog = page.locator('.app-confirm-message-box')
+  await dialog.getByRole('button', { name: '确定' }).click()
+  await expect(dialog).toBeHidden()
+}
+
+async function expectFileAccessLayout(page: Page): Promise<void> {
+  await expect(page.getByTestId('file-policy-card')).toHaveCount(3)
+  await expect(page.getByTestId('executable-type')).toHaveText(['dll', 'exe', 'PE', 'ELF'])
+  await expect(page.getByText('23种')).toHaveCount(0)
+  await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
+  await expect(page.getByTestId('blacklist-panel')).toBeVisible()
+}
+
 async function withOperator(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -78,6 +99,7 @@ test.describe('操作员三页面业务闭环', () => {
 
   test('三个开关逐次成功并在重进页面后保持状态', async () => {
     await withOperator(async (_device, _app, page) => {
+      await expectFileAccessLayout(page)
       for (const testId of ['exec-control-switch', 'auto-read-control-switch', 'blacklist-control-switch']) {
         await page.getByTestId(testId).click()
         await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)
@@ -278,11 +300,13 @@ test.describe('操作员三页面业务闭环', () => {
         await expect(page.getByTestId('connection-status')).toContainText('未连接')
         await expect(page.getByText('.jse', { exact: true })).toBeVisible()
         await page.getByTestId('exec-control-switch').click()
-        await expectLatestMessage(page, '装置已断开连接，无法修改策略')
+        await expectAppDialog(page, '操作失败', '装置已断开连接，无法修改策略')
+        await closeAppDialog(page)
         await page.getByTestId('add-blacklist-trigger').click()
         await page.locator('[data-testid="blacklist-extension-input"]').fill('.bat')
         await page.getByTestId('blacklist-submit').click()
-        await expectLatestMessage(page, '装置已断开连接，无法修改策略')
+        await expectAppDialog(page, '操作失败', '装置已断开连接，无法修改策略')
+        await closeAppDialog(page)
         await page.keyboard.press('Escape')
         await openMenu(page, 'U盘设备控制')
         await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()

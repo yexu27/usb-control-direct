@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import AddBlacklistDialog from '@/components/file-policy/AddBlacklistDialog.vue'
@@ -61,16 +60,16 @@ async function showError(error: unknown, fallback: string): Promise<void> {
   await showErrorDialog(fallback, errorMessage(error, fallback))
 }
 
-function canWrite(): boolean {
+async function canWrite(): Promise<boolean> {
   if (connection.isConnected) {
     return true
   }
-  ElMessage.warning('装置已断开连接，无法修改策略')
+  await showErrorDialog('操作失败', '装置已断开连接，无法修改策略')
   return false
 }
 
 async function changeSwitch(key: FilePolicyKey, enabled: boolean): Promise<boolean> {
-  if (!canWrite()) {
+  if (!(await canWrite())) {
     return false
   }
   try {
@@ -83,10 +82,14 @@ async function changeSwitch(key: FilePolicyKey, enabled: boolean): Promise<boole
 }
 
 async function handleAdd(value: BlacklistFormValue): Promise<void> {
-  if (isAdding.value || !canWrite()) {
+  if (isAdding.value) {
     return
   }
   isAdding.value = true
+  if (!(await canWrite())) {
+    isAdding.value = false
+    return
+  }
   addErrorMessage.value = ''
   try {
     await filePolicy.addExtension(session.token, value.extension, value.description)
@@ -106,7 +109,7 @@ async function handleRemove(extension: string): Promise<void> {
   }
   removingExtensions.value.add(normalizedExtension)
   try {
-    if (!canWrite()) {
+    if (!(await canWrite())) {
       return
     }
     try {
@@ -119,7 +122,7 @@ async function handleRemove(extension: string): Promise<void> {
     } catch {
       return
     }
-    if (!canWrite()) {
+    if (!(await canWrite())) {
       return
     }
     try {
@@ -179,7 +182,7 @@ function changePageSize(nextPageSize: number): void {
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">可执行程序访问控制</span>
-              <span class="app-checkbox-desc">禁止 USB 介质中的可执行程序被读取或运行。</span>
+              <span class="app-checkbox-desc">禁止访问移动存储设备中的可执行文件</span>
             </span>
           </label>
           <div class="type-list" aria-label="可执行文件类型">
@@ -210,7 +213,7 @@ function changePageSize(nextPageSize: number): void {
             />
             <span class="app-checkbox-copy">
               <span class="app-checkbox-title">介质自动读取功能控制</span>
-              <span class="app-checkbox-desc">控制移动存储设备插入后是否启用自动读取相关访问控制。</span>
+              <span class="app-checkbox-desc">启用介质自动读取功能控制</span>
             </span>
           </label>
         </el-card>
@@ -230,24 +233,17 @@ function changePageSize(nextPageSize: number): void {
               :disabled="isPending('file_type_blacklist_control')"
               @change="(enabled) => handlePolicyCheckboxChange('file_type_blacklist_control', enabled === true)"
             />
-            <span class="app-checkbox-copy">
-              <span class="app-checkbox-title">文件类型黑名单</span>
-              <span class="app-checkbox-desc">启用后禁止访问黑名单后缀对应的文件。</span>
+            <span class="app-checkbox-copy file-policy-copy">
+              <span class="app-checkbox-title">文件类型访问控制</span>
+              <span class="app-checkbox-desc">启用文件类型访问控制</span>
+              <span class="policy-help">
+                通过后缀类型管理移动存储设备中的文件。启用后禁止访问黑名单中对应后缀类型的文件。
+              </span>
             </span>
           </label>
-          <DataTable
-            :columns="columns"
-            :data="pageRows"
-            :loading="filePolicy.isLoading"
-            :error="filePolicy.errorMessage"
-            :total="blacklist.length"
-            :page="page"
-            :page-size="pageSize"
-            empty-text="暂无黑名单条目"
-            @page-change="changePage"
-            @page-size-change="changePageSize"
-          >
-            <template #filters>
+          <div class="blacklist-panel" data-testid="blacklist-panel">
+            <div class="blacklist-panel-header">
+              <span>文件类型黑名单</span>
               <el-button
                 type="primary"
                 data-testid="add-blacklist-trigger"
@@ -256,20 +252,33 @@ function changePageSize(nextPageSize: number): void {
               >
                 添加黑名单
               </el-button>
-            </template>
-            <template #actions="{ row }">
-              <el-button
-                link
-                type="danger"
-                :data-extension="row.extension"
-                :disabled="isRemoving(row.extension)"
-                :loading="isRemoving(row.extension)"
-                @click="handleRemove(row.extension)"
-              >
-                删除
-              </el-button>
-            </template>
-          </DataTable>
+            </div>
+            <DataTable
+              :columns="columns"
+              :data="pageRows"
+              :loading="filePolicy.isLoading"
+              :error="filePolicy.errorMessage"
+              :total="blacklist.length"
+              :page="page"
+              :page-size="pageSize"
+              empty-text="暂无黑名单条目"
+              @page-change="changePage"
+              @page-size-change="changePageSize"
+            >
+              <template #actions="{ row }">
+                <el-button
+                  link
+                  type="danger"
+                  :data-extension="row.extension"
+                  :disabled="isRemoving(row.extension)"
+                  :loading="isRemoving(row.extension)"
+                  @click="handleRemove(row.extension)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </DataTable>
+          </div>
         </el-card>
       </section>
     </div>
@@ -307,7 +316,7 @@ function changePageSize(nextPageSize: number): void {
 .policy-list {
   display: flex;
   flex-direction: column;
-  gap: $spacing-5;
+  gap: 18px;
 }
 
 .policy-section {
@@ -319,40 +328,62 @@ function changePageSize(nextPageSize: number): void {
   border-color: $border-color;
 }
 
-.card-heading {
+.policy-card :deep(.el-card__body) {
+  padding: 28px 36px;
+}
+
+.app-checkbox-row {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: $spacing-6;
+  gap: 16px;
+}
 
-  h2 {
-    margin: 0;
-    color: $text-primary;
-    font-size: $font-size-md;
-    font-weight: $font-weight-semibold;
-  }
+.file-policy-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  p {
-    margin: $spacing-1 0 0;
-    color: $text-secondary;
-  }
+.policy-help {
+  color: $text-secondary;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .type-list {
   display: flex;
-  margin-top: $spacing-5;
-  gap: $spacing-3;
+  gap: 12px;
+  margin: 22px 0 0 48px;
 
   span {
-    padding: $spacing-1 $spacing-3;
-    color: $text-regular;
-    background: $bg-sidebar;
+    min-width: 48px;
+    padding: 9px 14px;
+    color: $text-secondary;
+    font-size: 14px;
+    text-align: center;
+    background: $bg-white;
     border: $border-width solid $border-color;
-    border-radius: $border-radius;
+    border-radius: 6px;
   }
 }
 
-.data-table-wrapper {
-  margin-top: $spacing-6;
+.blacklist-panel {
+  margin: 22px 0 0 48px;
+  overflow: hidden;
+  background: $bg-white;
+  border: $border-width solid $border-color;
+  border-radius: 6px;
+}
+
+.blacklist-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  color: $text-primary;
+  font-weight: $font-weight-semibold;
+  background: $bg-sidebar;
+  border-bottom: $border-width solid $border-color;
 }
 </style>
