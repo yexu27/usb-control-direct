@@ -37,12 +37,18 @@ pub struct Storage {
 }
 
 impl Storage {
-    /// 打开数据库并执行 schema 初始化。
+    /// 使用默认读连接池大小（4）打开数据库。
+    pub fn open(path: &Path) -> Result<Self, StorageError> {
+        Self::open_with_pool_size(path, 4)
+    }
+
+    /// 打开数据库并指定读连接池大小。
     ///
     /// 参数:
     ///   - `path`: 数据库文件路径。
-    pub fn open(path: &Path) -> Result<Self, StorageError> {
-        let pool = Pool::open(path, 4)?;
+    ///   - `read_pool_size`: 只读连接池大小，0 时使用内部默认值。
+    pub fn open_with_pool_size(path: &Path, read_pool_size: usize) -> Result<Self, StorageError> {
+        let pool = Pool::open(path, read_pool_size)?;
         pool.with_transaction(|conn| {
             schema::migrate(conn)?;
             Ok(())
