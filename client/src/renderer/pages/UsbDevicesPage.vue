@@ -423,30 +423,36 @@ function changePageSize(nextPageSize: number): void {
       </div>
     </header>
     <ConnectionAlert />
-    <el-card shadow="never" class="whitelist-card app-card">
+    <el-card shadow="never" class="usb-whitelist-card app-card" data-testid="usb-whitelist-card">
       <template #header>
-        <h2 class="whitelist-title">受信任普通移动存储设备白名单</h2>
+        <div class="usb-whitelist-card-header">
+          <h3>受信任普通移动存储设备白名单</h3>
+          <div class="usb-whitelist-actions">
+            <el-button
+              data-testid="add-device-trigger"
+              :disabled="addSubmitting"
+              :loading="addSubmitting"
+              @click="openAddDialog('device')"
+            >
+              装置端添加
+            </el-button>
+            <el-button
+              type="primary"
+              data-testid="add-management-trigger"
+              :disabled="addSubmitting"
+              :loading="addSubmitting"
+              @click="openAddDialog('management')"
+            >
+              管理端添加
+            </el-button>
+          </div>
+        </div>
       </template>
       <DataTable
         :columns="columns" :data="pageRows" :loading="whitelist.isLoading"
         :error="tableError" :total="rows.length" :page="page" :page-size="pageSize"
         empty-text="暂无数据" @page-change="changePage" @page-size-change="changePageSize"
       >
-        <template #filters>
-          <el-button
-            data-testid="add-device-trigger"
-            :disabled="addSubmitting" :loading="addSubmitting" @click="openAddDialog('device')"
-          >
-            装置端添加
-          </el-button>
-          <el-button
-            type="primary"
-            data-testid="add-management-trigger" :disabled="addSubmitting" :loading="addSubmitting"
-            @click="openAddDialog('management')"
-          >
-            管理端添加
-          </el-button>
-        </template>
         <template #actions="{ row }">
           <el-button
             link type="primary" :data-testid="`edit-${row.serialNumber}`"
@@ -493,14 +499,27 @@ function changePageSize(nextPageSize: number): void {
   color: $text-secondary;
 }
 
-.whitelist-card {
+.usb-whitelist-card {
   border-color: $border-color;
 }
 
-.whitelist-title {
+.usb-whitelist-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.usb-whitelist-card-header h3 {
   margin: 0;
   color: $text-primary;
-  font-size: $font-size-md;
+  font-size: 18px;
   font-weight: $font-weight-semibold;
+}
+
+.usb-whitelist-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

@@ -71,6 +71,15 @@ async function expectFileAccessLayout(page: Page): Promise<void> {
   await expect(page.getByTestId('blacklist-panel')).toBeVisible()
 }
 
+async function expectUsbDevicesLayout(page: Page): Promise<void> {
+  await expect(page.getByTestId('usb-whitelist-card')).toBeVisible()
+  await expect(page.getByText('受信任普通移动存储设备白名单')).toBeVisible()
+  await expect(page.getByTestId('add-device-trigger')).toBeVisible()
+  await expect(page.getByTestId('add-management-trigger')).toBeVisible()
+  await expect(page.getByText('安全U盘自由使用')).toHaveCount(0)
+  await expect(page.getByTestId('page-role-badge')).toHaveCount(0)
+}
+
 async function withOperator(
   run: (device: MockDevice, app: ElectronApplication, page: Page) => Promise<void>,
 ): Promise<void> {
@@ -105,6 +114,7 @@ test.describe('操作员三页面业务闭环', () => {
         await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)
       }
       await openMenu(page, 'U盘设备控制')
+      await expectUsbDevicesLayout(page)
       await openMenu(page, '文件访问控制')
       for (const testId of ['exec-control-switch', 'auto-read-control-switch', 'blacklist-control-switch']) {
         await expect(page.getByTestId(testId)).toHaveClass(/is-checked/)

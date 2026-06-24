@@ -60,7 +60,7 @@ function mountPage() {
   return mount(UsbDevicesPage, { global: { stubs: {
     ConnectionAlert: { template: '<aside data-testid="connection-alert"/>' },
     AddWhitelistDialog: AddDialogStub, EditWhitelistDialog: EditDialogStub,
-    ElCard: { template: '<section><slot name="header"/><slot /></section>' },
+    ElCard: { template: '<section v-bind="$attrs"><slot name="header"/><slot /></section>' },
     ElButton: {
       props: ['type'],
       template: '<button v-bind="$attrs" :data-button-type="type" @click="$emit(\'click\')"><slot/></button>',
@@ -128,9 +128,13 @@ describe('UsbDevicesPage', () => {
   it('展示白名单卡片标题并按原型设置按钮主次', () => {
     const wrapper = mountPage()
 
+    expect(wrapper.get('[data-testid="usb-whitelist-card"]').classes()).toContain('usb-whitelist-card')
     expect(wrapper.text()).toContain('受信任普通移动存储设备白名单')
+    expect(wrapper.get('[data-testid="add-device-trigger"]').text()).toContain('装置端添加')
+    expect(wrapper.get('[data-testid="add-management-trigger"]').text()).toContain('管理端添加')
     expect(wrapper.get('[data-testid="add-device-trigger"]').attributes('data-button-type')).toBeUndefined()
     expect(wrapper.get('[data-testid="add-management-trigger"]').attributes('data-button-type')).toBe('primary')
+    expect(wrapper.text()).not.toContain('安全U盘自由使用')
   })
 
   it('管理端枚举原始执行错误映射为稳定中文且不泄露路径命令', async () => {
