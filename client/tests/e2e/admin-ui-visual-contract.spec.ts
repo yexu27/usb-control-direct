@@ -121,4 +121,32 @@ test.describe('管理端 UI 视觉契约', () => {
       await device.stop()
     }
   })
+
+  test('日志管理确认原型不显示旧分页和右上角角色 badge', async () => {
+    const device = new MockDevice({ ...DEFAULT_SCENARIO, role: 'auditor' })
+    let app: ElectronApplication | null = null
+    await device.start()
+    try {
+      const launched = await launchApp()
+      app = launched.app
+      const page = launched.page
+
+      await page.locator('[data-testid="login-username"]').fill('audit')
+      await page.locator('[data-testid="login-password"]').fill('audit@123')
+      await page.locator('[data-testid="login-ip"]').fill('127.0.0.1')
+      await page.getByTestId('login-submit').click()
+      await expect(page).toHaveURL(/#\/logs$/)
+
+      await expect(page.getByRole('heading', { name: '日志管理' })).toBeVisible()
+      await expect(page.getByTestId('logs-prototype-shell')).toBeVisible()
+      await expect(page.getByTestId('logs-prototype-pagination')).toBeVisible()
+      await expect(page.getByText('Go to')).toHaveCount(0)
+      await expect(page.getByText('20/page')).toHaveCount(0)
+      await expect(page.getByTestId('logs-role-badge')).toHaveCount(0)
+      await expectRoundedTable(page, '[data-testid="logs-table-shell"]')
+    } finally {
+      await app?.close()
+      await device.stop()
+    }
+  })
 })

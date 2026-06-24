@@ -17,7 +17,7 @@ describe('log display utils', () => {
       '时间',
       '设备名称',
       '序列号',
-      '事件类型',
+      '插拔类型',
       '内容',
     ])
     expect(getLogColumns('malware').map((column) => column.label)).toEqual([
@@ -30,7 +30,6 @@ describe('log display utils', () => {
     expect(getLogColumns('operation').map((column) => column.label)).toEqual([
       '时间',
       '用户',
-      '操作日志类型',
       '内容',
     ])
   })

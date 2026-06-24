@@ -6,10 +6,8 @@ import DataTable from '@/components/DataTable.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
 import {
   LOG_TABS,
-  OPERATION_LOG_CATEGORY_OPTIONS,
   USB_EVENT_TYPE_OPTIONS,
   type LogType,
-  formatOperationLogCategory,
   getLogColumns,
 } from '@/utils/log-display'
 import {
@@ -37,7 +35,6 @@ interface LogRow {
   content: string
   virus?: string
   username?: string
-  operationType?: string
 }
 
 const session = useSessionStore()
@@ -46,7 +43,6 @@ const activeLogType = ref<LogType>('usb_audit')
 const dateRange = ref<[Date, Date]>(createDefaultRange())
 const keyword = ref('')
 const selectedEventType = ref('')
-const selectedOperationCategory = ref('')
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE)
 const rows = ref<LogRow[]>([])
@@ -62,7 +58,40 @@ const activeTabLabel = computed(() => {
 })
 const columns = computed(() => getLogColumns(activeLogType.value))
 const showUsbEventFilter = computed(() => activeLogType.value === 'usb_audit')
-const showOperationFilter = computed(() => activeLogType.value === 'operation')
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const startTime = computed({
+  get: () => dateRange.value[0],
+  set: (value: Date | null) => {
+    if (!(value instanceof Date)) {
+      return
+    }
+    dateRange.value = [value, dateRange.value[1]]
+  },
+})
+const endTime = computed({
+  get: () => dateRange.value[1],
+  set: (value: Date | null) => {
+    if (!(value instanceof Date)) {
+      return
+    }
+    dateRange.value = [dateRange.value[0], value]
+  },
+})
+const rangeStart = computed(() => {
+  if (total.value === 0) {
+    return 0
+  }
+  return (page.value - 1) * pageSize.value + 1
+})
+const rangeEnd = computed(() => Math.min(total.value, page.value * pageSize.value))
+const visiblePages = computed(() => {
+  if (totalPages.value <= 3) {
+    return Array.from({ length: totalPages.value }, (_, index) => index + 1)
+  }
+  const start = Math.min(Math.max(1, page.value - 1), totalPages.value - 2)
+  return Array.from({ length: 3 }, (_, index) => start + index)
+})
+const showPaginationEllipsis = computed(() => visiblePages.value.at(-1) !== totalPages.value)
 
 onMounted(() => {
   void loadLogs()
@@ -94,7 +123,7 @@ function buildQueryInput(): LogQueryInput {
     eventType: activeLogType.value === 'usb_audit' ? selectedEventType.value : '',
     page: page.value,
     pageSize: pageSize.value,
-    logCategory: activeLogType.value === 'operation' ? selectedOperationCategory.value : '',
+    logCategory: '',
     actionType: '',
   }
 }
@@ -155,7 +184,6 @@ function mapOperationRow(entry: usb_control.IOperationLogEntry): LogRow {
     id: String(entry.id ?? ''),
     time: formatUnixSeconds(entry.opTime ?? 0),
     username: entry.username ?? '',
-    operationType: formatOperationLogCategory(entry.logCategory ?? ''),
     content: buildContent(entry.detail, entry.result, entry.failReason),
   }
 }
@@ -179,11 +207,35 @@ function formatUsbEventType(value: string): string {
   return USB_EVENT_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? value
 }
 
+function eventChipClass(eventType: string | undefined): string {
+  if (eventType === 'USB插入成功' || eventType === '映射成功' || eventType === '验证成功') {
+    return 'success'
+  }
+  if (eventType === 'USB移除成功') {
+    return 'danger'
+  }
+  if (
+    eventType === '禁止' ||
+    eventType === '阻断' ||
+    eventType === '映射失败' ||
+    eventType === '验证失败'
+  ) {
+    return 'warning'
+  }
+  return 'info'
+}
+
+function selectLogType(logType: LogType): void {
+  if (activeLogType.value === logType) {
+    return
+  }
+  handleTabChange(logType)
+}
+
 function handleTabChange(tabName: string | number): void {
   activeLogType.value = tabName as LogType
   page.value = 1
   selectedEventType.value = ''
-  selectedOperationCategory.value = ''
   void loadLogs()
 }
 
@@ -193,8 +245,15 @@ function handleSearch(): void {
 }
 
 function handlePageChange(nextPage: number): void {
-  page.value = nextPage
+  page.value = clampPage(nextPage)
   void loadLogs()
+}
+
+function clampPage(nextPage: number): number {
+  if (!Number.isFinite(nextPage)) {
+    return 1
+  }
+  return Math.min(Math.max(1, Math.trunc(nextPage)), totalPages.value)
 }
 
 function handlePageSizeChange(nextPageSize: number): void {
@@ -306,21 +365,23 @@ function disabledClearDate(date: Date): boolean {
     </header>
     <ConnectionAlert />
 
-    <el-card shadow="never" class="logs-card app-card">
-      <el-tabs
-        :model-value="activeLogType"
-        data-testid="log-tabs"
-        @tab-change="handleTabChange"
-      >
-        <el-tab-pane
+    <section class="logs-prototype-shell" data-testid="logs-prototype-shell">
+      <nav class="logs-segmented-tabs" aria-label="日志类型">
+        <button
           v-for="tab in LOG_TABS"
           :key="tab.value"
-          :label="tab.label"
-          :name="tab.value"
-        />
-      </el-tabs>
+          class="logs-segmented-tab"
+          :class="{ active: activeLogType === tab.value }"
+          type="button"
+          :data-testid="`logs-tab-${tab.value}`"
+          @click="selectLogType(tab.value)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
 
       <DataTable
+        class="logs-table prototype-table"
         :columns="columns"
         :data="rows"
         :loading="isLoading"
@@ -329,51 +390,51 @@ function disabledClearDate(date: Date): boolean {
         :page="page"
         :page-size="pageSize"
         empty-text="暂无日志"
+        :show-default-pagination="false"
+        data-testid="logs-table-shell"
         @page-change="handlePageChange"
         @page-size-change="handlePageSizeChange"
       >
         <template #filters>
-          <div class="log-filter-bar">
+          <div
+            class="log-filter-bar"
+            :class="{ 'without-type-filter': !showUsbEventFilter }"
+          >
             <el-input
               v-model="keyword"
               class="filter-keyword"
-              placeholder="关键字"
+              placeholder="搜索内容..."
               clearable
               data-testid="log-keyword"
               @keyup.enter="handleSearch"
             />
             <el-date-picker
-              v-model="dateRange"
-              class="filter-range"
-              type="datetimerange"
-              start-placeholder="开始时间"
-              end-placeholder="结束时间"
+              v-model="startTime"
+              class="filter-start"
+              type="datetime"
+              placeholder="开始时间"
               :clearable="false"
-              data-testid="log-date-range"
+              data-testid="log-start-time"
+            />
+            <el-date-picker
+              v-model="endTime"
+              class="filter-end"
+              type="datetime"
+              placeholder="结束时间"
+              :clearable="false"
+              data-testid="log-end-time"
             />
             <el-select
               v-if="showUsbEventFilter"
               v-model="selectedEventType"
               class="filter-select"
+              placeholder="全部类型"
               data-testid="log-event-type"
             >
               <el-option
                 v-for="option in USB_EVENT_TYPE_OPTIONS"
                 :key="option.value"
-                :label="option.label"
-                :value="option.value"
-              />
-            </el-select>
-            <el-select
-              v-if="showOperationFilter"
-              v-model="selectedOperationCategory"
-              class="filter-select"
-              data-testid="log-category"
-            >
-              <el-option
-                v-for="option in OPERATION_LOG_CATEGORY_OPTIONS"
-                :key="option.value"
-                :label="option.label"
+                :label="option.value === '' ? '全部类型' : option.label"
                 :value="option.value"
               />
             </el-select>
@@ -384,20 +445,54 @@ function disabledClearDate(date: Date): boolean {
               <el-button data-testid="log-export" :loading="isExporting" @click="handleExport">
                 导出 .zip
               </el-button>
-              <el-button type="danger" data-testid="log-clear" @click="handleClear">
+              <el-button class="logs-clear-button" data-testid="log-clear" @click="handleClear">
                 清理
               </el-button>
             </div>
           </div>
         </template>
-        <template #eventType="{ row }">
-          <el-tag size="small">{{ row.eventType }}</el-tag>
+        <template #serialNumber="{ row }">
+          <span class="log-serial-chip" data-testid="log-serial-chip">{{ row.serialNumber }}</span>
         </template>
-        <template #operationType="{ row }">
-          <el-tag size="small" type="info">{{ row.operationType }}</el-tag>
+        <template #eventType="{ row }">
+          <span
+            class="log-event-chip"
+            :class="eventChipClass(row.eventType)"
+            data-testid="log-event-chip"
+          >
+            {{ row.eventType }}
+          </span>
         </template>
       </DataTable>
-    </el-card>
+
+      <nav
+        class="logs-prototype-pagination"
+        data-testid="logs-prototype-pagination"
+        aria-label="日志分页"
+      >
+        <span>显示 {{ rangeStart }}-{{ rangeEnd }}，共 {{ total }} 条</span>
+        <div class="logs-page-buttons">
+          <button
+            v-for="pageNumber in visiblePages"
+            :key="pageNumber"
+            type="button"
+            class="logs-page-button"
+            :class="{ active: page === pageNumber }"
+            @click="handlePageChange(pageNumber)"
+          >
+            {{ pageNumber }}
+          </button>
+          <button
+            v-if="showPaginationEllipsis"
+            type="button"
+            class="logs-page-button"
+            @click="handlePageChange(Math.min(totalPages, page + 1))"
+          >
+            ...
+          </button>
+        </div>
+      </nav>
+    </section>
 
     <el-dialog v-model="clearDialogVisible" title="清理日志" width="520px">
       <div class="clear-dialog-body">
@@ -436,57 +531,277 @@ function disabledClearDate(date: Date): boolean {
 .logs-page {
   display: flex;
   flex-direction: column;
-  gap: $spacing-5;
+  gap: 18px;
 }
 
 .page-header {
+  margin-bottom: 4px;
+
   h1 {
     margin: 0;
     color: $text-primary;
-    font-size: $font-xxl;
+    font-size: 26px;
     font-weight: $font-weight-semibold;
+    line-height: 1.2;
   }
 
   p {
-    margin: $spacing-1 0 0;
+    margin: 6px 0 0;
     color: $text-secondary;
+    font-size: 16px;
+    font-weight: $font-weight-medium;
   }
 }
 
-.logs-card {
-  border-color: $border-color;
+.logs-prototype-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.logs-segmented-tabs {
+  display: flex;
+  align-self: flex-start;
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  border-radius: 5px;
+  background: #f3f6fa;
+  gap: 0;
+}
+
+.logs-segmented-tab {
+  min-width: 134px;
+  height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-right: 1px solid #d8dee8;
+  background: transparent;
+  color: $text-secondary;
+  font-family: var(--andi-font-family);
+  font-size: 16px;
+  font-weight: $font-weight-semibold;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &.active {
+    border-right-color: $brand-primary;
+    background: $brand-primary;
+    color: $bg-white;
+  }
+
+  &:last-child {
+    border-right: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(0, 86, 179, 0.26);
+    outline-offset: -2px;
+  }
+
+  &:not(.active):hover {
+    background: #f9fbff;
+    color: $brand-primary;
+  }
+}
+
+.logs-table {
+  overflow: visible;
+  border-radius: 8px;
+}
+
+.logs-table :deep(.data-table-wrapper) {
+  gap: 18px;
+}
+
+.logs-table :deep(.app-filter-bar) {
+  display: block;
+}
+
+.logs-table :deep(.el-table) {
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.logs-table :deep(.el-table__border-left-patch),
+.logs-table :deep(.el-table__inner-wrapper::before),
+.logs-table :deep(.el-table__inner-wrapper::after) {
+  display: none;
+}
+
+.logs-table :deep(th.el-table__cell) {
+  height: 42px;
+  padding: 0 16px;
+  background: #eef2f7;
+  color: $text-regular;
+  font-size: 15px;
+  font-weight: $font-weight-semibold;
+}
+
+.logs-table :deep(td.el-table__cell) {
+  height: 48px;
+  padding: 0 16px;
+  background: $bg-white;
+  color: $text-primary;
+  font-size: 16px;
+}
+
+.logs-table :deep(.el-table__body tr.el-table__row--striped td.el-table__cell),
+.logs-table :deep(.el-table__body tr:hover > td.el-table__cell) {
+  background: $bg-white;
 }
 
 .log-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) 280px 280px 150px auto;
   align-items: center;
   width: 100%;
-  gap: $spacing-3;
+  gap: 10px;
+}
+
+.log-filter-bar.without-type-filter {
+  grid-template-columns: minmax(320px, 1fr) 280px 280px auto;
 }
 
 .filter-keyword {
-  flex: 1 1 180px;
-  min-width: 180px;
+  width: 100%;
+  min-width: 0;
 }
 
-.filter-range {
-  flex: 0 1 360px;
+.filter-start,
+.filter-end {
+  width: 100%;
 }
 
 .filter-select {
-  flex: 0 1 160px;
+  width: 100%;
+}
+
+.filter-keyword :deep(.el-input__wrapper),
+.filter-start :deep(.el-input__wrapper),
+.filter-end :deep(.el-input__wrapper),
+.filter-select :deep(.el-select__wrapper) {
+  min-height: 38px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #d8dee8 inset;
+  font-size: 16px;
 }
 
 .filter-actions {
   display: flex;
-  flex: 0 0 auto;
   margin-left: auto;
-  gap: $spacing-3;
+  gap: 10px;
 }
 
-:deep(.table-pagination) {
-  align-self: flex-end;
+.filter-actions :deep(.el-button) {
+  min-width: 86px;
+  height: 38px;
+  margin-left: 0;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: $font-weight-semibold;
+}
+
+.filter-actions :deep(.el-button--primary) {
+  background: $brand-primary;
+  border-color: $brand-primary;
+}
+
+.logs-clear-button {
+  color: #e53935;
+  background: $bg-white;
+  border-color: #ff8f8f;
+
+  &:hover,
+  &:focus {
+    color: $bg-white;
+    background: #e53935;
+    border-color: #e53935;
+  }
+}
+
+.log-serial-chip,
+.log-event-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: $border-radius;
+  font-size: 15px;
+  font-weight: $font-weight-semibold;
+  line-height: 1;
+}
+
+.log-serial-chip {
+  background: #f0f2f5;
+  color: $brand-primary-dark;
+}
+
+.log-event-chip {
+  &.success {
+    background: rgba($color-success, 0.12);
+    color: $color-success;
+  }
+
+  &.danger {
+    background: rgba($color-danger, 0.12);
+    color: $color-danger;
+  }
+
+  &.warning {
+    background: rgba($color-warning, 0.12);
+    color: $color-warning;
+  }
+
+  &.info {
+    background: rgba($color-info, 0.12);
+    color: $color-info;
+  }
+}
+
+.logs-prototype-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border-top: 0;
+  color: $text-secondary;
+  font-size: 15px;
+}
+
+.logs-page-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.logs-page-button {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid #d8dee8;
+  border-radius: $border-radius;
+  background: $bg-white;
+  color: $text-primary;
+  font-size: 15px;
+  cursor: pointer;
+
+  &.active {
+    border-color: $brand-primary;
+    background: $brand-primary;
+    color: $color-white;
+  }
+
+  &:not(.active):hover,
+  &:focus-visible {
+    border-color: $brand-primary;
+    color: $brand-primary;
+  }
 }
 
 .clear-dialog-body {
@@ -508,6 +823,14 @@ function disabledClearDate(date: Date): boolean {
   .filter-actions {
     flex: 1 1 100%;
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .logs-prototype-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: $spacing-3;
   }
 }
 </style>

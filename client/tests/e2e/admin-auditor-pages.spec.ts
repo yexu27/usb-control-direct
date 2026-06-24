@@ -113,7 +113,28 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await login(page, 'audit', 'audit@123')
         await expect(page).toHaveURL(/#\/logs$/)
         await expect(page.getByRole('heading', { name: '日志管理' })).toBeVisible()
-        await expect(page.getByText('USB审计日志', { exact: true })).toBeVisible()
+        await expect(page.getByTestId('logs-prototype-shell')).toBeVisible()
+        await expect(page.getByTestId('logs-prototype-pagination')).toBeVisible()
+        await expect(page.getByText(/显示 1-\d+，共 \d+ 条/)).toBeVisible()
+        await expect(page.getByText('Go to')).toHaveCount(0)
+        await expect(page.getByText('20/page')).toHaveCount(0)
+        await expect(page.getByTestId('logs-role-badge')).toHaveCount(0)
+        await expect(page.getByTestId('logs-tab-usb_audit')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '插拔类型' })).toBeVisible()
+
+        await page.getByTestId('logs-tab-malware').click()
+        await expect(page.getByTestId('logs-tab-malware')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '病毒' })).toBeVisible()
+        await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+        await page.getByTestId('logs-tab-operation').click()
+        await expect(page.getByTestId('logs-tab-operation')).toHaveClass(/active/)
+        await expect(page.getByRole('columnheader', { name: '用户' })).toBeVisible()
+        await expect(page.getByText('操作日志类型')).toHaveCount(0)
+        await expect(page.getByTestId('log-event-type')).toHaveCount(0)
+
+        await page.getByTestId('logs-tab-usb_audit').click()
+        await expect(page.getByTestId('logs-tab-usb_audit')).toHaveClass(/active/)
 
         await app.evaluate(({ dialog }, path) => {
           dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })

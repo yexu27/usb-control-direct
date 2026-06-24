@@ -29,6 +29,7 @@ describe('page style contract', () => {
     'UsersPage.vue',
     'PoliciesPage.vue',
     'SystemPage.vue',
+    'LogsPage.vue',
   ].includes(fileName)))(
     '%s uses the shared card surface for card regions',
     (fileName) => {
@@ -66,5 +67,16 @@ describe('page style contract', () => {
     expect(source).toContain('system-card')
     expect(source).toContain('system-card-grid')
     expect(source).not.toContain('安全U盘自动升级')
+  })
+
+  it('LogsPage uses the confirmed logs prototype shell and custom pagination', () => {
+    const source = readPage('LogsPage.vue')
+
+    expect(source).toContain('logs-prototype-shell')
+    expect(source).toContain('logs-segmented-tabs')
+    expect(source).toContain('logs-prototype-pagination')
+    expect(source).toContain(':show-default-pagination="false"')
+    expect(source).not.toContain('logs-card app-card')
+    expect(source).not.toContain('data-testid="logs-role-badge"')
   })
 })

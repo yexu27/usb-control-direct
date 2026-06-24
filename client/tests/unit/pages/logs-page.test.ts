@@ -28,14 +28,30 @@ let pinia: Pinia
 
 const DataTableStub = defineComponent({
   name: 'DataTable',
-  props: ['columns', 'data', 'total', 'page', 'pageSize', 'loading', 'error'],
+  props: [
+    'columns',
+    'data',
+    'total',
+    'page',
+    'pageSize',
+    'loading',
+    'error',
+    'showDefaultPagination',
+  ],
   emits: ['page-change', 'page-size-change'],
   setup(props, { slots }) {
-    return () => h('section', { 'data-testid': 'logs-table' }, [
+    return () => h('section', {
+      'data-testid': 'logs-table',
+      'data-show-default-pagination': String(props.showDefaultPagination),
+    }, [
       slots.filters?.(),
       h('div', { 'data-testid': 'columns' }, props.columns.map((column: { label: string }) => column.label).join('|')),
-      props.data.map((row: { id: string; content: string }) =>
-        h('div', { key: row.id, 'data-testid': 'log-row' }, row.content),
+      props.data.map((row: { id: string; content: string; serialNumber?: string; eventType?: string }) =>
+        h('div', { key: row.id, 'data-testid': 'log-row' }, [
+          row.serialNumber != null ? slots.serialNumber?.({ row }) : null,
+          row.eventType != null ? slots.eventType?.({ row }) : null,
+          h('span', row.content),
+        ]),
       ),
     ])
   },
@@ -137,10 +153,64 @@ describe('LogsPage', () => {
     }))
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('设备名称')
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('序列号')
-    expect(wrapper.get('[data-testid="columns"]').text()).toContain('事件类型')
+    expect(wrapper.get('[data-testid="columns"]').text()).toContain('插拔类型')
+    expect(wrapper.get('[data-testid="columns"]').text()).not.toContain('事件类型')
     expect(wrapper.text()).toContain('USB审计日志')
     expect(wrapper.text()).not.toContain('刷新')
     expect(wrapper.text()).not.toContain('重置')
+  })
+
+  it('按确认原型渲染日志管理页框架、筛选栏、表格和分页', async () => {
+    const wrapper = mountPage()
+
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="logs-prototype-shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="logs-tab-usb_audit"]').text()).toBe('USB审计日志')
+    expect(wrapper.find('[data-testid="logs-tab-malware"]').text()).toBe('恶意代码检测日志')
+    expect(wrapper.find('[data-testid="logs-tab-operation"]').text()).toBe('操作日志')
+    expect(wrapper.find('[data-testid="logs-role-badge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="logs-table-shell"]').attributes('data-show-default-pagination')).toBe('false')
+    expect(wrapper.find('[data-testid="logs-prototype-pagination"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('显示 1-1，共 1 条')
+    expect(wrapper.text()).not.toContain('Go to')
+    expect(wrapper.text()).not.toContain('20/page')
+  })
+
+  it('USB审计日志按确认原型展示插拔类型和序列号标签', async () => {
+    const wrapper = mountPage()
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="columns"]').text()).toContain('插拔类型')
+    expect(wrapper.get('[data-testid="columns"]').text()).not.toContain('事件类型')
+    expect(wrapper.find('[data-testid="log-serial-chip"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="log-event-chip"]').exists()).toBe(true)
+  })
+
+  it('操作日志按确认原型只展示时间、用户和内容列', async () => {
+    vi.mocked(queryLogs).mockResolvedValue({
+      success: true,
+      total: 1,
+      usbAuditEntries: [],
+      malwareEntries: [],
+      operationEntries: [{
+        id: 1,
+        opTime: 1_767_225_610,
+        username: 'admin',
+        logCategory: 'user_management',
+        detail: '用户登录，用户名：admin，成功',
+      }],
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|用户|内容')
   })
 
   it('exports selected log type to user selected path', async () => {
