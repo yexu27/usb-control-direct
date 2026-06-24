@@ -1,6 +1,7 @@
 //! T07 系统配置表 CRUD。
 
 use rusqlite::params;
+use tracing::debug;
 
 use crate::error::StorageError;
 use crate::model::SystemConfig;
@@ -9,6 +10,7 @@ use crate::Storage;
 impl Storage {
     /// 获取配置值。
     pub fn config_get(&self, config_key: &str) -> Result<Option<SystemConfig>, StorageError> {
+        debug!(key = %config_key, "读取系统配置");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT config_key, config_value, updated_at FROM system_config WHERE config_key = ?1",
@@ -33,6 +35,7 @@ impl Storage {
         if config_key.is_empty() {
             return Err(StorageError::Validation("config_key 不能为空".into()));
         }
+        debug!(key = %config_key, "写入系统配置");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             tx.execute(

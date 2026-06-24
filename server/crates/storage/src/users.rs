@@ -1,6 +1,7 @@
 //! T08 用户表 CRUD。
 
 use rusqlite::params;
+use tracing::debug;
 
 use crate::error::StorageError;
 use crate::model::{User, UserInsert};
@@ -15,6 +16,7 @@ impl Storage {
         if item.password_hash.is_empty() {
             return Err(StorageError::Validation("password_hash 不能为空".into()));
         }
+        debug!(user = %item.username, "插入用户");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             tx.execute(
@@ -28,6 +30,7 @@ impl Storage {
 
     /// 按用户名查询用户。
     pub fn user_query_by_username(&self, username: &str) -> Result<Option<User>, StorageError> {
+        debug!(user = %username, "查询用户");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, username, password_hash, role, status, is_builtin, login_fail_count, lock_until, created_at, updated_at, password_changed_at \
@@ -52,6 +55,7 @@ impl Storage {
 
     /// 查询全部活跃用户（status != 2）。
     pub fn user_query_active(&self) -> Result<Vec<User>, StorageError> {
+        debug!("查询活跃用户列表");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, username, password_hash, role, status, is_builtin, login_fail_count, lock_until, created_at, updated_at, password_changed_at \
@@ -72,6 +76,7 @@ impl Storage {
 
     /// 更新用户密码。
     pub fn user_update_password(&self, id: i64, password_hash: &str) -> Result<(), StorageError> {
+        debug!(user_id = id, "更新用户密码");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
@@ -87,6 +92,7 @@ impl Storage {
 
     /// 更新登录失败计数和锁定时间。
     pub fn user_update_login_fail(&self, id: i64, fail_count: i32, lock_until: Option<i64>) -> Result<(), StorageError> {
+        debug!(user_id = id, fail_count = fail_count, "更新登录失败计数");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
@@ -102,6 +108,7 @@ impl Storage {
 
     /// 软删除用户（status=2）。
     pub fn user_soft_delete(&self, id: i64) -> Result<(), StorageError> {
+        debug!(user_id = id, "软删除用户");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
