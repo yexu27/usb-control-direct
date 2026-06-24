@@ -1,5 +1,7 @@
 //! USB 安全管理装置端服务入口。
 
+mod logging;
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -46,18 +48,14 @@ const INSTALL_DIR: &str = "/opt/usb-control";
 const SERVICE_NAME: &str = "usb-control";
 /// 策略密钥目录。
 const POLICY_KEY_DIR: &str = "/etc/usb-control/keys";
+/// Rust 服务运行日志目录。
+const LOG_DIR: &str = "/var/log/usb-control";
 /// SM2 授权验签公钥路径。
 const LICENSE_PUBKEY_PATH: &str = "/etc/usb-control/keys/license_verify.pub";
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_target(true)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
-        )
-        .init();
+    let _log_guards = logging::init_logging(std::path::Path::new(LOG_DIR));
 
     info!("USB 安全管理装置端服务启动");
 
