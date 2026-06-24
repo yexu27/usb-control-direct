@@ -3,7 +3,7 @@
 use prost::Message;
 
 use sha2::{Digest, Sha256};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -104,7 +104,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
     match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
         Ok(validation) => {
             if let Err(e) = mgr.apply_upgrade(validation) {
-                warn!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级安装失败");
+                error!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级安装失败");
                 log_operation(
                     ctx,
                     session,
@@ -140,7 +140,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             success_response(ctx.seq_id)
         }
         Err(e) => {
-            warn!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级校验失败");
+            error!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级校验失败");
             log_operation(
                 ctx,
                 session,
@@ -223,13 +223,13 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     }
 
     if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
-        warn!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
+        error!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
         log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
     let now = common::time::now_unix();
     if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
-        warn!("病毒库已升级但更新时间持久化失败");
+        error!("病毒库已升级但更新时间持久化失败");
         log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
     }
