@@ -6,7 +6,7 @@ use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use tracing::debug;
+use tracing::warn;
 
 use crate::exfat::volume::VirtualVolume;
 use crate::types::SectorContent;
@@ -52,7 +52,7 @@ impl WriteBackManager {
         match content {
             SectorContent::FileData { real_path, offset, valid_bytes, blocked } => {
                 if blocked {
-                    debug!("拒绝写入被阻断文件的数据扇区: sector={}", sector);
+                    warn!("拒绝写入被阻断文件的数据扇区: sector={}", sector);
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         format!("文件被策略阻断，禁止写入: sector={}", sector),
