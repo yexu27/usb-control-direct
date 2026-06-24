@@ -1,6 +1,7 @@
 //! T05 USB 审计日志表 CRUD。
 
 use rusqlite::params;
+use tracing::{debug, trace};
 
 use crate::error::StorageError;
 use crate::model::{LogQueryParams, UsbAuditLog, UsbAuditLogInsert};
@@ -15,6 +16,7 @@ impl Storage {
         if item.result.is_empty() {
             return Err(StorageError::Validation("result 不能为空".into()));
         }
+        trace!(event_type = %item.event_type, device_sn = ?item.device_sn, "写入 USB 审计日志");
         self.pool().with_transaction(|tx| {
             tx.execute(
                 "INSERT INTO usb_audit_log (event_time, device_type, interface_type, interface_class, interface_subclass, interface_protocol, device_name, device_sn, vid, pid, event_type, permission, capacity_bytes, file_path, matched_policy, result, fail_reason, detail) \
@@ -89,6 +91,7 @@ impl Storage {
         &self,
         params: &LogQueryParams,
     ) -> Result<(Vec<UsbAuditLog>, i64), StorageError> {
+        debug!(page = params.page, page_size = params.page_size, "分页查询 USB 审计日志");
         self.pool().with_read(|conn| {
             let mut conditions = Vec::new();
             let mut bind_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -204,6 +207,7 @@ impl Storage {
         start_time: i64,
         end_time: i64,
     ) -> Result<i64, StorageError> {
+        debug!(start = start_time, end = end_time, "按时间范围删除 USB 审计日志");
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
                 "DELETE FROM usb_audit_log WHERE event_time >= ?1 AND event_time <= ?2",

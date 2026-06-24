@@ -1,6 +1,7 @@
 //! 策略导入导出 handler（0x0300/0x0302）。
 
 use prost::Message;
+use tracing::{debug, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{CmdExportPolicy, CmdImportPolicy, RspCommon, RspExportPolicy};
@@ -30,6 +31,8 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(code) => return export_error(ctx.seq_id, code, "会话状态异常"),
     };
 
+    debug!(user = %session.username, "收到策略导出请求");
+
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,
         None => {
@@ -39,6 +42,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match policy_service.export_policy() {
         Ok(data) => {
+            info!(user = %session.username, size = data.len(), "策略导出成功");
             log_operation(ctx, session, "policy_management", "export", "策略配置", 0, None);
             let rsp = RspExportPolicy {
                 success: true,
@@ -50,6 +54,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 .unwrap_or_default()
         }
         Err(e) => {
+            warn!(user = %session.username, reason = %e, "策略导出失败");
             let code = e.to_result_code();
             log_operation(ctx, session, "policy_management", "export", "策略配置", 1, Some(&e.to_string()));
             export_error(ctx.seq_id, code, "策略导出失败")
@@ -71,6 +76,8 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
     };
 
+    debug!(user = %session.username, size = cmd.policy_data.len(), "收到策略导入请求");
+
     let policy_service = match ctx.policy_service.as_ref() {
         Some(s) => s,
         None => {
@@ -89,10 +96,12 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
 
     match policy_service.import_policy(&cmd.policy_data) {
         Ok(()) => {
+            info!(user = %session.username, "策略导入成功");
             log_operation(ctx, session, "policy_management", "import", "策略配置", 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(user = %session.username, reason = %e, "策略导入失败");
             let code = e.to_result_code();
             log_operation(ctx, session, "policy_management", "import", "策略配置", 1, Some(&e.to_string()));
             error_response(ctx.seq_id, code, "策略导入失败")

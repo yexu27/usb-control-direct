@@ -10,7 +10,7 @@ use prost::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 
@@ -135,7 +135,7 @@ pub async fn handle_connection(
                         crc_fail_count += 1;
                         warn!(seq_id = header.seq_id, count = crc_fail_count, "CRC 校验失败");
                         if crc_fail_count >= MAX_CRC_FAILURES {
-                            warn!(source_ip = %source_ip, "CRC 连续失败 {} 次，断开连接", MAX_CRC_FAILURES);
+                            error!(source_ip = %source_ip, "CRC 连续失败 {} 次，断开连接", MAX_CRC_FAILURES);
                             return Err(GatewayError::CrcExceeded);
                         }
                         continue;

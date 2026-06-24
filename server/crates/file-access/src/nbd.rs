@@ -9,7 +9,7 @@ use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
 
 use tokio::sync::oneshot;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::exfat::volume::VirtualVolume;
@@ -172,7 +172,7 @@ impl NbdServer {
             let result = unsafe { nbd_ioctl(nbd_fd_copy, NBD_DO_IT, 0) };
             match result {
                 Ok(_) => info!("NBD_DO_IT 正常结束"),
-                Err(e) => warn!("NBD_DO_IT 结束: {}", e),
+                Err(e) => error!(reason = %e, "NBD_DO_IT 异常结束"),
             }
             unsafe {
                 let _ = nbd_ioctl(nbd_fd_copy, NBD_CLEAR_SOCK, 0);
@@ -239,7 +239,7 @@ pub fn run_request_loop(
         let req = match NbdRequest::parse(&request_buf) {
             Some(r) => r,
             None => {
-                warn!("NBD 请求解析失败");
+                error!("NBD 请求解析失败");
                 break;
             }
         };

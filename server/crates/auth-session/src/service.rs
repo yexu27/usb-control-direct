@@ -2,6 +2,8 @@
 //!
 //! 组合 password 模块和 SessionManager，提供登录、锁定、改密码等完整业务接口。
 
+use tracing::{debug, info, warn};
+
 use storage::Storage;
 
 use crate::error::AuthError;
@@ -63,6 +65,8 @@ impl AuthService {
         password: &str,
         source_ip: &str,
     ) -> Result<LoginResult, AuthError> {
+        debug!(user = %username, source_ip = %source_ip, "处理登录请求");
+
         let user = self
             .storage
             .user_query_by_username(username)?
@@ -70,6 +74,7 @@ impl AuthService {
 
         // 已删除用户不可登录
         if user.status == 2 {
+            warn!(user = %username, "已删除用户尝试登录");
             return Err(AuthError::UserOrPasswordError);
         }
 
@@ -77,6 +82,7 @@ impl AuthService {
         let fail_count_base = if let Some(lock_until) = user.lock_until {
             let now = now_unix();
             if now < lock_until {
+                warn!(user = %username, remaining = lock_until - now, "账户锁定中");
                 return Err(AuthError::AccountLocked);
             }
             // 锁定超时自动解除，清零计数
@@ -98,6 +104,11 @@ impl AuthService {
             };
             self.storage
                 .user_update_login_fail(user.id, new_count, lock_until)?;
+            if new_count >= MAX_FAIL_COUNT {
+                warn!(user = %username, count = new_count, "登录失败次数达到阈值，账户锁定");
+            } else {
+                warn!(user = %username, count = new_count, "密码验证失败");
+            }
             return Err(AuthError::UserOrPasswordError);
         }
 
@@ -112,6 +123,8 @@ impl AuthService {
             .session_mgr
             .create_session(user.id, &user.username, user.role, source_ip);
 
+        info!(user = %username, role = user.role, "登录验证成功");
+
         Ok(LoginResult {
             token,
             username: user.username,
@@ -121,8 +134,10 @@ impl AuthService {
 
     /// 用户登出。
     pub fn logout(&self, token: &str) -> Result<SessionInfo, AuthError> {
+        debug!("处理登出请求");
         let info = self.session_mgr.validate_token(token)?;
         self.session_mgr.remove_token(token);
+        info!(user = %info.username, "登出成功");
         Ok(info)
     }
 
@@ -144,13 +159,17 @@ impl AuthService {
     ) -> Result<SessionInfo, AuthError> {
         let info = self.session_mgr.validate_token(token)?;
 
+        debug!(user = %info.username, "处理密码修改请求");
+
         // 校验确认密码
         if new_password != confirm_password {
+            debug!(user = %info.username, "确认密码不一致");
             return Err(AuthError::PasswordConfirmMismatch);
         }
 
         // 校验新密码复杂度
         if !password::validate_password_complexity(new_password) {
+            debug!(user = %info.username, "新密码复杂度不满足要求");
             return Err(AuthError::PasswordComplexity);
         }
 
@@ -162,6 +181,7 @@ impl AuthService {
 
         let old_matched = password::verify_password(old_password, &user.password_hash)?;
         if !old_matched {
+            warn!(user = %info.username, "旧密码验证失败");
             return Err(AuthError::OldPasswordError);
         }
 
@@ -171,6 +191,8 @@ impl AuthService {
 
         // 使该用户所有 token 失效
         self.session_mgr.invalidate_user_sessions(user.id);
+
+        info!(user = %info.username, "密码修改成功");
 
         Ok(info)
     }
@@ -187,7 +209,10 @@ impl AuthService {
 
     /// 查询全部活跃用户列表。
     pub fn list_users(&self) -> Result<Vec<storage::model::User>, AuthError> {
-        Ok(self.storage.user_query_active()?)
+        debug!("查询活跃用户列表");
+        let users = self.storage.user_query_active()?;
+        debug!(count = users.len(), "活跃用户列表查询成功");
+        Ok(users)
     }
 
     /// 新建用户。
@@ -204,6 +229,8 @@ impl AuthService {
         password_str: &str,
         confirm_password: &str,
     ) -> Result<i64, AuthError> {
+        debug!(user = %username, role = role, "处理创建用户请求");
+
         if !validate_username(username) {
             return Err(AuthError::InvalidUsername);
         }
@@ -228,6 +255,7 @@ impl AuthService {
         }
 
         let hash = password::hash_password(password_str)?;
+        info!(user = %username, role = role, "用户创建成功");
         let insert = storage::model::UserInsert {
             username: username.to_string(),
             password_hash: hash,
@@ -248,6 +276,8 @@ impl AuthService {
         target_username: &str,
         current_user_id: i64,
     ) -> Result<(), AuthError> {
+        debug!(target_user = %target_username, "处理删除用户请求");
+
         let user = self
             .storage
             .user_query_by_username(target_username)?
@@ -268,6 +298,8 @@ impl AuthService {
         self.storage.user_soft_delete(user.id)?;
         self.session_mgr.invalidate_user_sessions(user.id);
 
+        info!(target_user = %target_username, "用户删除成功");
+
         Ok(())
     }
 
@@ -283,6 +315,8 @@ impl AuthService {
         new_password: &str,
         confirm_password: &str,
     ) -> Result<(), AuthError> {
+        debug!(target_user = %target_username, "处理重置密码请求");
+
         if new_password != confirm_password {
             return Err(AuthError::PasswordConfirmMismatch);
         }
@@ -304,6 +338,8 @@ impl AuthService {
         self.storage.user_update_password(user.id, &new_hash)?;
         self.storage.user_update_login_fail(user.id, 0, None)?;
         self.session_mgr.invalidate_user_sessions(user.id);
+
+        info!(target_user = %target_username, "密码重置成功");
 
         Ok(())
     }

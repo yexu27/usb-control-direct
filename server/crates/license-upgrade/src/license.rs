@@ -3,6 +3,8 @@
 //! 定义授权校验 trait 和 mock 实现。生产环境通过 trait 注入实际校验逻辑，
 //! 测试时使用 [`MockLicenseValidator`] 进行基本格式和有效期校验。
 
+use tracing::{debug, info, warn};
+
 use chrono::Utc;
 
 use crate::error::LicenseUpgradeError;
@@ -49,6 +51,8 @@ impl LicenseValidator for MockLicenseValidator {
         license_data: &[u8],
         machine_code: &str,
     ) -> Result<LicenseInfo, LicenseUpgradeError> {
+        debug!("开始校验授权文件");
+
         let text = std::str::from_utf8(license_data)
             .map_err(|_| LicenseUpgradeError::LicenseFormatError)?;
 
@@ -65,6 +69,7 @@ impl LicenseValidator for MockLicenseValidator {
             .trim();
 
         if file_machine_code != machine_code {
+            warn!(reason = "机器码不匹配", "授权文件校验失败");
             return Err(LicenseUpgradeError::LicenseVerifyFailed(
                 "机器码不匹配".into(),
             ));
@@ -76,9 +81,11 @@ impl LicenseValidator for MockLicenseValidator {
 
         let now = Utc::now().timestamp();
         if expire_time <= now {
+            warn!(reason = "授权已过期", "授权文件校验失败");
             return Err(LicenseUpgradeError::LicenseExpired);
         }
 
+        info!(expire = expire_time, "授权文件校验成功");
         Ok(LicenseInfo { expire_time })
     }
 }

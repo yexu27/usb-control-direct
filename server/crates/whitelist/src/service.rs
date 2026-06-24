@@ -8,7 +8,7 @@ use std::sync::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 
 use storage::model::{UsbWhitelist, UsbWhitelistInsert, WhitelistCacheSnapshotEntry};
 use storage::{Storage, StorageError};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::error::WhitelistError;
 
@@ -73,12 +73,15 @@ impl WhitelistManager {
     /// - 成功时返回初始化完成的 [`WhitelistManager`]；
     /// - 数据库读取失败时返回 [`WhitelistError`]。
     pub fn new(storage: Storage) -> Result<Self, WhitelistError> {
+        info!("初始化白名单管理器");
         let manager = WhitelistManager {
             storage,
             mutation_lock: Mutex::new(()),
             cache: RwLock::new(HashMap::new()),
         };
         manager.reload_cache()?;
+        let cache_size = manager.cache.read().map(|c| c.len()).unwrap_or(0);
+        info!(cache_size, "白名单缓存加载完成");
         Ok(manager)
     }
 
@@ -142,6 +145,7 @@ impl WhitelistManager {
     /// - 在白名单中时返回 `Some(WhitelistResult)`，携带行 ID 和权限值；
     /// - 不在白名单中时返回 `None`。
     pub fn is_whitelisted(&self, sn: &str) -> Option<WhitelistResult> {
+        trace!(sn = %sn, "白名单查询");
         if self.mutation_lock.is_poisoned() {
             return None;
         }
@@ -291,6 +295,7 @@ impl WhitelistManager {
     /// - 存在时返回 `Some(UsbWhitelist)`；不存在时返回 `None`；
     ///   存储层失败时返回 [`WhitelistError`]。
     pub fn query_by_sn(&self, sn: &str) -> Result<Option<UsbWhitelist>, WhitelistError> {
+        trace!(sn = %sn, "白名单查询（数据库）");
         if sn.is_empty() {
             return Err(WhitelistError::SerialNumberEmpty);
         }

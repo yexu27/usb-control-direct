@@ -1,5 +1,7 @@
 //! 日志多条件分页查询。
 
+use tracing::debug;
+
 use crate::error::AuditError;
 
 /// 半年时间常量（秒）：180 天。
@@ -44,6 +46,7 @@ pub fn validate_delete_time(end_time: i64) -> Result<(), AuditError> {
     let now = crate::audit::now_unix();
     let six_months_ago = now - SIX_MONTHS_SECS;
     if end_time > six_months_ago {
+        debug!("日志清理时间范围校验失败，违反半年保留期");
         return Err(AuditError::RetentionViolation);
     }
     Ok(())

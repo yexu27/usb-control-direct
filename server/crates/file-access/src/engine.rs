@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use log_audit::AuditService;
 use storage::Storage;
@@ -112,6 +112,7 @@ impl DeviceMapper for FileAccessEngine {
             let mount_path = Path::new(&ctx.mount_path);
 
             // 1. 加载策略快照
+            debug!("开始加载文件访问策略快照");
             let snapshot = load_policy_snapshot(&self.storage, ctx.permission);
             info!(
                 "策略快照: exec={}, blacklist={}, autorun={}, permission={}",
@@ -122,6 +123,7 @@ impl DeviceMapper for FileAccessEngine {
             );
 
             // 2. 构建受控文件树
+            debug!("开始构建文件树: {}", ctx.mount_path);
             let tree = build_file_tree(mount_path, &ctx.scan_result.infected_files);
             info!("文件树构建完成: {} 个根节点", tree.len());
 
@@ -136,6 +138,7 @@ impl DeviceMapper for FileAccessEngine {
             // 5. 启动 NBD 服务
             let nbd_device_path = PathBuf::from(&self.nbd_device);
             let mut nbd_server = NbdServer::new(&nbd_device_path);
+            debug!("NBD 设备开始服务: {}", self.nbd_device);
             let user_fd = nbd_server
                 .start(total_sectors)
                 .map_err(|e| MapError::NbdFailed(e.to_string()))?;

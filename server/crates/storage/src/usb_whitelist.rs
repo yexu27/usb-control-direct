@@ -1,6 +1,7 @@
 //! T01 白名单表 CRUD。
 
 use rusqlite::params;
+use tracing::debug;
 
 use crate::error::StorageError;
 use crate::model::{UsbWhitelist, UsbWhitelistInsert};
@@ -12,6 +13,7 @@ impl Storage {
         if item.serial_number.is_empty() {
             return Err(StorageError::Validation("serial_number 不能为空".into()));
         }
+        debug!(sn = %item.serial_number, "插入白名单设备");
         let now = crate::now_unix();
         self.pool().with_transaction(|tx| {
             tx.execute(
@@ -60,6 +62,7 @@ impl Storage {
 
     /// 查询全部白名单。
     pub fn whitelist_query_all(&self) -> Result<Vec<UsbWhitelist>, StorageError> {
+        debug!("查询白名单全量列表");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, serial_number, vid, pid, device_name, capacity_bytes, device_type, description, permission, add_method, created_at \
@@ -90,6 +93,7 @@ impl Storage {
 
     /// 更新白名单条目（权限和描述）。
     pub fn whitelist_update(&self, id: i64, permission: i32, description: Option<&str>) -> Result<(), StorageError> {
+        debug!(id = id, permission = permission, "更新白名单设备");
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
                 "UPDATE usb_whitelist SET permission = ?1, description = ?2 WHERE id = ?3",
@@ -104,6 +108,7 @@ impl Storage {
 
     /// 删除白名单条目。
     pub fn whitelist_delete(&self, id: i64) -> Result<(), StorageError> {
+        debug!(id = id, "删除白名单设备");
         self.pool().with_transaction(|tx| {
             let affected = tx.execute("DELETE FROM usb_whitelist WHERE id = ?1", params![id])?;
             if affected == 0 {

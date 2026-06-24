@@ -15,6 +15,8 @@
 //! 3. 机器码匹配
 //! 4. 有效期检查
 
+use tracing::{debug, info, warn};
+
 use chrono::Utc;
 use serde::Deserialize;
 
@@ -51,6 +53,7 @@ impl ProductionLicenseValidator {
 
     /// 从文件加载 SM2 公钥。
     pub fn from_key_file(path: &std::path::Path) -> Result<Self, LicenseUpgradeError> {
+        info!(path = %path.display(), "加载授权公钥");
         let key_data = std::fs::read(path).map_err(|e| {
             LicenseUpgradeError::LicenseVerifyFailed(format!("读取公钥文件失败: {}", e))
         })?;
@@ -64,6 +67,8 @@ impl LicenseValidator for ProductionLicenseValidator {
         license_data: &[u8],
         machine_code: &str,
     ) -> Result<LicenseInfo, LicenseUpgradeError> {
+        debug!("开始验证授权签名");
+
         if license_data.len() < SIG_LEN_PREFIX + 1 {
             return Err(LicenseUpgradeError::LicenseFormatError);
         }
@@ -84,10 +89,13 @@ impl LicenseValidator for ProductionLicenseValidator {
         let pk_hex = hex::encode(&self.verify_key);
         let verifier = smcrypto::sm2::Verify::new(&pk_hex);
         if !verifier.verify_raw(payload_bytes, signature) {
+            warn!("授权签名验证失败");
             return Err(LicenseUpgradeError::LicenseVerifyFailed(
                 "SM2 签名验证失败".into(),
             ));
         }
+
+        debug!("授权签名验证通过");
 
         let payload: LicensePayload = serde_json::from_slice(payload_bytes)
             .map_err(|_| LicenseUpgradeError::LicenseFormatError)?;
@@ -102,6 +110,8 @@ impl LicenseValidator for ProductionLicenseValidator {
         if payload.expire_time <= now {
             return Err(LicenseUpgradeError::LicenseExpired);
         }
+
+        info!(expire = payload.expire_time, "授权文件校验成功");
 
         Ok(LicenseInfo {
             expire_time: payload.expire_time,

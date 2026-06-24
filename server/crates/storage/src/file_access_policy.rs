@@ -1,6 +1,7 @@
 //! T03 文件访问控制开关表 CRUD。
 
 use rusqlite::params;
+use tracing::debug;
 
 use crate::error::StorageError;
 use crate::model::FileAccessPolicy;
@@ -9,6 +10,7 @@ use crate::Storage;
 impl Storage {
     /// 查询指定策略开关。
     pub fn policy_query(&self, policy_key: &str) -> Result<Option<FileAccessPolicy>, StorageError> {
+        debug!(key = %policy_key, "查询文件策略配置");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT policy_key, enabled, updated_at FROM file_access_policy WHERE policy_key = ?1",
@@ -30,6 +32,7 @@ impl Storage {
 
     /// 查询全部策略开关。
     pub fn policy_query_all(&self) -> Result<Vec<FileAccessPolicy>, StorageError> {
+        debug!("查询全部策略开关");
         self.pool().with_read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT policy_key, enabled, updated_at FROM file_access_policy ORDER BY policy_key",
@@ -50,6 +53,7 @@ impl Storage {
         if policy_key.is_empty() {
             return Err(StorageError::Validation("policy_key 不能为空".into()));
         }
+        debug!(key = %policy_key, enabled = enabled, "更新文件策略开关");
         let now = crate::now_unix();
         let enabled_int = if enabled { 1 } else { 0 };
         self.pool().with_transaction(|tx| {

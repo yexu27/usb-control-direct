@@ -1,6 +1,7 @@
 //! CMD_AUTH_STATUS_QUERY (0x0003) handler。
 
 use prost::Message;
+use tracing::debug;
 
 use common::proto::{CmdAuthStatusQuery, RspAuthStatus};
 
@@ -16,9 +17,12 @@ const RSP_AUTH_STATUS: u32 = 0x0004;
 /// 此 cmd 在中间件白名单中，handler 自行校验 session_token。
 /// 返回当前设备授权状态、过期时间和设备描述。
 pub fn handle_auth_status(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到授权状态查询请求");
+
     let cmd = match CmdAuthStatusQuery::decode(payload) {
         Ok(c) => c,
         Err(_) => {
+            debug!("授权状态查询 protobuf 解码失败");
             return make_rsp(ctx.seq_id, false, 0, "", "unauthorized");
         }
     };
@@ -34,6 +38,7 @@ pub fn handle_auth_status(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     }
 
     if !token_valid {
+        debug!("授权状态查询 token 无效");
         return make_rsp(ctx.seq_id, false, 0, "", "failed");
     }
 

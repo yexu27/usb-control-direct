@@ -3,6 +3,7 @@
 //! 与 `docs/architecture/08-数据库设计.md` 逐字对齐。
 
 use rusqlite::Connection;
+use tracing::debug;
 
 use crate::error::StorageError;
 
@@ -25,6 +26,8 @@ fn set_schema_version(conn: &Connection, version: i32) -> Result<(), StorageErro
 ///
 /// 仅在 user_version == 0 时执行（首次建库）。
 pub fn migrate(conn: &Connection) -> Result<(), StorageError> {
+    debug!("开始数据库 schema 迁移");
+
     let version = get_schema_version(conn)?;
     if version >= CURRENT_SCHEMA_VERSION {
         return Ok(());
@@ -36,11 +39,13 @@ pub fn migrate(conn: &Connection) -> Result<(), StorageError> {
         set_schema_version(conn, CURRENT_SCHEMA_VERSION)?;
     }
 
+    debug!("数据库 schema 迁移完成");
     Ok(())
 }
 
 /// 创建 T01-T11 全部表和索引。
 fn create_all_tables(conn: &Connection) -> Result<(), StorageError> {
+    debug!("创建/检查全部数据表和索引 (T01-T11)");
     conn.execute_batch(
         "
         -- T01 白名单表
@@ -209,6 +214,8 @@ fn create_all_tables(conn: &Connection) -> Result<(), StorageError> {
 
 /// 插入初始化数据。
 fn insert_initial_data(conn: &Connection) -> Result<(), StorageError> {
+    debug!("插入默认初始数据");
+
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()

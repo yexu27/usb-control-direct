@@ -37,6 +37,7 @@ pub struct RealMountOps;
 
 impl MountOperations for RealMountOps {
     fn is_mounted(&self, dev_path: &str) -> Result<bool, UsbIdentifyError> {
+        debug!(dev = %dev_path, "检查设备是否已挂载");
         let mounts = std::fs::read_to_string("/proc/mounts")
             .map_err(|e| UsbIdentifyError::Internal(format!("读取 /proc/mounts 失败: {}", e)))?;
         Ok(mounts.lines().any(|line| {

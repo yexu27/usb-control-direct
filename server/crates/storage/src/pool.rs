@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 use rusqlite::{Connection, OpenFlags};
+use tracing::debug;
 
 use crate::StorageError;
 
@@ -44,6 +45,8 @@ impl Pool {
             .ok_or_else(|| StorageError::Validation("数据库路径包含非 UTF-8 字符".into()))?
             .to_owned();
 
+        debug!(path = %path_str, "打开数据库");
+
         let pool_size = if read_pool_size == 0 {
             DEFAULT_READ_POOL_SIZE
         } else {
@@ -59,6 +62,8 @@ impl Pool {
             let conn = Self::open_read_connection(&path_str)?;
             read_conns.push(conn);
         }
+
+        debug!("数据库连接池初始化完成");
 
         Ok(Self {
             write_conn: Mutex::new(write_conn),
@@ -173,6 +178,7 @@ impl Pool {
         let conn = Connection::open(path)?;
         // WAL 模式提升并发读写性能
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        debug!("启用 WAL 模式");
         // 锁等待超时 5000ms，避免写冲突时立即报错
         conn.execute_batch("PRAGMA busy_timeout=5000;")?;
         // 启用自动清理，保持数据库文件紧凑（须在建表前设置）

@@ -88,7 +88,7 @@ impl UsbStateMachine {
             // CLASSIFYING + ClassifiedAsRejected → REJECTED
             (UsbDeviceState::Classifying, UsbDeviceEvent::ClassifiedAsRejected { reason }) => {
                 self.state = UsbDeviceState::Rejected;
-                warn!(reason = %reason, "U 盘分类拒绝");
+                info!(reason = %reason, "U 盘分类拒绝");
                 Ok(TransitionResult {
                     new_state: UsbDeviceState::Rejected,
                 })

@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use crate::autorun;
 use crate::exec_detect;
@@ -26,6 +26,8 @@ pub const VIRUS_PREFIX: &str = "[病毒禁止访问]";
 /// 返回:
 ///   - 根目录下的受控文件节点列表。
 pub fn build_file_tree(mount_path: &Path, infected_files: &[String]) -> Vec<ControlledEntry> {
+    debug!("开始遍历目录: {}", mount_path.display());
+
     let infected_set: HashSet<String> = infected_files
         .iter()
         .map(|p| normalize_path(p))
@@ -34,7 +36,9 @@ pub fn build_file_tree(mount_path: &Path, infected_files: &[String]) -> Vec<Cont
     // 先解析 autorun.inf（如果存在）
     let autorun_targets = parse_root_autorun(mount_path);
 
-    build_directory(mount_path, mount_path, &infected_set, &autorun_targets, true)
+    let roots = build_directory(mount_path, mount_path, &infected_set, &autorun_targets, true);
+    info!(root_count = roots.len(), "文件树构建完成");
+    roots
 }
 
 /// 递归构建目录。

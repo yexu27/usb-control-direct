@@ -1,6 +1,7 @@
 //! T10 操作日志表 CRUD。
 
 use rusqlite::params;
+use tracing::{debug, trace};
 
 use crate::error::StorageError;
 use crate::model::{LogQueryParams, OperationLog, OperationLogInsert};
@@ -15,6 +16,7 @@ impl Storage {
         if item.log_type.is_empty() {
             return Err(StorageError::Validation("log_type 不能为空".into()));
         }
+        trace!(user = %item.username, action = ?item.action_type, "写入操作日志");
         self.pool().with_transaction(|tx| {
             tx.execute(
                 "INSERT INTO operation_log (op_time, username, role, log_type, action_type, target, before_value, after_value, related_file, related_version, result, fail_reason, source_ip, app_version, session_id, request_id, detail) \
@@ -87,6 +89,7 @@ impl Storage {
         &self,
         params: &LogQueryParams,
     ) -> Result<(Vec<OperationLog>, i64), StorageError> {
+        debug!(page = params.page, page_size = params.page_size, "分页查询操作日志");
         self.pool().with_read(|conn| {
             let mut conditions = Vec::new();
             let mut bind_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -206,6 +209,7 @@ impl Storage {
         start_time: i64,
         end_time: i64,
     ) -> Result<i64, StorageError> {
+        debug!(start = start_time, end = end_time, "按时间范围删除操作日志");
         self.pool().with_transaction(|tx| {
             let affected = tx.execute(
                 "DELETE FROM operation_log WHERE op_time >= ?1 AND op_time <= ?2",

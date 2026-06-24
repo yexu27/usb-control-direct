@@ -6,7 +6,7 @@
 //! - 任意状态下拔出设备均进入 MouseRemoved。
 
 use common::types::MouseState;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::HidAccessError;
 
@@ -64,6 +64,7 @@ impl MouseAdmission {
         &mut self,
         event: MouseEvent,
     ) -> Result<MouseTransitionResult, HidAccessError> {
+        debug!("鼠标状态机处理事件");
         // 任意状态下拔出设备，直接迁移到 MouseRemoved。
         if event == MouseEvent::Unplug {
             info!(state = ?self.state, "鼠标已拔出，迁移到 MouseRemoved");
@@ -92,15 +93,18 @@ impl MouseAdmission {
         &mut self,
         event: MouseEvent,
     ) -> Result<MouseTransitionResult, HidAccessError> {
+        let old_state = self.state;
         match event {
             MouseEvent::MapSuccess => {
-                info!("鼠标映射成功，迁移到 MouseMapped");
                 self.state = MouseState::MouseMapped;
+                debug!(from = ?old_state, to = ?self.state, "鼠标状态转换");
+                info!("鼠标映射成功，迁移到 MouseMapped");
                 Ok(MouseTransitionResult::Transitioned(MouseState::MouseMapped))
             }
             MouseEvent::MapFailed => {
-                warn!("鼠标映射失败，迁移到 MouseRejected");
                 self.state = MouseState::MouseRejected;
+                debug!(from = ?old_state, to = ?self.state, "鼠标状态转换");
+                warn!("鼠标映射失败，迁移到 MouseRejected");
                 Ok(MouseTransitionResult::Transitioned(
                     MouseState::MouseRejected,
                 ))

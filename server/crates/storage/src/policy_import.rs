@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use rusqlite::params;
+use tracing::{debug, info};
 
 use crate::error::StorageError;
 use crate::extension::normalize_extension;
@@ -38,12 +39,19 @@ impl Storage {
         policies: &[(String, i32)],
         blacklist: &[(String, Option<String>, i32)],
     ) -> Result<Vec<WhitelistCacheSnapshotEntry>, StorageError> {
+        info!("开始策略数据导入事务");
+
         validate_whitelist(whitelist)?;
         validate_policies(policies)?;
         let normalized_blacklist = validate_and_normalize_blacklist(blacklist)?;
+
+        debug!(whitelist_count = whitelist.len(), "导入白名单条目");
+        debug!(policy_count = policies.len(), "导入策略条目");
+        debug!(blacklist_count = normalized_blacklist.len(), "导入黑名单条目");
+
         let now = crate::now_unix();
 
-        self.pool().with_transaction(|conn| {
+        let whitelist_snapshot = self.pool().with_transaction(|conn| {
             conn.execute("DELETE FROM usb_whitelist", [])?;
             let mut whitelist_snapshot = Vec::with_capacity(whitelist.len());
             {
@@ -101,8 +109,12 @@ impl Storage {
                 }
             }
 
+            debug!("策略导入事务提交");
             Ok(whitelist_snapshot)
-        })
+        })?;
+
+        info!("策略数据导入事务完成");
+        Ok(whitelist_snapshot)
     }
 }
 

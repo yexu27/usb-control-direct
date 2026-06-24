@@ -7,6 +7,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use tracing::{debug, trace};
+
 use crate::types::ExecFileType;
 
 /// PE 特征字段中 IMAGE_FILE_DLL 标志位。
@@ -29,15 +31,26 @@ pub fn detect_exec_type(path: &Path) -> Option<ExecFileType> {
 
     // ELF: \x7fELF
     if header[0] == 0x7F && header[1] == b'E' && header[2] == b'L' && header[3] == b'F' {
+        debug!(file = %path.display(), exec_type = "ELF", "检测到可执行文件");
         return Some(ExecFileType::Elf);
     }
 
     // PE: MZ 头
     if header[0] != b'M' || header[1] != b'Z' {
+        trace!(file = %path.display(), "文件非可执行类型");
         return None;
     }
 
-    detect_pe(&mut file)
+    let result = detect_pe(&mut file);
+    match &result {
+        Some(exec_type) => {
+            debug!(file = %path.display(), exec_type = ?exec_type, "检测到可执行文件");
+        }
+        None => {
+            trace!(file = %path.display(), "文件非可执行类型");
+        }
+    }
+    result
 }
 
 /// 从 MZ 头继续检测 PE 签名和 DLL 标志。

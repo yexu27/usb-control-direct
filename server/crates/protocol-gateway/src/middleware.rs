@@ -4,7 +4,7 @@
 //! 权限中间件根据 Router 注册的角色声明校验当前会话角色。
 
 use prost::Message;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
@@ -71,7 +71,10 @@ pub fn check_token(msg_type: u32, payload: &[u8], auth_service: &AuthService) ->
             auth_service.refresh_token(&token);
             TokenResult::Authenticated(info)
         }
-        Err(_) => TokenResult::Failed(ResultCode::Unauthenticated),
+        Err(e) => {
+            debug!(reason = %e, "token 校验失败");
+            TokenResult::Failed(ResultCode::Unauthenticated)
+        }
     }
 }
 

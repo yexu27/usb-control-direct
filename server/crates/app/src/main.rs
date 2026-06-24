@@ -52,6 +52,7 @@ const LICENSE_PUBKEY_PATH: &str = "/etc/usb-control/keys/license_verify.pub";
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
+        .with_target(true)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info".into()),

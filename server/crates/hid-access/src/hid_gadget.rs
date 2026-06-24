@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tracing::info;
+use tracing::{error, info};
 
 use crate::error::HidAccessError;
 
@@ -59,6 +59,7 @@ fn write_configfs_attr(
 ) -> Result<(), HidAccessError> {
     let path = dir.join(filename);
     fs::write(&path, value).map_err(|e| {
+        error!(path = %path.display(), reason = %e, "configfs 属性写入失败");
         HidAccessError::Internal(format!(
             "写 configfs {} 失败: {}",
             path.display(),

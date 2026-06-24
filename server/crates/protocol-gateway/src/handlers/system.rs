@@ -3,7 +3,7 @@
 use prost::Message;
 
 use sha2::{Digest, Sha256};
-use tracing::warn;
+use tracing::{debug, error, info, warn};
 
 use common::code::ResultCode;
 use common::proto::{
@@ -24,6 +24,8 @@ const RSP_COMMON: u32 = 0xFF00;
 
 /// CMD_GET_SYSTEM_INFO (0x0500) handler。
 pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
+    debug!("收到系统信息查询请求");
+
     let _cmd = match CmdGetSystemInfo::decode(payload) {
         Ok(c) => c,
         Err(_) => {
@@ -76,6 +78,8 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
         Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
     };
 
+    debug!(user = %session.username, target_version = %cmd.target_version, "收到系统升级请求");
+
     let mgr = match ctx.system_upgrade_mgr.as_ref() {
         Some(m) => m,
         None => {
@@ -100,6 +104,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
     match mgr.validate_upgrade(cmd.upgrade_data, &cmd.target_version, &current_version) {
         Ok(validation) => {
             if let Err(e) = mgr.apply_upgrade(validation) {
+                error!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级安装失败");
                 log_operation(
                     ctx,
                     session,
@@ -117,6 +122,8 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                 return error_response(ctx.seq_id, ResultCode::InternalError, "版本号持久化失败");
             }
 
+            info!(user = %session.username, target_version = %cmd.target_version, "系统升级成功");
+
             log_operation(
                 ctx,
                 session,
@@ -133,6 +140,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            error!(user = %session.username, target_version = %cmd.target_version, reason = %e, "系统升级校验失败");
             log_operation(
                 ctx,
                 session,
@@ -160,6 +168,8 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         Ok(s) => s,
         Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
     };
+
+    debug!(user = %session.username, target_version = %cmd.target_version, "收到病毒库升级请求");
 
     let mgr = match ctx.virusdb_upgrade_mgr.as_ref() {
         Some(m) => m,
@@ -213,16 +223,18 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     }
 
     if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
-        warn!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
+        error!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
         log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
     let now = common::time::now_unix();
     if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
-        warn!("病毒库已升级但更新时间持久化失败");
+        error!("病毒库已升级但更新时间持久化失败");
         log_operation(ctx, session, "system_management", "virusdb_upgrade", &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
     }
+
+    info!(user = %session.username, target_version = %cmd.target_version, "病毒库升级成功");
 
     log_operation(
         ctx,
@@ -250,6 +262,8 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
         Err(code) => return error_response(ctx.seq_id, code, "会话状态异常"),
     };
 
+    debug!("收到设备描述更新请求");
+
     if !validate_device_desc(&cmd.description) {
         return error_response(
             ctx.seq_id,
@@ -267,6 +281,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
 
     match storage.config_set("device_description", &cmd.description) {
         Ok(()) => {
+            info!(user = %session.username, desc = %cmd.description, "设备描述更新成功");
             log_operation(
                 ctx,
                 session,
@@ -279,6 +294,7 @@ pub fn handle_update_device_desc(ctx: &RequestContext, payload: &[u8]) -> Vec<u8
             success_response(ctx.seq_id)
         }
         Err(e) => {
+            warn!(user = %session.username, reason = %e, "设备描述更新失败");
             log_operation(
                 ctx,
                 session,

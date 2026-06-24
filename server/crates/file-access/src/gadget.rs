@@ -124,7 +124,7 @@ impl GadgetManager {
     /// 配置 f_mass_storage。
     pub fn configure_mass_storage(
         &self,
-        nbd_device: &Path,
+        _nbd_device: &Path,
         readonly: bool,
     ) -> Result<(), std::io::Error> {
         let function = self.gadget_path.join("functions/mass_storage.usb0");
