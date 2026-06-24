@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use tokio::sync::{mpsc, watch};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
 
@@ -204,11 +204,14 @@ impl DeviceOrchestrator {
         let whitelist_entry = match self.whitelist.is_whitelisted(&serial) {
             Some(e) => e,
             None => {
+                debug!(serial = %serial, "U 盘不在白名单中");
                 self.write_audit_storage(&info, "whitelist_denied", "blocked",
                     Some("不在白名单"));
                 return;
             }
         };
+
+        debug!(serial = %serial, permission = %whitelist_entry.permission, "U 盘在白名单中");
 
         let nbd_index = match self.nbd_pool.acquire() {
             Some(idx) => idx,
@@ -219,6 +222,8 @@ impl DeviceOrchestrator {
                 return;
             }
         };
+
+        debug!(serial = %serial, nbd = nbd_index, "NBD 设备已分配");
 
         // 注册 ActiveSession
         let (cancel_tx, mut cancel_rx) = watch::channel(false);
