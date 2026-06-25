@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import {
   LOG_TABS,
   OPERATION_LOG_CATEGORY_OPTIONS,
@@ -98,9 +99,7 @@ const visiblePages = computed(() => {
 })
 const showPaginationEllipsis = computed(() => visiblePages.value.at(-1) !== totalPages.value)
 
-onMounted(() => {
-  void loadLogs()
-})
+useDeviceBackedPageRefresh(loadLogs)
 
 function createDefaultRange(): [Date, Date] {
   const range = getDefaultLogRange()

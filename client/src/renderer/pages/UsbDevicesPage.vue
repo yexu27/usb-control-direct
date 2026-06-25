@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import AddWhitelistDialog from '@/components/whitelist/AddWhitelistDialog.vue'
 import EditWhitelistDialog from '@/components/whitelist/EditWhitelistDialog.vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { getConnectedDevices } from '@/services/device-service'
 import { listManagementUsbStorageDevices } from '@/services/management-usb-service'
 import { useConnectionStore } from '@/stores/connection'
@@ -131,9 +132,7 @@ watch([() => rows.value.length, pageSize], ([total, size]) => {
   page.value = Math.min(page.value, Math.max(1, Math.ceil(total / size)))
 })
 
-onMounted(() => {
-  void refreshWhitelist()
-})
+useDeviceBackedPageRefresh(refreshWhitelist)
 
 async function refreshWhitelist(): Promise<void> {
   if (!connection.isConnected) {

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import AddBlacklistDialog from '@/components/file-policy/AddBlacklistDialog.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore, type FilePolicyKey } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
@@ -40,9 +41,7 @@ const pageRows = computed(() => {
   return blacklist.value.slice(start, start + pageSize.value)
 })
 
-onMounted(() => {
-  void refreshPolicy()
-})
+useDeviceBackedPageRefresh(refreshPolicy)
 
 function isPending(key: string): boolean {
   return filePolicy.pendingKeys.has(key)

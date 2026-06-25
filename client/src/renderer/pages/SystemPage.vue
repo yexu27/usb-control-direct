@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, onMounted } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { getMachineCode, uploadLicense } from '@/services/auth-service'
 import {
   getSystemInfo,
@@ -71,9 +72,7 @@ async function waitAtLeast(startedAt: number, minimumMs = 3_000): Promise<void> 
   }
 }
 
-onMounted(() => {
-  void loadSystemInfo()
-})
+useDeviceBackedPageRefresh(loadSystemInfo)
 
 onUnmounted(() => {
   if (qrcodeUrl.value !== '') {

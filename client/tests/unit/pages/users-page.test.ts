@@ -14,6 +14,7 @@ import {
 } from '../../../src/renderer/services/user-service'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { emitPageRefresh, resetPageRefreshListenersForTest } from '../../../src/renderer/services/page-refresh-events'
 import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('../../../src/renderer/services/user-service', () => ({
@@ -122,6 +123,7 @@ describe('UsersPage', () => {
     setActivePinia(pinia)
     seedStores()
     vi.clearAllMocks()
+    resetPageRefreshListenersForTest()
     vi.mocked(listUsers).mockResolvedValue({
       users: [
         { username: 'admin', role: 'admin', status: 'active', isBuiltin: true, createdAt: 0 },
@@ -205,6 +207,17 @@ describe('UsersPage', () => {
     expect(wrapper.get('[data-testid="create-user-error"]').text()).toContain('用户名已存在')
     expect(wrapper.find('[data-testid="create-user-submit"]').exists()).toBe(true)
     expect(showSuccessToast).not.toHaveBeenCalledWith('用户创建成功')
+  })
+
+  it('重连成功事件后重新读取用户列表', async () => {
+    mountPage()
+    await flushPromises()
+    vi.mocked(listUsers).mockClear()
+
+    emitPageRefresh('reconnect')
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenCalledWith('token')
   })
 
   it('deletes non-builtin users only after confirmation', async () => {

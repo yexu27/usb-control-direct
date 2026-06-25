@@ -15,6 +15,7 @@ import {
 } from '../../../src/renderer/services/system-service'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { emitPageRefresh, resetPageRefreshListenersForTest } from '../../../src/renderer/services/page-refresh-events'
 import { parseSystemUpgradeVersion, parseVirusdbUpgradeVersion } from '../../../src/renderer/utils/upgrade-package'
 import { showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
@@ -100,6 +101,7 @@ describe('SystemPage', () => {
     setActivePinia(pinia)
     seedStores()
     vi.clearAllMocks()
+    resetPageRefreshListenersForTest()
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:qrcode'),
       revokeObjectURL: vi.fn(),
@@ -164,6 +166,17 @@ describe('SystemPage', () => {
     expect(wrapper.text()).toContain('修改')
     expect(wrapper.text()).not.toContain('系统管理员')
     expect(wrapper.text()).not.toContain('安全U盘自动升级')
+  })
+
+  it('重连成功事件后重新读取系统信息', async () => {
+    mountPage()
+    await flushPromises()
+    vi.mocked(getSystemInfo).mockClear()
+
+    emitPageRefresh('reconnect')
+    await flushPromises()
+
+    expect(getSystemInfo).toHaveBeenCalledWith('token')
   })
 
   it('uploads system upgrade package immediately after selecting a valid file', async () => {

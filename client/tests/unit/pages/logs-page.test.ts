@@ -9,6 +9,7 @@ import LogsPage from '../../../src/renderer/pages/LogsPage.vue'
 import { deleteLogs, exportLogs, queryLogs } from '../../../src/renderer/services/log-service'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { emitPageRefresh, resetPageRefreshListenersForTest } from '../../../src/renderer/services/page-refresh-events'
 
 vi.mock('../../../src/renderer/services/log-service', () => ({
   queryLogs: vi.fn(),
@@ -138,6 +139,7 @@ describe('LogsPage', () => {
     setActivePinia(pinia)
     seedStores()
     vi.clearAllMocks()
+    resetPageRefreshListenersForTest()
     saveFile.mockResolvedValue({
       canceled: false,
       filePath: 'C:\\导出\\USBUsageLog20260622120000.zip',
@@ -250,6 +252,29 @@ describe('LogsPage', () => {
       eventType: 'mapped',
       logCategory: '',
       page: 1,
+    }))
+  })
+
+  it('重连成功事件后按当前筛选条件重新查询日志', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-search"]').trigger('click')
+    await flushPromises()
+    vi.mocked(queryLogs).mockClear()
+
+    emitPageRefresh('reconnect')
+    await flushPromises()
+
+    expect(queryLogs).toHaveBeenCalledWith('token', expect.objectContaining({
+      logType: 'usb_audit',
+      keyword: 'Kingston',
+      eventType: 'mapped',
+      logCategory: '',
+      page: 1,
+      pageSize: 20,
     }))
   })
 

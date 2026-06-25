@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { type FormInstance, type FormRules } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import {
   createUser,
   deleteUser,
@@ -122,9 +123,7 @@ const columns = computed<DataTableColumn[]>(() => [
   { prop: 'actions', label: '操作', minWidth: 180, slot: 'actions', fixed: 'right' },
 ])
 
-onMounted(() => {
-  void loadUsers()
-})
+useDeviceBackedPageRefresh(loadUsers)
 
 async function canOperate(): Promise<boolean> {
   if (connection.isConnected) {

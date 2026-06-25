@@ -11,6 +11,7 @@ import FileAccessPage from '../../../src/renderer/pages/FileAccessPage.vue'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { emitPageRefresh, resetPageRefreshListenersForTest } from '../../../src/renderer/services/page-refresh-events'
 import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 const fileAccessPageSource = readFileSync(
@@ -137,6 +138,7 @@ describe('FileAccessPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    resetPageRefreshListenersForTest()
     seed()
   })
 
@@ -145,6 +147,19 @@ describe('FileAccessPage', () => {
     const load = vi.spyOn(store, 'load').mockResolvedValue()
 
     mountPage()
+    await flushPromises()
+
+    expect(load).toHaveBeenCalledWith('session-token')
+  })
+
+  it('重连成功事件后重新从装置加载文件访问策略', async () => {
+    const store = useFilePolicyStore()
+    const load = vi.spyOn(store, 'load').mockResolvedValue()
+    mountPage()
+    await flushPromises()
+    load.mockClear()
+
+    emitPageRefresh('reconnect')
     await flushPromises()
 
     expect(load).toHaveBeenCalledWith('session-token')
