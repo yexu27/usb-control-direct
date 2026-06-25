@@ -10,6 +10,7 @@ export interface MockScenario {
   role: 'admin' | 'operator' | 'auditor'
   uploadedLicenseValid: boolean
   importPolicyFails?: boolean
+  sessionExpiresAfterLogin?: boolean
 }
 
 const PORT = 9600
@@ -154,6 +155,7 @@ function initialPolicy(): StoredPolicy {
 export class MockDevice {
   private server: Server | null = null
   private readonly sockets = new Set<TLSSocket>()
+  private activeSocket: TLSSocket | null = null
   private readonly fallbackRole: MockScenario['role']
   private currentUsername = ''
   private loginAttempts = 0
@@ -295,6 +297,10 @@ export class MockDevice {
     this.scenario.importPolicyFails = true
   }
 
+  expireCurrentSessionForTest(): void {
+    this.sessionExpired = true
+  }
+
   async requestForTest(msgType: number, body: Record<string, unknown>): Promise<Record<string, unknown>> {
     const payload = this.encodeCommandForTest(msgType, body)
     const response = this.createResponse(msgType, payload)
@@ -315,8 +321,19 @@ export class MockDevice {
   }
 
   private handleConnection(socket: TLSSocket): void {
+    if (this.activeSocket != null && !this.activeSocket.destroyed) {
+      socket.destroy(new Error('装置已有管理端连接，请稍后重试'))
+      return
+    }
+
+    this.activeSocket = socket
     this.sockets.add(socket)
-    socket.once('close', () => this.sockets.delete(socket))
+    socket.once('close', () => {
+      this.sockets.delete(socket)
+      if (this.activeSocket === socket) {
+        this.activeSocket = null
+      }
+    })
 
     const parser = new FrameStreamParser()
     parser.onFrame = (header, payload) => {
@@ -497,7 +514,7 @@ export class MockDevice {
     const sessionToken = `e2e-session-token-${Date.now()}-${this.loginAttempts}`
     this.activeSessionToken = sessionToken
     this.invalidatedSessionTokens.delete(sessionToken)
-    this.sessionExpired = false
+    this.sessionExpired = this.scenario.sessionExpiresAfterLogin === true
     return {
       msgType: 0x0002,
       messageClass: usb_control.RspLogin,
