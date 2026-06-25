@@ -17,6 +17,7 @@ use tracing::{debug, info, warn};
 
 use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
 
+use common::audit_const::event_type;
 use common::time::now_unix;
 use log_audit::AuditService;
 use storage::model::UsbAuditLogInsert;
@@ -197,7 +198,7 @@ impl DeviceOrchestrator {
 
         let serial = info.serial_number.clone();
         if serial.is_empty() {
-            self.write_audit_storage(&info, "whitelist_denied", "blocked",
+            self.write_audit_storage(&info, event_type::WHITELIST_DENIED, "blocked",
                 Some("序列号为空"));
             return;
         }
@@ -205,7 +206,7 @@ impl DeviceOrchestrator {
             Some(e) => e,
             None => {
                 debug!(serial = %serial, "U 盘不在白名单中");
-                self.write_audit_storage(&info, "whitelist_denied", "blocked",
+                self.write_audit_storage(&info, event_type::WHITELIST_DENIED, "blocked",
                     Some("不在白名单"));
                 return;
             }
@@ -217,7 +218,7 @@ impl DeviceOrchestrator {
             Some(idx) => idx,
             None => {
                 warn!("NBD 设备号池耗尽，拒绝映射");
-                self.write_audit_storage(&info, "map_failed", "failed",
+                self.write_audit_storage(&info, event_type::MAP_FAILED, "failed",
                     Some("NBD 设备号池耗尽"));
                 return;
             }
@@ -247,7 +248,7 @@ impl DeviceOrchestrator {
             let dev_path = match &info.dev_path {
                 Some(p) if !p.is_empty() => p.clone(),
                 _ => {
-                    write_audit_fail(&audit, &info, "map_failed", "dev_path 为空");
+                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, "dev_path 为空");
                     return;
                 }
             };
@@ -258,7 +259,7 @@ impl DeviceOrchestrator {
             // 1. Mount
             let read_only = permission == 0;
             if let Err(e) = crate::mount::mount_partition(&dev_path, &mount_point.to_string_lossy(), read_only) {
-                write_audit_fail(&audit, &info, "scan_failed", &e.to_string());
+                write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
                 return;
             }
             let mount_path_str = mount_point.to_string_lossy().to_string();
@@ -275,7 +276,7 @@ impl DeviceOrchestrator {
             let scan_result = match scan_result {
                 Ok(r) => r,
                 Err(e) => {
-                    write_audit_fail(&audit, &info, "scan_failed", &e.to_string());
+                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
@@ -297,11 +298,11 @@ impl DeviceOrchestrator {
             };
             match map_result {
                 Ok(_session) => {
-                    write_audit_storage_static(&audit, &info, "mapped", "mapped", None);
+                    write_audit_storage_static(&audit, &info, event_type::MAPPED, "mapped", None);
                     info!(serial = %serial, "U 盘映射成功");
                 }
                 Err(e) => {
-                    write_audit_fail(&audit, &info, "map_failed", &e.to_string());
+                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
                     let _ = mount_ops.umount(&mount_path_str);
                 }
             }
@@ -350,7 +351,7 @@ impl DeviceOrchestrator {
                 Ok(()) => info!(dev = %device_name, "键盘拦截器正常退出"),
                 Err(e) => warn!(dev = %device_name, error = %e, "键盘拦截器异常退出"),
             }
-            write_audit_generic_static(&audit, &info4audit, "device_removed",
+            write_audit_generic_static(&audit, &info4audit, event_type::DEVICE_REMOVE,
                 "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
         });
     }
@@ -393,7 +394,7 @@ impl DeviceOrchestrator {
                 Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
                 Err(e) => warn!(dev = %device_name, error = %e, "鼠标转发器异常退出"),
             }
-            write_audit_generic_static(&audit, &info4audit, "device_removed",
+            write_audit_generic_static(&audit, &info4audit, event_type::DEVICE_REMOVE,
                 "success", "mouse", "hid_mouse", 0x03, 0x01, 0x02);
         });
     }
@@ -416,7 +417,7 @@ impl DeviceOrchestrator {
             device_sn: Some(info.serial_number.clone()),
             vid: Some(info.vid.clone()),
             pid: Some(info.pid.clone()),
-            event_type: "unsupported_blocked".to_string(),
+            event_type: event_type::WHITELIST_DENIED.to_string(),
             permission: None,
             capacity_bytes: None,
             file_path: None,
@@ -467,7 +468,7 @@ impl DeviceOrchestrator {
             common::types::DeviceType::Mouse => ("mouse", "hid_mouse"),
             _ => ("unsupported", "unsupported"),
         };
-        self.write_audit_generic(&device_record.info, "device_removed", "success",
+        self.write_audit_generic(&device_record.info, event_type::DEVICE_REMOVE, "success",
             dev_type_str, iface_str,
             device_record.info.interface_class as i32,
             device_record.info.interface_subclass as i32,
