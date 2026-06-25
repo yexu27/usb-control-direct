@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::proto::{
     CmdAddBlacklistExtension, CmdGetFilePolicy, CmdRemoveBlacklistExtension,
@@ -105,12 +106,12 @@ pub fn handle_update_file_policy_switch(ctx: &RequestContext, payload: &[u8]) ->
     match storage.policy_update(&cmd.policy_key, cmd.enabled) {
         Ok(()) => {
             info!(key = %cmd.policy_key, enabled = cmd.enabled, "文件策略开关更新成功");
-            write_audit_log(ctx, "file_policy", "update", Some(&cmd.policy_key), 0, None);
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(key = %cmd.policy_key, reason = %e, "文件策略开关更新失败");
-            write_audit_log(ctx, "file_policy", "update", Some(&cmd.policy_key), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }
@@ -156,12 +157,12 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
     match storage.blacklist_insert(&extension, description) {
         Ok(_id) => {
             info!(ext = %extension, "黑名单后缀添加成功");
-            write_audit_log(ctx, "file_blacklist", "add", Some(&extension), 0, None);
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀添加失败");
-            write_audit_log(ctx, "file_blacklist", "add", Some(&extension), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 1, Some(&e.to_string()));
             error_response(
                 ctx.seq_id,
                 map_blacklist_insert_error(&e),
@@ -205,12 +206,12 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
     match storage.blacklist_delete(&extension) {
         Ok(()) => {
             info!(ext = %extension, "黑名单后缀删除成功");
-            write_audit_log(ctx, "file_blacklist", "remove", Some(&extension), 0, None);
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀删除失败");
-            write_audit_log(ctx, "file_blacklist", "remove", Some(&extension), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }

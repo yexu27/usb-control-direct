@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::proto::{CmdExportPolicy, CmdImportPolicy, RspCommon, RspExportPolicy};
 
@@ -43,7 +44,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match policy_service.export_policy() {
         Ok(data) => {
             info!(user = %session.username, size = data.len(), "策略导出成功");
-            log_operation(ctx, session, "policy_management", "export", "策略配置", 0, None);
+            log_operation(ctx, session, log_type::SECURITY_CONFIG, action_type::POLICY_EXPORT, "策略配置", 0, None);
             let rsp = RspExportPolicy {
                 success: true,
                 policy_data: data,
@@ -56,7 +57,7 @@ pub fn handle_export_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(e) => {
             warn!(user = %session.username, reason = %e, "策略导出失败");
             let code = e.to_result_code();
-            log_operation(ctx, session, "policy_management", "export", "策略配置", 1, Some(&e.to_string()));
+            log_operation(ctx, session, log_type::SECURITY_CONFIG, action_type::POLICY_EXPORT, "策略配置", 1, Some(&e.to_string()));
             export_error(ctx.seq_id, code, "策略导出失败")
         }
     }
@@ -97,13 +98,13 @@ pub fn handle_import_policy(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match policy_service.import_policy(&cmd.policy_data) {
         Ok(()) => {
             info!(user = %session.username, "策略导入成功");
-            log_operation(ctx, session, "policy_management", "import", "策略配置", 0, None);
+            log_operation(ctx, session, log_type::SECURITY_CONFIG, action_type::POLICY_IMPORT, "策略配置", 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(user = %session.username, reason = %e, "策略导入失败");
             let code = e.to_result_code();
-            log_operation(ctx, session, "policy_management", "import", "策略配置", 1, Some(&e.to_string()));
+            log_operation(ctx, session, log_type::SECURITY_CONFIG, action_type::POLICY_IMPORT, "策略配置", 1, Some(&e.to_string()));
             error_response(ctx.seq_id, code, "策略导入失败")
         }
     }

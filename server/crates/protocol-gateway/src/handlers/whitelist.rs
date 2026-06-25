@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::mapping::{
     add_method_int_to_str, add_method_str_to_int, permission_int_to_str, permission_str_to_int,
@@ -213,17 +214,17 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match add_result {
         Ok(_id) => {
             info!(sn = %serial_number, method = cmd.add_method, "白名单添加成功");
-            write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 0, None);
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 0, None);
             success_response(ctx.seq_id)
         }
         Err(WhitelistError::AlreadyExists(_)) => {
             info!(sn = %serial_number, "白名单添加失败：设备已存在");
-            write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 1, Some("该设备已在白名单中"));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some("该设备已在白名单中"));
             error_response(ctx.seq_id, ResultCode::AlreadyExists, "该设备已在白名单中")
         }
         Err(e) => {
             warn!(sn = %serial_number, reason = %e, "白名单添加失败");
-            write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -248,8 +249,8 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             info!(sn = %cmd.serial_number, "白名单删除成功");
             write_audit_log(
                 ctx,
-                "whitelist_remove",
-                "remove",
+                log_type::SECURITY_CONFIG,
+                action_type::WHITELIST_REMOVE,
                 Some(&cmd.serial_number),
                 0,
                 None,
@@ -258,7 +259,7 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单删除失败");
-            write_audit_log(ctx, "whitelist_remove", "remove", Some(&cmd.serial_number), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_REMOVE, Some(&cmd.serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -304,8 +305,8 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             info!(sn = %cmd.serial_number, "白名单更新成功");
             write_audit_log(
                 ctx,
-                "whitelist_update",
-                "update",
+                log_type::SECURITY_CONFIG,
+                action_type::WHITELIST_UPDATE,
                 Some(&cmd.serial_number),
                 0,
                 None,
@@ -314,7 +315,7 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单更新失败");
-            write_audit_log(ctx, "whitelist_update", "update", Some(&cmd.serial_number), 1, Some(&e.to_string()));
+            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_UPDATE, Some(&cmd.serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
