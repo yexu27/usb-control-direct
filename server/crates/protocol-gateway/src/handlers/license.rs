@@ -63,7 +63,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
     match license_upgrade::generate_machine_code() {
         Ok(result) => {
             info!(user = %session.username, "下载机器码");
-            log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::AUTH_UPLOAD, "机器码", 0, None);
+            log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::AUTH_UPLOAD, "机器码", 0, None);
             let rsp = RspMachineCode {
                 machine_code: result.machine_code,
                 qrcode_png: result.qrcode_png,
@@ -76,7 +76,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
             log_operation(
                 ctx,
                 session,
-                log_type::SYSTEM_MANAGEMENT,
+                log_type::AUTH_MANAGEMENT,
                 action_type::AUTH_UPLOAD,
                 "机器码",
                 1,
@@ -151,16 +151,16 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             info!(user = %session.username, expire = info.expire_time, "授权文件校验成功");
             if let Err(_e) = storage.config_set("auth_status", "authorized") {
                 error!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
-                log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 1, Some("授权状态持久化失败"));
+                log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 1, Some("授权状态持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权状态持久化失败");
             }
             if let Err(_e) = storage.config_set("auth_expire_time", &info.expire_time.to_string()) {
                 error!(user = %session.username, reason = "授权状态持久化失败", "授权上传持久化异常");
-                log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 1, Some("授权过期时间持久化失败"));
+                log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 1, Some("授权过期时间持久化失败"));
                 return license_error(ctx.seq_id, ResultCode::InternalError, "授权过期时间持久化失败");
             }
 
-            log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 0, None);
+            log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::AUTH_UPLOAD, "授权文件", 0, None);
             let rsp = RspUploadLicense {
                 success: true,
                 expire_time: info.expire_time,
@@ -176,7 +176,7 @@ pub fn handle_upload_license(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                log_type::SYSTEM_MANAGEMENT,
+                log_type::AUTH_MANAGEMENT,
                 action_type::AUTH_UPLOAD,
                 "授权文件",
                 1,

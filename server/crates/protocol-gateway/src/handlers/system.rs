@@ -98,7 +98,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
     let current_version = config_value(storage, "system_version");
 
     if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
-        log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::SYSTEM_UPGRADE, &cmd.target_version, 1, Some("SHA-256 校验失败"));
+        log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::SYSTEM_UPGRADE, &cmd.target_version, 1, Some("SHA-256 校验失败"));
         return error_response(ctx.seq_id, ResultCode::UpgradeChecksumError, "升级包 SHA-256 校验失败");
     }
 
@@ -109,7 +109,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                 log_operation(
                     ctx,
                     session,
-                    log_type::SYSTEM_MANAGEMENT,
+                    log_type::PROGRAM_UPGRADE,
                     action_type::SYSTEM_UPGRADE,
                     &cmd.target_version,
                     1,
@@ -119,7 +119,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             }
 
             if let Err(_e) = storage.config_set("system_version", &cmd.target_version) {
-                log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::SYSTEM_UPGRADE, &cmd.target_version, 1, Some("版本号持久化失败"));
+                log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::SYSTEM_UPGRADE, &cmd.target_version, 1, Some("版本号持久化失败"));
                 return error_response(ctx.seq_id, ResultCode::InternalError, "版本号持久化失败");
             }
 
@@ -128,7 +128,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             log_operation(
                 ctx,
                 session,
-                log_type::SYSTEM_MANAGEMENT,
+                log_type::PROGRAM_UPGRADE,
                 action_type::SYSTEM_UPGRADE,
                 &cmd.target_version,
                 0,
@@ -145,7 +145,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
             log_operation(
                 ctx,
                 session,
-                log_type::SYSTEM_MANAGEMENT,
+                log_type::PROGRAM_UPGRADE,
                 action_type::SYSTEM_UPGRADE,
                 &cmd.target_version,
                 1,
@@ -193,7 +193,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     let current_version = config_value(storage, "virus_db_version");
 
     if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
-        log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("SHA-256 校验失败"));
+        log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("SHA-256 校验失败"));
         return error_response(ctx.seq_id, ResultCode::UpgradeChecksumError, "升级包 SHA-256 校验失败");
     }
 
@@ -201,7 +201,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         log_operation(
             ctx,
             session,
-            log_type::SYSTEM_MANAGEMENT,
+            log_type::PROGRAM_UPGRADE,
             action_type::VIRUSDB_UPGRADE,
             &cmd.target_version,
             1,
@@ -214,7 +214,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         log_operation(
             ctx,
             session,
-            log_type::SYSTEM_MANAGEMENT,
+            log_type::PROGRAM_UPGRADE,
             action_type::VIRUSDB_UPGRADE,
             &cmd.target_version,
             1,
@@ -225,13 +225,13 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
 
     if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
         error!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
-        log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
+        log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
     let now = common::time::now_unix();
     if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
         error!("病毒库已升级但更新时间持久化失败");
-        log_operation(ctx, session, log_type::SYSTEM_MANAGEMENT, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("更新时间持久化失败"));
+        log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
     }
 
@@ -240,7 +240,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
     log_operation(
         ctx,
         session,
-        log_type::SYSTEM_MANAGEMENT,
+        log_type::PROGRAM_UPGRADE,
         action_type::VIRUSDB_UPGRADE,
         &cmd.target_version,
         0,
