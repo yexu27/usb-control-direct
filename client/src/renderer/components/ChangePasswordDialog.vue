@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { type FormInstance, type FormRules } from 'element-plus'
 import { useSessionStore } from '@/stores/session'
 import { changePassword } from '@/services/user-service'
 import { ServiceError } from '@/services/send-command'
 import { validatePasswordComplexity } from '@/utils/password-validator'
+import { errorMessage, showSuccessToast } from '@/utils/operation-feedback'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
@@ -12,6 +13,7 @@ const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 const session = useSessionStore()
 const formRef = ref<FormInstance | null>(null)
 const isSubmitting = ref(false)
+const submitErrorMessage = ref('')
 const passwordForm = reactive({
   oldPassword: '',
   newPassword: '',
@@ -51,6 +53,7 @@ function resetForm(): void {
   passwordForm.oldPassword = ''
   passwordForm.newPassword = ''
   passwordForm.confirmPassword = ''
+  submitErrorMessage.value = ''
   formRef.value?.clearValidate()
 }
 
@@ -75,8 +78,10 @@ async function handleSubmit(): Promise<void> {
   }
 
   isSubmitting.value = true
+  submitErrorMessage.value = ''
   const isValid = await formRef.value.validate().catch(() => false)
   if (!isValid) {
+    submitErrorMessage.value = '请检查密码填写内容'
     isSubmitting.value = false
     return
   }
@@ -88,14 +93,14 @@ async function handleSubmit(): Promise<void> {
       passwordForm.newPassword,
       passwordForm.confirmPassword,
     )
-    ElMessage.success('密码修改成功')
+    showSuccessToast('密码修改成功')
     resetForm()
     emit('update:visible', false)
   } catch (error: unknown) {
     if (error instanceof ServiceError && error.kind === 'unauthenticated') {
       return
     }
-    ElMessage.error(error instanceof Error ? error.message : '密码修改失败')
+    submitErrorMessage.value = errorMessage(error, '密码修改失败')
   } finally {
     isSubmitting.value = false
   }
@@ -121,6 +126,15 @@ watch(
     :show-close="!isSubmitting"
     @update:model-value="handleVisibilityChange"
   >
+    <el-alert
+      v-if="submitErrorMessage"
+      class="dialog-error"
+      type="error"
+      :title="submitErrorMessage"
+      :closable="false"
+      show-icon
+    />
+
     <el-form ref="formRef" :model="passwordForm" :rules="rules" label-width="80px">
       <el-form-item label="旧密码" prop="oldPassword">
         <el-input
@@ -157,3 +171,11 @@ watch(
     </template>
   </el-dialog>
 </template>
+
+<style scoped lang="scss">
+@use '@/styles/tokens' as *;
+
+.dialog-error {
+  margin-bottom: $spacing-4;
+}
+</style>

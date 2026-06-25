@@ -155,6 +155,7 @@ export class MockDevice {
   private server: Server | null = null
   private readonly sockets = new Set<TLSSocket>()
   private readonly fallbackRole: MockScenario['role']
+  private currentUsername = ''
   private loginAttempts = 0
   private policy = initialPolicy()
   private deletedUsernames = new Set<string>()
@@ -331,7 +332,6 @@ export class MockDevice {
       case 0x0007:
         return this.uploadLicenseResponse(payload)
       case 0x0009:
-      case 0x0605:
         return this.commonSuccessResponse()
       case 0x0400:
         return this.queryLogsResponse(payload)
@@ -414,6 +414,8 @@ export class MockDevice {
         return this.deleteUserResponse(payload)
       case 0x0604:
         return this.resetPasswordResponse(payload)
+      case 0x0605:
+        return this.changePasswordResponse(payload)
       case 0xff01:
         return {
           msgType: 0xff02,
@@ -462,6 +464,7 @@ export class MockDevice {
     }
 
     const authorized = this.scenario.authStatus === 'authorized'
+    this.currentUsername = command.username
     return {
       msgType: 0x0002,
       messageClass: usb_control.RspLogin,
@@ -689,6 +692,26 @@ export class MockDevice {
     }
     user.password = command.newPassword
     user.status = 'active'
+    return this.commonSuccessResponse()
+  }
+
+  private changePasswordResponse(payload: Uint8Array): MockResponse {
+    const command = usb_control.CmdChangePassword.decode(payload)
+    const user = this.users.find((item) => item.username === this.currentUsername)
+    const currentPassword = user?.password ?? 'Password1!'
+
+    if (command.oldPassword !== currentPassword) {
+      return this.commonErrorResponse(0x0706, '旧密码错误')
+    }
+
+    const passwordError = this.validatePassword(command.newPassword, command.confirmPassword)
+    if (passwordError != null) {
+      return passwordError
+    }
+
+    if (user != null) {
+      user.password = command.newPassword
+    }
     return this.commonSuccessResponse()
   }
 

@@ -22,9 +22,13 @@ async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
   return { app, page: await app.firstWindow() }
 }
 
-async function fillAndSubmitLogin(page: Page, username = 'e2e-user'): Promise<void> {
+async function fillAndSubmitLogin(
+  page: Page,
+  username = 'e2e-user',
+  password = 'Password1!',
+): Promise<void> {
   await page.locator('[data-testid="login-username"]').fill(username)
-  await page.locator('[data-testid="login-password"]').fill('Password1!')
+  await page.locator('[data-testid="login-password"]').fill(password)
   await page.locator('[data-testid="login-ip"]').fill('127.0.0.1')
   await page.getByTestId('login-submit').click()
 }
@@ -63,7 +67,7 @@ test.describe('登录、授权与修改密码闭环', () => {
         await fillAndSubmitLogin(page, `${role}-user`)
         await expect(page).toHaveURL(new RegExp(`#${route}$`))
         await expect(page.getByTestId('user-menu-trigger')).toBeVisible()
-        await expect(page.getByTestId('user-menu-trigger')).toHaveText('')
+        await expect(page.getByTestId('user-menu-trigger')).toHaveText(`${role}-user`)
       })
     })
   }
@@ -135,18 +139,40 @@ test.describe('登录、授权与修改密码闭环', () => {
 
   test('修改密码成功后关闭弹窗且保持当前登录页签', async () => {
     await withScenario({ role: 'admin' }, async (_app, page) => {
-      await fillAndSubmitLogin(page, 'admin-user')
+      await fillAndSubmitLogin(page, 'admin', 'admin@123')
       await expect(page).toHaveURL(/#\/users$/)
 
       await page.getByTestId('user-menu-trigger').click()
       await page.getByText('修改密码', { exact: true }).click()
-      await page.getByPlaceholder('请输入旧密码').fill('Password1!')
+      await page.getByPlaceholder('请输入旧密码').fill('admin@123')
       await page.getByPlaceholder('请输入新密码').fill('NewPassword2!')
       await page.getByPlaceholder('请再次输入新密码').fill('NewPassword2!')
       await page.getByRole('button', { name: '确定', exact: true }).click()
 
       await expect(page.getByRole('dialog', { name: '修改密码' })).toHaveCount(0)
+      await expect(page.getByTestId('app-toast')).toHaveText('密码修改成功')
       await expect(page).toHaveURL(/#\/users$/)
+    })
+  })
+
+  test('修改密码旧密码错误时在弹窗内显示红色错误提示', async () => {
+    await withScenario({ role: 'admin' }, async (_app, page) => {
+      await fillAndSubmitLogin(page, 'admin', 'admin@123')
+      await expect(page).toHaveURL(/#\/users$/)
+
+      await page.getByTestId('user-menu-trigger').click()
+      await page.getByText('修改密码', { exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: '修改密码' })
+      await expect(dialog).toBeVisible()
+
+      await page.getByPlaceholder('请输入旧密码').fill('wrong@123')
+      await page.getByPlaceholder('请输入新密码').fill('NewPassword2!')
+      await page.getByPlaceholder('请再次输入新密码').fill('NewPassword2!')
+      await page.getByRole('button', { name: '确定', exact: true }).click()
+
+      const errorAlert = dialog.locator('.el-alert--error').filter({ hasText: '旧密码错误' })
+      await expect(errorAlert).toBeVisible()
+      await expect(dialog).toBeVisible()
     })
   })
 })

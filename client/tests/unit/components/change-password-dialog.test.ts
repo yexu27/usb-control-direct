@@ -5,24 +5,23 @@ import { mount } from '@vue/test-utils'
 import ChangePasswordDialog from '../../../src/renderer/components/ChangePasswordDialog.vue'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { changePassword } from '../../../src/renderer/services/user-service'
-import { ElMessage } from 'element-plus'
 import { ServiceError } from '../../../src/renderer/services/send-command'
+import { showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
 
 vi.mock('../../../src/renderer/services/user-service', () => ({
   changePassword: vi.fn(),
   listUsers: vi.fn(),
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
+vi.mock('../../../src/renderer/utils/operation-feedback', () => ({
+  showSuccessToast: vi.fn(),
+  errorMessage: (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback,
 }))
 
 const validate = vi.fn().mockResolvedValue(true)
 const clearValidate = vi.fn()
 const changePasswordMock = vi.mocked(changePassword)
+const showSuccessToastMock = vi.mocked(showSuccessToast)
 
 const ElFormStub = defineComponent({
   setup(_props, { expose, slots }) {
@@ -48,6 +47,7 @@ interface ChangePasswordDialogVm {
     }>
   >
   isSubmitting: boolean
+  submitErrorMessage: string
   close: () => void
   handleSubmit: () => Promise<void>
 }
@@ -75,6 +75,7 @@ describe('ChangePasswordDialog', () => {
           ElDialog: { template: '<section><slot /><slot name="footer" /></section>' },
           ElForm: ElFormStub,
           ElFormItem: { template: '<label><slot /></label>' },
+          ElAlert: { props: ['title'], template: '<div data-testid="change-password-error">{{ title }}</div>' },
           ElInput: true,
           ElButton: true,
         },
@@ -98,7 +99,7 @@ describe('ChangePasswordDialog', () => {
       'new@1234',
       'new@1234',
     )
-    expect(ElMessage.success).toHaveBeenCalledWith('密码修改成功')
+    expect(showSuccessToastMock).toHaveBeenCalledWith('密码修改成功')
     expect(wrapper.emitted('update:visible')).toEqual([[false]])
     expect(component.passwordForm).toEqual({
       oldPassword: '',
@@ -114,7 +115,8 @@ describe('ChangePasswordDialog', () => {
 
     await component.handleSubmit()
 
-    expect(ElMessage.error).toHaveBeenCalledWith('旧密码错误')
+    expect(component.submitErrorMessage).toBe('旧密码错误')
+    expect(wrapper.get('[data-testid="change-password-error"]').text()).toBe('旧密码错误')
     expect(wrapper.emitted('update:visible')).toBeUndefined()
   })
 
@@ -125,7 +127,20 @@ describe('ChangePasswordDialog', () => {
 
     await component.handleSubmit()
 
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(component.submitErrorMessage).toBe('')
+    expect(wrapper.find('[data-testid="change-password-error"]').exists()).toBe(false)
+  })
+
+  it('表单校验失败时保留弹窗并展示红色错误', async () => {
+    validate.mockResolvedValue(false)
+    const wrapper = mountDialog()
+    const component = wrapper.vm as unknown as ChangePasswordDialogVm
+
+    await component.handleSubmit()
+
+    expect(changePasswordMock).not.toHaveBeenCalled()
+    expect(component.submitErrorMessage).toBe('请检查密码填写内容')
+    expect(wrapper.get('[data-testid="change-password-error"]').text()).toBe('请检查密码填写内容')
   })
 
   it('弱密码未通过复杂度校验', () => {
