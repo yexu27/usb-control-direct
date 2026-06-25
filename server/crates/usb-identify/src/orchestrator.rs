@@ -195,6 +195,7 @@ impl DeviceOrchestrator {
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
+        self.write_audit_storage(&info, event_type::DEVICE_INSERT, "success", None);
 
         let serial = info.serial_number.clone();
         if serial.is_empty() {
@@ -269,6 +270,7 @@ impl DeviceOrchestrator {
                 r = scan_service.scan(&mount_point, &serial, &info.device_name) => r,
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "扫描被取消（设备拔出）");
+                    write_audit_fail(&audit, &info, event_type::SCAN_INTERRUPTED, "设备拔出");
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
@@ -292,6 +294,7 @@ impl DeviceOrchestrator {
                 r = file_access_engine.map_device(map_ctx) => r,
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "映射被取消（设备拔出）");
+                    write_audit_fail(&audit, &info, event_type::SCAN_INTERRUPTED, "设备拔出");
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
@@ -317,6 +320,8 @@ impl DeviceOrchestrator {
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
+        self.write_audit_generic(&info, event_type::DEVICE_INSERT, "success",
+            "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
 
         // 发现 evdev 设备节点
         let evdev_path = match find_evdev_path(&info.sys_path) {
@@ -374,11 +379,36 @@ impl DeviceOrchestrator {
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
+        self.write_audit_generic(&info, event_type::DEVICE_INSERT, "success",
+            "mouse", "hid_mouse", 0x03, 0x01, 0x02);
 
         let evdev_path = match find_evdev_path(&info.sys_path) {
             Some(p) => p,
             None => {
                 warn!(dev = %info.device_name, "鼠标: 找不到对应 evdev 设备");
+                {
+                    let mut log = UsbAuditLogInsert {
+                        event_time: now_unix(),
+                        device_type: Some("mouse".into()),
+                        interface_type: Some("hid_mouse".into()),
+                        interface_class: Some(0x03),
+                        interface_subclass: Some(0x01),
+                        interface_protocol: Some(0x02),
+                        device_name: Some(info.device_name.clone()),
+                        device_sn: Some(info.serial_number.clone()),
+                        vid: Some(info.vid.clone()),
+                        pid: Some(info.pid.clone()),
+                        event_type: event_type::MOUSE_MAP_FAILED.to_string(),
+                        permission: None,
+                        capacity_bytes: None,
+                        file_path: None,
+                        matched_policy: None,
+                        result: "failed".to_string(),
+                        fail_reason: Some("找不到 evdev 设备节点".into()),
+                        detail: None,
+                    };
+                    let _ = self.audit.log_usb_audit(&mut log);
+                }
                 return;
             }
         };
@@ -397,6 +427,8 @@ impl DeviceOrchestrator {
         let audit = Arc::clone(&self.audit);
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "鼠标: 启动转发器");
+        self.write_audit_generic(&info, event_type::MOUSE_MAPPED, "success",
+            "mouse", "hid_mouse", 0x03, 0x01, 0x02);
 
         tokio::task::spawn_blocking(move || {
             use hid_access::mouse_forwarder::MouseForwarder;
@@ -415,6 +447,31 @@ impl DeviceOrchestrator {
         warn!(dev = %info.device_name, reason = %reason, "不支持的 USB 设备");
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
+        }
+
+        // device_insert 审计
+        {
+            let mut insert_log = UsbAuditLogInsert {
+                event_time: now_unix(),
+                device_type: Some("unsupported".into()),
+                interface_type: Some("unsupported".into()),
+                interface_class: Some(info.interface_class as i32),
+                interface_subclass: Some(info.interface_subclass as i32),
+                interface_protocol: Some(info.interface_protocol as i32),
+                device_name: Some(info.device_name.clone()),
+                device_sn: Some(info.serial_number.clone()),
+                vid: Some(info.vid.clone()),
+                pid: Some(info.pid.clone()),
+                event_type: event_type::DEVICE_INSERT.to_string(),
+                permission: None,
+                capacity_bytes: None,
+                file_path: None,
+                matched_policy: None,
+                result: "success".to_string(),
+                fail_reason: None,
+                detail: None,
+            };
+            let _ = self.audit.log_usb_audit(&mut insert_log);
         }
 
         let mut log = UsbAuditLogInsert {
