@@ -4,6 +4,7 @@ use prost::Message;
 
 use tracing::{debug, error, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::proto::{
     CmdDeleteLogs, CmdExportLogs, CmdQueryLogs, MalwareLogEntry, OperationLogEntry,
@@ -254,7 +255,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match log_audit::export::generate_zip(&csv_filename, &csv_content) {
         Ok(zip_data) => {
             info!(user = %session.username, log_type = %cmd.log_type, size = zip_data.len(), "日志导出成功");
-            log_operation(ctx, session, "log_management", "export", &cmd.log_type, 0, None);
+            log_operation(ctx, session, log_type::LOG_MANAGEMENT, "export", &cmd.log_type, 0, None);
             let rsp = RspExportLogs {
                 success: true,
                 zip_data,
@@ -270,7 +271,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "log_management",
+                log_type::LOG_MANAGEMENT,
                 "export",
                 &cmd.log_type,
                 1,
@@ -350,8 +351,8 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "log_management",
-                "delete",
+                log_type::LOG_MANAGEMENT,
+                action_type::LOG_CLEAN,
                 &format!("{}({}条)", cmd.log_type, count),
                 0,
                 None,
@@ -363,8 +364,8 @@ pub fn handle_delete_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "log_management",
-                "delete",
+                log_type::LOG_MANAGEMENT,
+                action_type::LOG_CLEAN,
                 &cmd.log_type,
                 1,
                 Some(&e.to_string()),

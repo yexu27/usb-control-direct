@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::proto::{CmdChangePassword, RspCommon};
 use storage::model::OperationLogInsert;
@@ -38,8 +39,8 @@ pub fn handle_change_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 op_time: 0,
                 username: info.username.clone(),
                 role: info.role,
-                log_type: "login_auth".into(),
-                action_type: Some("change_password".into()),
+                log_type: log_type::LOGIN_AUTH.into(),
+                action_type: Some(action_type::PASSWORD_CHANGE.into()),
                 target: Some(info.username.clone()),
                 before_value: None,
                 after_value: None,
@@ -67,8 +68,8 @@ pub fn handle_change_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                     op_time: 0,
                     username: session.username.clone(),
                     role: session.role,
-                    log_type: "login_auth".into(),
-                    action_type: Some("change_password".into()),
+                    log_type: log_type::LOGIN_AUTH.into(),
+                    action_type: Some(action_type::PASSWORD_CHANGE.into()),
                     target: Some(session.username.clone()),
                     before_value: None,
                     after_value: None,
