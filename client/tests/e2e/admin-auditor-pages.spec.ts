@@ -325,7 +325,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
       await login(page, 'admin', 'admin@123')
       await expect(page).toHaveURL(/#\/users$/)
       await expectUsersLayout(page)
-      await expect(page.getByText('admin', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('users-table-shell').getByText('admin', { exact: true })).toBeVisible()
       await expect(page.getByTestId('delete-user-admin')).toHaveCount(0)
 
       await page.getByTestId('create-user-open').click()
