@@ -95,7 +95,7 @@ function seed(): void {
     fileTypeBlacklistEnabled: false,
     blacklist: [
       { extension: '.doc', description: '文档', isDefault: true },
-      ...Array.from({ length: 20 }, (_, index) => ({
+      ...Array.from({ length: 37 }, (_, index) => ({
         extension: `.x${index}`, description: `类型 ${index}`, isDefault: false,
       })),
     ],
@@ -113,11 +113,17 @@ function mountPage() {
         ElButton: { template: '<button><slot /></button>' },
         DataTable: {
           name: 'DataTable',
-          props: ['data', 'page', 'pageSize', 'columns'],
+          props: ['data', 'page', 'pageSize', 'columns', 'total', 'showDefaultPagination'],
           emits: ['page-change', 'page-size-change'],
           template: `
             <div data-testid="blacklist-table">
               <slot name="filters" />
+              <div
+                v-if="showDefaultPagination !== false"
+                data-testid="blacklist-pagination"
+              >
+                共 {{ total }} 条，每页 {{ pageSize }} 条
+              </div>
               <div v-for="row in data" :key="row.extension" data-testid="blacklist-row">
                 <span>{{ row.extension }}</span>
                 <slot name="actions" :row="row" />
@@ -296,7 +302,7 @@ describe('FileAccessPage', () => {
     expect(setSwitch).not.toHaveBeenCalled()
     expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(execSwitch.attributes('data-checked')).toBe('false')
-    expect(store.policy?.blacklist).toHaveLength(21)
+    expect(store.policy?.blacklist).toHaveLength(38)
   })
 
   it('断线时仍可打开添加弹窗，提交时警告并保留弹窗', async () => {
@@ -459,31 +465,36 @@ describe('FileAccessPage', () => {
     expect(remove).toHaveBeenCalledTimes(1)
   })
 
-  it('黑名单使用 DataTable 且每页 20 条，默认项也显示删除', () => {
+  it('黑名单使用 DataTable 且默认每页 10 条并显示分页', () => {
     const wrapper = mountPage()
     const table = wrapper.getComponent({ name: 'DataTable' })
 
-    expect(table.props('pageSize')).toBe(20)
+    expect(table.props('pageSize')).toBe(10)
+    expect(table.props('total')).toBe(38)
+    expect(table.props('showDefaultPagination')).not.toBe(false)
+    expect(wrapper.get('[data-testid="blacklist-pagination"]').text()).toContain('共 38 条，每页 10 条')
     expect(table.props('columns').map((column: { label: string }) => column.label)).toEqual([
       '后缀名', '说明', '操作',
     ])
     const deleteButtons = wrapper.findAll('[data-extension]')
-    expect(deleteButtons).toHaveLength(20)
+    expect(deleteButtons).toHaveLength(10)
     expect(deleteButtons[0].attributes('data-extension')).toBe('.doc')
   })
 
-  it('切换到第二页后仅展示超过首页 20 条的内容', async () => {
+  it('切换到第二页后展示第 11 到 20 条黑名单内容', async () => {
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('.x18')
-    expect(wrapper.text()).not.toContain('.x19')
+    expect(wrapper.text()).toContain('.x8')
+    expect(wrapper.text()).not.toContain('.x9')
     await wrapper.get('[data-testid="blacklist-page-2"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.getComponent({ name: 'DataTable' }).props('page')).toBe(2)
-    expect(wrapper.text()).toContain('.x19')
-    expect(wrapper.text()).not.toContain('.x18')
-    expect(wrapper.findAll('[data-testid="blacklist-row"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('.x9')
+    expect(wrapper.text()).toContain('.x18')
+    expect(wrapper.text()).not.toContain('.x8')
+    expect(wrapper.text()).not.toContain('.x19')
+    expect(wrapper.findAll('[data-testid="blacklist-row"]')).toHaveLength(10)
   })
 
   it('使用 DataTable 现有 page-size-change API 切换条数并重置到第一页', async () => {
@@ -495,7 +506,7 @@ describe('FileAccessPage', () => {
 
     expect(table.props('pageSize')).toBe(50)
     expect(table.props('page')).toBe(1)
-    expect(wrapper.findAll('[data-testid="blacklist-row"]')).toHaveLength(21)
+    expect(wrapper.findAll('[data-testid="blacklist-row"]')).toHaveLength(38)
   })
 
   it('添加请求防重入，远端成功前不关闭不提示', async () => {

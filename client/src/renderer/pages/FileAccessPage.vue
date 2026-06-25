@@ -12,7 +12,7 @@ import { confirmAction } from '@/utils/confirm-action'
 import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 
 const SUCCESS_MESSAGE = '修改成功，重新拔插或重新映射后生效'
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface BlacklistFormValue {
   extension: string
@@ -280,7 +280,6 @@ function changePageSize(nextPageSize: number): void {
               :page="page"
               :page-size="pageSize"
               empty-text="暂无黑名单条目"
-              :show-default-pagination="false"
               @page-change="changePage"
               @page-size-change="changePageSize"
             >
