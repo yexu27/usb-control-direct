@@ -56,6 +56,32 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(e) => {
             warn!(source_ip = %ctx.source_ip, reason = %e, "用户登出失败");
             let code = e.to_result_code();
+
+            let mut log = OperationLogInsert {
+                op_time: 0,
+                username: ctx
+                    .session
+                    .as_ref()
+                    .map(|s| s.username.clone())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                role: ctx.session.as_ref().map(|s| s.role).unwrap_or(-1),
+                log_type: "login_auth".into(),
+                action_type: Some("logout".into()),
+                target: None,
+                before_value: None,
+                after_value: None,
+                related_file: None,
+                related_version: None,
+                result: 1,
+                fail_reason: Some(format!("{}", e)),
+                source_ip: Some(ctx.source_ip.clone()),
+                app_version: None,
+                session_id: None,
+                request_id: None,
+                detail: None,
+            };
+            let _ = ctx.audit_service.log_operation(&mut log);
+
             make_rsp(ctx.seq_id, false, code, &format!("{}", e))
         }
     }
