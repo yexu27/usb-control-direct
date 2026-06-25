@@ -173,6 +173,17 @@ describe('FileAccessPage', () => {
     expect(wrapper.text()).not.toContain('操作员')
   })
 
+  it('文件访问控制策略卡片使用紧凑密度样式', () => {
+    expect(fileAccessPageSource).toContain('.policy-list')
+    expect(fileAccessPageSource).toContain('gap: 10px;')
+    expect(fileAccessPageSource).toContain('padding: 14px 18px;')
+    expect(fileAccessPageSource).toContain('gap: 10px;')
+    expect(fileAccessPageSource).toContain('font-size: 12px;')
+    expect(fileAccessPageSource).toContain('line-height: 1.38;')
+    expect(fileAccessPageSource).toContain('margin: 12px 0 0;')
+    expect(fileAccessPageSource).toContain('padding: 8px 12px;')
+  })
+
   it('展示 PRD 可执行类型与页面说明', () => {
     const wrapper = mountPage()
 
@@ -200,7 +211,7 @@ describe('FileAccessPage', () => {
 
   it('文件类型黑名单表格跟选择框起始位置对齐，不缩进到文案区', () => {
     expect(fileAccessPageSource).not.toContain('margin: 22px 0 0 48px')
-    expect(fileAccessPageSource).toContain('margin: 22px 0 0')
+    expect(fileAccessPageSource).toContain('margin: 12px 0 0')
   })
 
   it.each([

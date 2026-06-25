@@ -325,7 +325,7 @@ function changePageSize(nextPageSize: number): void {
 .policy-list {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
 }
 
 .policy-section {
@@ -338,24 +338,24 @@ function changePageSize(nextPageSize: number): void {
 }
 
 .policy-card :deep(.el-card__body) {
-  padding: 28px 36px;
+  padding: 14px 18px;
 }
 
 .app-checkbox-row {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 10px;
 }
 
 .policy-detail {
   color: var(--andi-text-light);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: $font-weight-medium;
-  line-height: 1.55;
+  line-height: 1.38;
 }
 
 .blacklist-panel {
-  margin: 22px 0 0;
+  margin: 12px 0 0;
   overflow: hidden;
   background: var(--andi-white);
   border: $border-width-base solid var(--andi-border);
@@ -366,8 +366,8 @@ function changePageSize(nextPageSize: number): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: 12px;
+  padding: 8px 12px;
   color: var(--andi-text);
   font-weight: $font-weight-semibold;
   background: var(--andi-sidebar);
