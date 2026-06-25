@@ -126,9 +126,9 @@ mod tests {
     fn test_context(seq_id: u32) -> (RequestContext, tempfile::TempPath) {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.into_temp_path();
-        let storage_auth = Storage::open(&path).unwrap();
-        let storage_audit = Storage::open(&path).unwrap();
-        let auth = Arc::new(AuthService::new(storage_auth, SessionManager::new()));
+        let storage_auth = Arc::new(Storage::open(&path).unwrap());
+        let storage_audit = Arc::clone(&storage_auth);
+        let auth = Arc::new(AuthService::new(Arc::clone(&storage_auth), SessionManager::new()));
         let audit = Arc::new(AuditService::new(storage_audit, &path));
         let ctx = RequestContext {
             seq_id,

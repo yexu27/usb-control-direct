@@ -211,10 +211,12 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
         Err(WhitelistError::AlreadyExists(_)) => {
             info!(sn = %serial_number, "白名单添加失败：设备已存在");
+            write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 1, Some("该设备已在白名单中"));
             error_response(ctx.seq_id, ResultCode::AlreadyExists, "该设备已在白名单中")
         }
         Err(e) => {
             warn!(sn = %serial_number, reason = %e, "白名单添加失败");
+            write_audit_log(ctx, "whitelist_add", "add", Some(&serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -249,6 +251,7 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单删除失败");
+            write_audit_log(ctx, "whitelist_remove", "remove", Some(&cmd.serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -304,6 +307,7 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单更新失败");
+            write_audit_log(ctx, "whitelist_update", "update", Some(&cmd.serial_number), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -397,15 +401,16 @@ mod tests {
 
     fn context(device: Option<UsbDeviceInfo>) -> (RequestContext, TempPath) {
         let path = NamedTempFile::new().unwrap().into_temp_path();
+        let storage = Arc::new(Storage::open(&path).unwrap());
         let auth = Arc::new(AuthService::new(
-            Storage::open(&path).unwrap(),
+            Arc::clone(&storage),
             SessionManager::new(),
         ));
-        let audit = Arc::new(AuditService::new(Storage::open(&path).unwrap(), &path));
-        let whitelist = Arc::new(WhitelistManager::new(Storage::open(&path).unwrap()).unwrap());
+        let audit = Arc::new(AuditService::new(Arc::clone(&storage), &path));
+        let whitelist = Arc::new(WhitelistManager::new(Arc::clone(&storage)).unwrap());
         let mut manager = DeviceManager::new();
         if let Some(device) = device {
-            manager.handle_device_added(device).unwrap();
+            manager.add(device);
         }
         (
             RequestContext {
@@ -454,7 +459,7 @@ mod tests {
             .unwrap()
             .write()
             .unwrap()
-            .handle_device_removed("/sys/real");
+            .remove_interface("/sys/real");
         let rsp = decode_common(&handle_add_whitelist(
             &ctx,
             &command("device").encode_to_vec(),
@@ -625,7 +630,10 @@ mod tests {
 
     #[test]
     fn device_add_rejects_non_storage_with_standard_error() {
-        let (ctx, _path) = context(Some(device(DeviceType::Keyboard, 0x03)));
+        let mut dev = device(DeviceType::Keyboard, 0x03);
+        dev.interface_subclass = 0x01; // SUBCLASS_BOOT，避免触发 disguise 检测
+        dev.interface_protocol = 0x01; // PROTOCOL_KEYBOARD
+        let (ctx, _path) = context(Some(dev));
 
         let rsp = decode_common(&handle_add_whitelist(
             &ctx,
@@ -728,7 +736,7 @@ mod tests {
                 .send(guard.connected_device_by_serial("REAL-SN").is_some())
                 .unwrap();
             allow_remove_rx.recv().unwrap();
-            guard.handle_device_removed("/sys/real");
+            guard.remove_interface("/sys/real");
             remove_done_tx.send(()).unwrap();
         });
 

@@ -110,6 +110,7 @@ pub fn handle_update_file_policy_switch(ctx: &RequestContext, payload: &[u8]) ->
         }
         Err(e) => {
             warn!(key = %cmd.policy_key, reason = %e, "文件策略开关更新失败");
+            write_audit_log(ctx, "file_policy", "update", Some(&cmd.policy_key), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }
@@ -160,6 +161,7 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀添加失败");
+            write_audit_log(ctx, "file_blacklist", "add", Some(&extension), 1, Some(&e.to_string()));
             error_response(
                 ctx.seq_id,
                 map_blacklist_insert_error(&e),
@@ -208,6 +210,7 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀删除失败");
+            write_audit_log(ctx, "file_blacklist", "remove", Some(&extension), 1, Some(&e.to_string()));
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }

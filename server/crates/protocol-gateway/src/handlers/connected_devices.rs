@@ -121,12 +121,13 @@ mod tests {
 
     fn context() -> (RequestContext, TempPath) {
         let path = NamedTempFile::new().unwrap().into_temp_path();
+        let storage = Arc::new(Storage::open(&path).unwrap());
         let auth = Arc::new(AuthService::new(
-            Storage::open(&path).unwrap(),
+            Arc::clone(&storage),
             SessionManager::new(),
         ));
-        let audit = Arc::new(AuditService::new(Storage::open(&path).unwrap(), &path));
-        let whitelist = Arc::new(WhitelistManager::new(Storage::open(&path).unwrap()).unwrap());
+        let audit = Arc::new(AuditService::new(Arc::clone(&storage), &path));
+        let whitelist = Arc::new(WhitelistManager::new(Arc::clone(&storage)).unwrap());
         whitelist
             .add(AddWhitelistRequest {
                 serial_number: "WHITELISTED".into(),
