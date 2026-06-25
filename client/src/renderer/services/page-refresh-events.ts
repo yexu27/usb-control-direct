@@ -5,7 +5,11 @@ const pageRefreshListeners = new Set<PageRefreshListener>()
 
 export function emitPageRefresh(reason: PageRefreshReason): void {
   for (const listener of Array.from(pageRefreshListeners)) {
-    listener(reason)
+    try {
+      listener(reason)
+    } catch (error: unknown) {
+      console.error('页面刷新监听器执行失败', error)
+    }
   }
 }
 

@@ -28,4 +28,20 @@ describe('page-refresh-events', () => {
 
     expect(listener).not.toHaveBeenCalled()
   })
+
+  it('isolates listener errors and continues dispatching', () => {
+    const first = vi.fn(() => {
+      throw new Error('listener failed')
+    })
+    const second = vi.fn()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    onPageRefresh(first)
+    onPageRefresh(second)
+
+    expect(() => emitPageRefresh('reconnect')).not.toThrow()
+    expect(first).toHaveBeenCalledWith('reconnect')
+    expect(second).toHaveBeenCalledWith('reconnect')
+    expect(consoleError).toHaveBeenCalled()
+  })
 })
