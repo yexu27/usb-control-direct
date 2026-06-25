@@ -174,13 +174,19 @@ function resetCreateForm(): void {
   createFormRef.value?.clearValidate()
 }
 
-function openCreateDialog(): void {
+async function openCreateDialog(): Promise<void> {
+  if (!(await canOperate())) {
+    return
+  }
   resetCreateForm()
   createDialogVisible.value = true
   void nextTick(() => createFormRef.value?.clearValidate())
 }
 
-function openResetDialog(username: string): void {
+async function openResetDialog(username: string): Promise<void> {
+  if (!(await canOperate())) {
+    return
+  }
   resetForm.username = username
   resetForm.password = ''
   resetForm.confirmPassword = ''

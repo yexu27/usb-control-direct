@@ -393,4 +393,22 @@ test.describe('管理员与审计员页面业务闭环', () => {
       await expect(page).toHaveURL(/#\/file-access$/)
     })
   })
+
+  test('用户管理断线后授权态失效时重连进入授权页', async () => {
+    await withDevice(async (device, _app, page) => {
+      await login(page, 'admin', 'admin@123')
+      await expect(page).toHaveURL(/#\/users$/)
+      await expectUsersLayout(page)
+
+      device.setAuthStatusForTest('unauthorized')
+      device.disconnectSockets()
+      await expect(page.getByTestId('connection-status')).toContainText('未连接')
+
+      await page.getByTestId('connection-reconnect').click()
+
+      await expect(page).toHaveURL(/#\/license$/)
+      await expect(page.getByText('USB 管控装置已断开连接，操作失败。')).toHaveCount(0)
+      await expect(page.getByRole('heading', { name: '设备授权' })).toBeVisible()
+    })
+  })
 })

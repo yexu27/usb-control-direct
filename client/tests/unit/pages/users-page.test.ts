@@ -191,6 +191,19 @@ describe('UsersPage', () => {
     expect(listUsers).toHaveBeenCalledTimes(2)
   })
 
+  it('断线状态下不打开新建用户弹窗', async () => {
+    const connection = useConnectionStore()
+    connection.updateStatus('DISCONNECTED')
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="create-user-open"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="create-username"]').exists()).toBe(false)
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', 'USB 管控装置已断开连接，操作失败。')
+  })
+
   it('keeps create dialog open and shows inline service error when creating user fails', async () => {
     vi.mocked(createUser).mockRejectedValue(new Error('用户名已存在'))
     const wrapper = mountPage()
@@ -265,6 +278,18 @@ describe('UsersPage', () => {
     expect(resetPassword).toHaveBeenCalledWith('token', 'zhang_wei', 'Reset@123', 'Reset@123')
     expect(showSuccessToast).toHaveBeenCalledWith('密码已重置')
     expect(listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('断线状态下不打开重置密码弹窗', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    useConnectionStore().updateStatus('DISCONNECTED')
+
+    await wrapper.get('[data-testid="reset-password-zhang_wei"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-password"]').exists()).toBe(false)
+    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', 'USB 管控装置已断开连接，操作失败。')
   })
 
   it('keeps reset dialog open and shows inline service error when reset fails', async () => {

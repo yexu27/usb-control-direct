@@ -22,6 +22,10 @@ async function handleReconnect(): Promise<void> {
       await router.push('/login')
       return
     }
+    if (connection.status === 'AUTH_REQUIRED' || connection.status === 'LICENSE_EXPIRED') {
+      await router.push('/license')
+      return
+    }
     emitPageRefresh('reconnect')
     ElMessage.success('USB 管控装置重新连接成功')
   } catch (error: unknown) {

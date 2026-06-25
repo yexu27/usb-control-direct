@@ -92,6 +92,24 @@ describe('ConnectionAlert', () => {
     expect(emitPageRefresh).not.toHaveBeenCalled()
   })
 
+  it('重连后进入授权态时跳转授权页且不刷新业务页面', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockImplementation(async () => {
+      connection.updateStatus('AUTH_REQUIRED')
+      return true
+    })
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith('/license')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
   it('建链失败时留在当前页并展示错误', async () => {
     const connection = useConnectionStore()
     connection.wasConnected = true

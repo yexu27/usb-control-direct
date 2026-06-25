@@ -301,6 +301,10 @@ export class MockDevice {
     this.sessionExpired = true
   }
 
+  setAuthStatusForTest(authStatus: MockScenario['authStatus']): void {
+    this.scenario.authStatus = authStatus
+  }
+
   async requestForTest(msgType: number, body: Record<string, unknown>): Promise<Record<string, unknown>> {
     const payload = this.encodeCommandForTest(msgType, body)
     const response = this.createResponse(msgType, payload)
