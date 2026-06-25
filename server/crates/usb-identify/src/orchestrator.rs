@@ -301,7 +301,7 @@ impl DeviceOrchestrator {
             };
             match map_result {
                 Ok(_session) => {
-                    write_audit_storage_static(&audit, &info, event_type::MAPPED, "mapped", None);
+                    write_audit_storage_static(&audit, &info, event_type::MAPPED, "mapped", None, Some(permission));
                     info!(serial = %serial, "U 盘映射成功");
                 }
                 Err(e) => {
@@ -605,6 +605,7 @@ fn write_audit_storage_static(
     event_type: &str,
     result: &str,
     fail_reason: Option<&str>,
+    permission: Option<i32>,
 ) {
     let mut log = UsbAuditLogInsert {
         event_time: now_unix(),
@@ -618,7 +619,7 @@ fn write_audit_storage_static(
         vid: Some(info.vid.clone()),
         pid: Some(info.pid.clone()),
         event_type: event_type.to_string(),
-        permission: None,
+        permission,
         capacity_bytes: info.capacity_bytes,
         file_path: None,
         matched_policy: None,
@@ -635,7 +636,7 @@ fn write_audit_fail(
     event_type: &str,
     reason: &str,
 ) {
-    write_audit_storage_static(audit, info, event_type, "failed", Some(reason));
+    write_audit_storage_static(audit, info, event_type, "failed", Some(reason), None);
 }
 
 fn write_audit_generic_static(
