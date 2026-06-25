@@ -137,6 +137,20 @@ test.describe('登录、授权与修改密码闭环', () => {
     }
   })
 
+  test('登录后登出再立即使用同一 IP 登录仍进入角色默认页', async () => {
+    await withScenario({ role: 'operator' }, async (_app, page) => {
+      await fillAndSubmitLogin(page, 'operator-user')
+      await expect(page).toHaveURL(/#\/file-access$/)
+
+      await page.getByTestId('user-menu-trigger').click()
+      await page.getByText('登出', { exact: true }).click()
+      await expect(page).toHaveURL(/#\/login$/)
+
+      await fillAndSubmitLogin(page, 'operator-user')
+      await expect(page).toHaveURL(/#\/file-access$/)
+    })
+  })
+
   test('修改密码成功后关闭弹窗且保持当前登录页签', async () => {
     await withScenario({ role: 'admin' }, async (_app, page) => {
       await fillAndSubmitLogin(page, 'admin', 'admin@123')
