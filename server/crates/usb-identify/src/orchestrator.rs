@@ -367,8 +367,6 @@ impl DeviceOrchestrator {
                         "failed", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
                 }
             }
-            write_audit_generic_static(&audit, &info4audit, event_type::DEVICE_REMOVE,
-                "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
         });
     }
 
@@ -398,7 +396,7 @@ impl DeviceOrchestrator {
                         device_sn: Some(info.serial_number.clone()),
                         vid: Some(info.vid.clone()),
                         pid: Some(info.pid.clone()),
-                        event_type: event_type::MOUSE_MAP_FAILED.to_string(),
+                        event_type: event_type::MAP_FAILED.to_string(),
                         permission: None,
                         capacity_bytes: None,
                         file_path: None,
@@ -423,11 +421,9 @@ impl DeviceOrchestrator {
 
         let hidg_mouse = self.hidg_nodes.mouse.clone();
         let device_name = info.device_name.clone();
-        let info4audit = info.clone();
-        let audit = Arc::clone(&self.audit);
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "鼠标: 启动转发器");
-        self.write_audit_generic(&info, event_type::MOUSE_MAPPED, "success",
+        self.write_audit_generic(&info, event_type::MAPPED, "mapped",
             "mouse", "hid_mouse", 0x03, 0x01, 0x02);
 
         tokio::task::spawn_blocking(move || {
@@ -437,8 +433,6 @@ impl DeviceOrchestrator {
                 Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
                 Err(e) => warn!(dev = %device_name, error = %e, "鼠标转发器异常退出"),
             }
-            write_audit_generic_static(&audit, &info4audit, event_type::DEVICE_REMOVE,
-                "success", "mouse", "hid_mouse", 0x03, 0x01, 0x02);
         });
     }
 
