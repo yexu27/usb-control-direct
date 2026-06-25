@@ -1,15 +1,15 @@
 export type PageRefreshReason = 'reconnect'
-export type PageRefreshListener = (reason: PageRefreshReason) => void
+export type PageRefreshListener = (reason: PageRefreshReason) => void | Promise<void>
 
 const pageRefreshListeners = new Set<PageRefreshListener>()
 
 export function emitPageRefresh(reason: PageRefreshReason): void {
   for (const listener of Array.from(pageRefreshListeners)) {
-    try {
-      listener(reason)
-    } catch (error: unknown) {
-      console.error('页面刷新监听器执行失败', error)
-    }
+    Promise.resolve()
+      .then(() => listener(reason))
+      .catch((error: unknown) => {
+        console.error('页面刷新监听器执行失败', error)
+      })
   }
 }
 
