@@ -6,17 +6,24 @@
 use std::collections::HashMap;
 
 use common::types::DeviceType;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::descriptor::UsbDeviceInfo;
+
+/// 大容量存储设备接口类。
+const CLASS_MASS_STORAGE: u8 = 0x08;
+/// HID 接口类。
+const CLASS_HID: u8 = 0x03;
 
 /// 设备记录。
 #[derive(Debug, Clone)]
 pub struct DeviceRecord {
-    /// 设备信息。
+    /// 设备信息（首个接口）。
     pub info: UsbDeviceInfo,
     /// 该设备的所有接口 sys_path。
     pub interfaces: Vec<String>,
+    /// 各接口的 class 值（与 interfaces 一一对应）。
+    pub interface_classes: Vec<u8>,
     /// 首次连接时间（Unix 秒）。
     pub connected_at: i64,
 }
@@ -25,6 +32,13 @@ impl DeviceRecord {
     /// 是否为存储类设备。
     pub fn is_storage(&self) -> bool {
         self.info.device_type == DeviceType::Storage
+    }
+
+    /// 是否疑似 BadUSB 设备（同时具备 Storage 和 HID 接口）。
+    pub fn is_badusb(&self) -> bool {
+        let has_storage = self.interface_classes.contains(&CLASS_MASS_STORAGE);
+        let has_hid = self.interface_classes.contains(&CLASS_HID);
+        has_storage && has_hid
     }
 }
 
@@ -54,13 +68,16 @@ impl DeviceManager {
     ///
     /// 如果父设备路径已存在，追加接口并保留首次记录的 info。
     /// 如果不存在，创建新记录。
+    /// 多接口设备同时具备 Storage + HID 时输出 BadUSB 告警。
     pub fn add(&mut self, info: UsbDeviceInfo) {
         let parent_path = parent_device_path(&info.sys_path);
+        let class = info.interface_class;
         let now = common::time::now_unix();
 
         if let Some(record) = self.records.get_mut(&parent_path) {
             if !record.interfaces.contains(&info.sys_path) {
                 record.interfaces.push(info.sys_path.clone());
+                record.interface_classes.push(class);
             }
             info!(
                 parent = %parent_path,
@@ -68,6 +85,13 @@ impl DeviceManager {
                 interfaces = ?record.interfaces,
                 "设备接口追加"
             );
+            if record.is_badusb() {
+                warn!(
+                    parent = %parent_path,
+                    dev = %info.device_name,
+                    "检测到 BadUSB 伪装设备（同时具备 Storage 和 HID 接口）"
+                );
+            }
         } else {
             info!(
                 parent = %parent_path,
@@ -81,6 +105,7 @@ impl DeviceManager {
                 DeviceRecord {
                     info,
                     interfaces: vec![sys_path],
+                    interface_classes: vec![class],
                     connected_at: now,
                 },
             );
@@ -122,6 +147,15 @@ impl DeviceManager {
     /// 根据序列号查找已连接设备信息。
     pub fn connected_device_by_serial(&self, serial: &str) -> Option<&UsbDeviceInfo> {
         self.records.values().find(|r| r.info.serial_number == serial).map(|r| &r.info)
+    }
+
+    /// 根据序列号判断设备是否疑似 BadUSB（同时具备 Storage 和 HID 接口）。
+    pub fn is_badusb_by_serial(&self, serial: &str) -> bool {
+        self.records
+            .values()
+            .find(|r| r.info.serial_number == serial)
+            .map(|r| r.is_badusb())
+            .unwrap_or(false)
     }
 
     /// 列出所有已连接设备。

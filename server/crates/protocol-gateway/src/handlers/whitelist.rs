@@ -148,6 +148,13 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 "设备描述符异常，疑似伪装设备，禁止添加",
             );
         }
+        if dm_guard.is_badusb_by_serial(&cmd.serial_number) {
+            return error_response(
+                ctx.seq_id,
+                ResultCode::DeviceSpoofSuspected,
+                "疑似 BadUSB 伪装设备（同时具备存储和键盘接口），禁止添加",
+            );
+        }
         if matches!(
             info.device_type,
             DeviceType::Unknown | DeviceType::Unsupported
