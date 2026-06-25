@@ -18,6 +18,14 @@ use crate::error::HidAccessError;
 use crate::hid_report::{keycode_to_hid, KeyboardReport};
 use crate::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult};
 
+/// 键盘拦截器运行结果。
+pub enum KeyboardRunResult {
+    /// 验证通过，转发后设备拔出。
+    VerifiedThenRemoved,
+    /// 验证阶段设备拔出。
+    RemovedDuringVerify,
+}
+
 /// 键盘 evdev 拦截器。
 ///
 /// 打开 Linux input 设备后自动 grab（独占），受控主机不再收到该键盘的输入。
@@ -38,7 +46,7 @@ impl KeyboardInterceptor {
     /// 在 spawn_blocking 中运行键盘拦截与验证。
     ///
     /// 返回 Ok 表示键盘正常拔出或映射结束，Err 表示不可恢复的错误。
-    pub fn run(&mut self, input_dev_path: &Path) -> Result<(), HidAccessError> {
+    pub fn run(&mut self, input_dev_path: &Path) -> Result<KeyboardRunResult, HidAccessError> {
         let mut dev = Device::open(input_dev_path).map_err(|e| {
             error!(dev = %input_dev_path.display(), reason = %e, "evdev 设备打开失败");
             HidAccessError::Internal(format!(
@@ -82,7 +90,7 @@ impl KeyboardInterceptor {
                     }
                     KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved) => {
                         info!(dev = %input_dev_path.display(), "键盘在验证阶段被拔出");
-                        return Ok(());
+                        return Ok(KeyboardRunResult::RemovedDuringVerify);
                     }
                     KeyboardTransitionResult::Transitioned(state) => {
                         return Err(HidAccessError::Internal(format!(
@@ -126,14 +134,16 @@ impl KeyboardInterceptor {
         &mut self,
         dev: &mut Device,
         input_dev_path: &Path,
-    ) -> Result<(), HidAccessError> {
+    ) -> Result<KeyboardRunResult, HidAccessError> {
         let mut pressed: BTreeSet<u8> = BTreeSet::new();
         let mut modifiers: u8 = 0;
 
         loop {
-            for ev in dev.fetch_events().map_err(|e| {
-                HidAccessError::Internal(format!("转发阶段读取 evdev 事件失败: {}", e))
-            })? {
+            let events = match dev.fetch_events() {
+                Ok(events) => events,
+                Err(_) => return Ok(KeyboardRunResult::VerifiedThenRemoved),
+            };
+            for ev in events {
                 if let InputEventKind::Key(key) = ev.kind() {
                     match keycode_to_hid(key) {
                         Some((mod_bit, 0)) if mod_bit != 0 => match ev.value() {
@@ -174,7 +184,7 @@ impl KeyboardInterceptor {
 
                 if let Err(e) = file.write_all(&report.to_bytes()) {
                     warn!(dev = %input_dev_path.display(), ?e, "写 hidg report 失败，结束转发");
-                    return Ok(());
+                    return Ok(KeyboardRunResult::VerifiedThenRemoved);
                 }
             }
         }

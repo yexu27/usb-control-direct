@@ -6,6 +6,7 @@ use tracing::{debug, info, warn};
 use auth_session::service::LoginResult;
 use common::code::ResultCode;
 use common::mapping::role_int_to_str;
+use common::audit_const::{action_type, log_type};
 use common::proto::{CmdLogin, RspLogin};
 use storage::model::OperationLogInsert;
 
@@ -41,12 +42,18 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         Err(e) => (1, Some(format!("{}", e))),
     };
 
+    let action = if result.is_ok() {
+        action_type::LOGIN
+    } else {
+        action_type::LOGIN_FAILED
+    };
+
     let mut log = OperationLogInsert {
         op_time: 0,
         username: cmd.username.clone(),
         role: result.as_ref().map(|r| r.role).unwrap_or(-1),
-        log_type: "login_auth".into(),
-        action_type: Some("login".into()),
+        log_type: log_type::LOGIN_AUTH.into(),
+        action_type: Some(action.into()),
         target: None,
         before_value: None,
         after_value: None,

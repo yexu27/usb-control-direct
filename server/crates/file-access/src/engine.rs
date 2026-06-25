@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
+use common::audit_const::event_type;
 use log_audit::AuditService;
 use storage::Storage;
 use storage::model::UsbAuditLogInsert;
@@ -63,7 +64,7 @@ impl FileAccessEngine {
     /// 记录文件阻断审计日志。
     fn log_block_event(&self, file_path: &str, matched_policy: &str) {
         let mut log = UsbAuditLogInsert {
-            event_time: 0,
+            event_time: common::time::now_unix(),
             device_type: None,
             interface_type: None,
             interface_class: None,
@@ -73,7 +74,7 @@ impl FileAccessEngine {
             device_sn: None,
             vid: None,
             pid: None,
-            event_type: "file_block".to_string(),
+            event_type: event_type::FILE_ACCESS_DENIED.to_string(),
             permission: None,
             capacity_bytes: None,
             file_path: Some(file_path.to_string()),

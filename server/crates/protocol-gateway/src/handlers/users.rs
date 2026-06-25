@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::mapping::{role_int_to_str, role_str_to_int};
 use common::proto::{
@@ -73,7 +74,7 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     {
         Ok(_id) => {
             info!(user = %cmd.username, "用户创建成功");
-            log_operation(ctx, session, "user_management", "create", &cmd.username, 0, None);
+            log_operation(ctx, session, log_type::USER_MANAGEMENT, action_type::USER_CREATE, &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -82,8 +83,8 @@ pub fn handle_create_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "user_management",
-                "create",
+                log_type::USER_MANAGEMENT,
+                action_type::USER_CREATE,
                 &cmd.username,
                 1,
                 Some(&e.to_string()),
@@ -114,7 +115,7 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     {
         Ok(()) => {
             info!(target_user = %cmd.username, "用户删除成功");
-            log_operation(ctx, session, "user_management", "delete", &cmd.username, 0, None);
+            log_operation(ctx, session, log_type::USER_MANAGEMENT, action_type::USER_DELETE, &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -123,8 +124,8 @@ pub fn handle_delete_user(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "user_management",
-                "delete",
+                log_type::USER_MANAGEMENT,
+                action_type::USER_DELETE,
                 &cmd.username,
                 1,
                 Some(&e.to_string()),
@@ -155,7 +156,7 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     {
         Ok(()) => {
             info!(target_user = %cmd.username, "密码重置成功");
-            log_operation(ctx, session, "user_management", "reset_password", &cmd.username, 0, None);
+            log_operation(ctx, session, log_type::USER_MANAGEMENT, action_type::PASSWORD_RESET, &cmd.username, 0, None);
             success_response(ctx.seq_id)
         }
         Err(e) => {
@@ -164,8 +165,8 @@ pub fn handle_reset_password(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
             log_operation(
                 ctx,
                 session,
-                "user_management",
-                "reset_password",
+                log_type::USER_MANAGEMENT,
+                action_type::PASSWORD_RESET,
                 &cmd.username,
                 1,
                 Some(&e.to_string()),

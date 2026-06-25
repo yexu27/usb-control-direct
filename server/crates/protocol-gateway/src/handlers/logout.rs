@@ -3,6 +3,7 @@
 use prost::Message;
 use tracing::{debug, info, warn};
 
+use common::audit_const::{action_type, log_type};
 use common::code::ResultCode;
 use common::proto::{CmdLogout, RspCommon};
 use storage::model::OperationLogInsert;
@@ -33,8 +34,8 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 op_time: 0,
                 username: info.username.clone(),
                 role: info.role,
-                log_type: "login_auth".into(),
-                action_type: Some("logout".into()),
+                log_type: log_type::LOGIN_AUTH.into(),
+                action_type: Some(action_type::LOGOUT.into()),
                 target: None,
                 before_value: None,
                 after_value: None,
@@ -65,8 +66,8 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                     .map(|s| s.username.clone())
                     .unwrap_or_else(|| "unknown".to_string()),
                 role: ctx.session.as_ref().map(|s| s.role).unwrap_or(-1),
-                log_type: "login_auth".into(),
-                action_type: Some("logout".into()),
+                log_type: log_type::LOGIN_AUTH.into(),
+                action_type: Some(action_type::LOGOUT.into()),
                 target: None,
                 before_value: None,
                 after_value: None,

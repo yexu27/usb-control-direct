@@ -13,3 +13,5 @@ pub mod mapping;
 pub mod proto;
 pub mod time;
 pub mod types;
+
+pub mod audit_const;
