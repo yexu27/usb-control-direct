@@ -78,7 +78,6 @@ export const useSessionStore = defineStore('session', () => {
 
   async function finishAuthentication(): Promise<void> {
     const connection = useConnectionStore()
-    const bootstrapStore = useBootstrapStore()
 
     await connection.applyStateEvent('AUTH_SUCCESS')
 
@@ -98,21 +97,8 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     await connection.applyStateEvent('LICENSE_AUTHORIZED')
-    try {
-      await bootstrapStore.loadForRole(token.value, role.value)
-      await connection.applyStateEvent('CONFIG_LOADED')
-      startInactivityTimer()
-    } catch (error: unknown) {
-      try {
-        await connection.applyStateEvent('CONFIG_FAILED')
-      } catch {
-        // 网络断开可能已将主进程状态推进到 DISCONNECTED。
-      }
-      bootstrapStore.clear()
-      clearSession()
-      await connection.disconnect(true).catch(() => {})
-      throw error
-    }
+    await connection.applyStateEvent('CONFIG_LOADED')
+    startInactivityTimer()
   }
 
   async function login(
