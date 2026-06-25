@@ -79,6 +79,15 @@ describe('RequestDispatcher', () => {
     await expect(p2).rejects.toThrow('disconnected')
   })
 
+  it('冻结后拒绝新增请求并保留明确错误', async () => {
+    dispatcher.freeze(new Error('正在登出，拒绝新请求'))
+
+    await expect(dispatcher.dispatch(0x0200, new Uint8Array())).rejects.toThrow(
+      '正在登出，拒绝新请求',
+    )
+    expect(writtenFrames.length).toBe(0)
+  })
+
   it('ignores late response after timeout', () => {
     dispatcher.dispatch(0x0104, new Uint8Array(0), 1000).catch(() => {})
     vi.advanceTimersByTime(1001)

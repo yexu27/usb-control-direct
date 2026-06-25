@@ -48,4 +48,20 @@ describe('TlsClient', () => {
       '装置已断开，请重新连接后再操作',
     )
   })
+
+  it('主动断开时停止心跳并拒绝所有 pending 请求', async () => {
+    const transport = new FakeTlsTransport()
+    const heartbeat = new HeartbeatManager()
+    const client = new TlsClient(transport, heartbeat)
+    await client.connect('19.19.19.16', 9600)
+    client.transitionState('AUTH_SUCCESS')
+    client.transitionState('LICENSE_AUTHORIZED')
+    client.transitionState('CONFIG_LOADED')
+
+    const pending = client.send(0x0200, new Uint8Array(0))
+    client.disconnect()
+
+    await expect(pending).rejects.toThrow('主动断开连接')
+    expect(client.getConnectionStatus()).toBe('DISCONNECTED')
+  })
 })

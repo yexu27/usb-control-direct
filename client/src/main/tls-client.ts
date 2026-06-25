@@ -65,6 +65,7 @@ export class TlsClient extends EventEmitter {
   }
 
   async connect(host: string, port: number): Promise<void> {
+    this.dispatcher.unfreeze()
     this.stateMachine.transition('CONNECT_START')
 
     try {
@@ -82,6 +83,7 @@ export class TlsClient extends EventEmitter {
 
   disconnect(): void {
     this.heartbeat.stop()
+    this.dispatcher.freeze(new Error('主动断开连接'))
     this.transport.disconnect()
     this.dispatcher.rejectAll(new Error('主动断开连接'))
 
