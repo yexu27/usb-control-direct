@@ -345,11 +345,22 @@ impl DeviceOrchestrator {
 
         // spawn_blocking: evdev IO 是阻塞的，拔出时 read 报错自然退出
         tokio::task::spawn_blocking(move || {
-            use hid_access::evdev_interceptor::KeyboardInterceptor;
+            use hid_access::evdev_interceptor::{KeyboardInterceptor, KeyboardRunResult};
             let mut interceptor = KeyboardInterceptor::new(hidg_kb);
             match interceptor.run(&evdev_path) {
-                Ok(()) => info!(dev = %device_name, "键盘拦截器正常退出"),
-                Err(e) => warn!(dev = %device_name, error = %e, "键盘拦截器异常退出"),
+                Ok(KeyboardRunResult::VerifiedThenRemoved) => {
+                    info!(dev = %device_name, "键盘拦截器正常退出");
+                    write_audit_generic_static(&audit, &info4audit, event_type::KEYBOARD_VERIFY_PASS,
+                        "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+                }
+                Ok(KeyboardRunResult::RemovedDuringVerify) => {
+                    info!(dev = %device_name, "键盘验证阶段设备拔出");
+                }
+                Err(e) => {
+                    warn!(dev = %device_name, error = %e, "键盘拦截器异常退出");
+                    write_audit_generic_static(&audit, &info4audit, event_type::KEYBOARD_VERIFY_FAIL,
+                        "failed", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+                }
             }
             write_audit_generic_static(&audit, &info4audit, event_type::DEVICE_REMOVE,
                 "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
