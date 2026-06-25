@@ -140,6 +140,16 @@ describe('FileAccessPage', () => {
     seed()
   })
 
+  it('页面挂载时重新从装置加载文件访问策略', async () => {
+    const store = useFilePolicyStore()
+    const load = vi.spyOn(store, 'load').mockResolvedValue()
+
+    mountPage()
+    await flushPromises()
+
+    expect(load).toHaveBeenCalledWith('session-token')
+  })
+
   it('三个策略卡片在共同容器中单列全宽纵向排列', () => {
     const wrapper = mountPage()
     const policyList = wrapper.get('[data-testid="file-policy-list"]')

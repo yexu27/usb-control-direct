@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import AddBlacklistDialog from '@/components/file-policy/AddBlacklistDialog.vue'
@@ -40,6 +40,10 @@ const pageRows = computed(() => {
   return blacklist.value.slice(start, start + pageSize.value)
 })
 
+onMounted(() => {
+  void refreshPolicy()
+})
+
 function isPending(key: string): boolean {
   return filePolicy.pendingKeys.has(key)
 }
@@ -58,6 +62,17 @@ function isRemoving(extension: string): boolean {
 
 async function showError(error: unknown, fallback: string): Promise<void> {
   await showErrorDialog(fallback, errorMessage(error, fallback))
+}
+
+async function refreshPolicy(): Promise<void> {
+  if (!connection.isConnected) {
+    return
+  }
+  try {
+    await filePolicy.load(session.token)
+  } catch {
+    // Store errorMessage is rendered by DataTable; no modal on passive page refresh.
+  }
 }
 
 async function canWrite(): Promise<boolean> {
