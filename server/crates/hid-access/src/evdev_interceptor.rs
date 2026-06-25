@@ -139,9 +139,11 @@ impl KeyboardInterceptor {
         let mut modifiers: u8 = 0;
 
         loop {
-            for ev in dev.fetch_events().map_err(|e| {
-                HidAccessError::Internal(format!("转发阶段读取 evdev 事件失败: {}", e))
-            })? {
+            let events = match dev.fetch_events() {
+                Ok(events) => events,
+                Err(_) => return Ok(KeyboardRunResult::VerifiedThenRemoved),
+            };
+            for ev in events {
                 if let InputEventKind::Key(key) = ev.kind() {
                     match keycode_to_hid(key) {
                         Some((mod_bit, 0)) if mod_bit != 0 => match ev.value() {
