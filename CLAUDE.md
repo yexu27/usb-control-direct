@@ -12,3 +12,4 @@ USB 安全管理系统。
 PRD: `docs/prd/USB安全管理系统-PRD-v1.0.1.md`
 原型图: `docs/prototype/USB安全管理系统原型图-v1.0.1.html`
 编码规范: `.claude/rules/README.md`
+Git 提交规范: `.claude/rules/git-commit-message.md`

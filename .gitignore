@@ -1,3 +1,7 @@
 .DS_Store
 CLAUDE.local.md
 .claude/settings.local.json
+docs/prompts
+docs/superpowers
+server/Cargo.lock
+.claude/worktrees

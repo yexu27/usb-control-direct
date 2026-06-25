@@ -11,4 +11,6 @@ USB 安全管理系统。
 架构设计: `docs/architecture/README.md`
 PRD: `docs/prd/USB安全管理系统-PRD-v1.0.1.md`
 原型图: `docs/prototype/USB安全管理系统原型图-v1.0.1.html`
-编码规范: `.Codex/rules/README.md`
+编码规范: `.codex/rules/README.md`
+Git 提交规范: `.codex/rules/git-commit-message.md`
+个人开发环境配置: `CLAUDE.local.md`

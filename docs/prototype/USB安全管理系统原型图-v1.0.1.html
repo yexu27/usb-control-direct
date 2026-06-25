@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USB安全管理系统 - 安帝科技</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei','Segoe UI',Roboto,sans-serif;background:#e8ecf1;color:#222}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+
+/* ===== Andisec Brand Colors ===== */
+:root{--andi-blue:#0056b3;--andi-blue-dark:#003d82;--andi-blue-light:#e8f0fe;--andi-blue-bg:#f0f4fa;--andi-sidebar:#f5f7fa;--andi-header-start:#004b9a;--andi-header-end:#0066cc;--andi-text:#333;--andi-text-secondary:#666;--andi-text-light:#999;--andi-border:#dce0e6;--andi-active-bg:#e3edfc}
+.andi-logo{display:flex;align-items:center;gap:10px}
+.andi-logo .shield{width:28px;height:28px;background:linear-gradient(135deg,#fff,#e0e8f0);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--andi-blue);position:relative}
+.andi-logo .shield::after{content:'';position:absolute;top:3px;left:5px;right:5px;bottom:3px;border:2px solid var(--andi-blue);border-radius:3px}
+.andi-logo .brand{text-align:left}
+.andi-logo .brand .cn{font-size:12px;font-weight:600;color:#fff;letter-spacing:1px}
+.andi-logo .brand .en{font-size:9px;color:rgba(255,255,255,.7);letter-spacing:1.5px;text-transform:uppercase}
+
+#app{max-width:1120px;margin:0 auto;padding:16px 20px}
+.main-wrap{border:1px solid var(--andi-border);border-radius:8px;overflow:hidden;min-height:680px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.07);display:flex;flex-direction:column}
+.header-bar{background:linear-gradient(135deg,var(--andi-header-start),var(--andi-header-end));padding:10px 20px;display:flex;align-items:center;justify-content:space-between;min-height:48px}
+.header-bar .title-area{display:flex;align-items:center;gap:16px}
+.header-bar .title-area .product-name{font-size:14px;font-weight:600;color:#fff;letter-spacing:.5px}
+.header-bar .title-area .product-sub{font-size:11px;color:rgba(255,255,255,.6)}
+.header-bar .win-controls{display:flex;gap:2px}
+.header-bar .win-controls span{width:14px;height:14px;border-radius:2px;border:1px solid rgba(255,255,255,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(255,255,255,.7);padding:2px}
+.body-wrap{display:flex;flex:1;min-height:0}
+
+.sidebar{width:190px;min-width:190px;background:var(--andi-sidebar);border-right:1px solid var(--andi-border);display:flex;flex-direction:column}
+.sidebar-nav{flex:1;overflow-y:auto;padding:6px 0}
+.nav-item{padding:10px 16px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--andi-text);transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover{background:var(--andi-active-bg);color:var(--andi-blue)}
+.nav-item.active{background:var(--andi-active-bg);border-left-color:var(--andi-blue);color:var(--andi-blue);font-weight:600}
+.nav-item svg{flex-shrink:0;opacity:.7}
+.nav-item.active svg{opacity:1}
+.sidebar-footer{padding:10px 16px;border-top:1px solid var(--andi-border);font-size:11px;color:var(--andi-text-light);background:#f0f2f5}
+
+.content{flex:1;overflow-y:auto;background:#fff;padding:20px 24px;min-height:650px}
+.page{display:none}
+.page.active{display:block}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.page-header h1{font-size:16px;font-weight:600;color:var(--andi-text)}
+.page-header .desc{font-size:12px;color:var(--andi-text-light);margin-top:2px}
+.role-badge{font-size:11px;padding:3px 10px;border-radius:10px;display:inline-block}
+.role-operator{background:#e8f5e9;color:#2e7d32}
+.role-auditor{background:#f3e5f5;color:#7b1fa2}
+.role-admin{background:#fbe9e7;color:#bf360c}
+.role-blue-bg{background:var(--andi-blue-light);color:var(--andi-blue)}
+
+.card{background:var(--andi-blue-bg);border-radius:6px;padding:16px;margin-bottom:14px;border:1px solid var(--andi-border)}
+.card-white{border:1px solid var(--andi-border);border-radius:6px;overflow:hidden}
+.card-padded{border:1px solid var(--andi-border);border-radius:6px;padding:18px}
+.card-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--andi-border);background:var(--andi-blue-bg)}
+.card-header h3{font-size:13px;font-weight:600;color:var(--andi-text)}
+.checkbox-row{display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0}
+.checkbox-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--andi-blue);cursor:pointer;margin-top:2px}
+.checkbox-row .label-text{font-size:13px;font-weight:500;color:var(--andi-text)}
+.checkbox-row .label-desc{font-size:11px;color:var(--andi-text-light);margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:7px 12px;text-align:left;font-weight:600;color:var(--andi-text-secondary);border-bottom:1px solid var(--andi-border);background:var(--andi-blue-bg);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+td{padding:7px 12px;border-bottom:1px solid var(--andi-border);color:var(--andi-text)}
+code{font-family:'SF Mono',Consolas,monospace;font-size:11px;background:#f0f2f5;padding:1px 5px;border-radius:3px;color:var(--andi-blue-dark)}
+.btn{padding:6px 14px;border:1px solid var(--andi-border);border-radius:4px;font-size:12px;cursor:pointer;background:transparent;transition:all .15s;display:inline-flex;align-items:center;gap:4px;color:var(--andi-text)}
+.btn:hover{background:var(--andi-blue-light);border-color:var(--andi-blue)}
+.btn-primary{background:var(--andi-blue);color:#fff;border:none}
+.btn-primary:hover{background:var(--andi-blue-dark)}
+.btn-success{background:#2e7d32;color:#fff;border:none}
+.btn-danger{border-color:#ef9a9a;color:#c62828}
+.btn-danger:hover{background:#ffebee;border-color:#c62828}
+.badge{padding:2px 7px;border-radius:3px;font-size:11px;display:inline-block}
+.badge-green{background:#e8f5e9;color:#2e7d32}
+.badge-red{background:#ffebee;color:#c62828}
+.badge-amber{background:#fff8e1;color:#e65100}
+.badge-blue{background:var(--andi-blue-light);color:var(--andi-blue)}
+.badge-purple{background:#f3e5f5;color:#7b1fa2}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-2x1{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.filter-bar input,.filter-bar select{padding:6px 10px;border:1px solid var(--andi-border);border-radius:4px;font-size:12px;outline:none;color:var(--andi-text)}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--andi-blue)}
+.tabs{display:flex;gap:0;margin-bottom:14px}
+.tab{padding:7px 18px;font-size:12px;cursor:pointer;border:1px solid var(--andi-border);background:#f8f9fa;color:var(--andi-text-secondary);transition:all .15s}
+.tab:first-child{border-radius:4px 0 0 4px}
+.tab:last-child{border-radius:0 4px 4px 0}
+.tab+.tab{border-left:none}
+.tab.active{background:var(--andi-blue);color:#fff;border-color:var(--andi-blue)}
+.pagination{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;color:var(--andi-text-light)}
+.pagination-btns{display:flex;gap:4px}
+.pagination-btns button{padding:3px 8px;border:1px solid var(--andi-border);border-radius:3px;font-size:11px;cursor:pointer;background:transparent;color:var(--andi-text)}
+.pagination-btns button.active{background:var(--andi-blue);color:#fff;border-color:var(--andi-blue)}
+/* Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal-box{background:#fff;border-radius:8px;padding:24px;min-width:400px;max-width:480px;box-shadow:0 8px 30px rgba(0,0,0,.18)}
+.modal-box h3{font-size:15px;font-weight:600;margin-bottom:16px;color:var(--andi-text)}
+.modal-box label{font-size:12px;color:var(--andi-text-secondary);display:block;margin-bottom:4px;margin-top:12px}
+.modal-box label:first-of-type{margin-top:0}
+.modal-box input,.modal-box select{width:100%;padding:8px 12px;border:1px solid var(--andi-border);border-radius:4px;font-size:13px;outline:none;box-sizing:border-box;color:var(--andi-text)}
+.modal-box input:focus,.modal-box select:focus{border-color:var(--andi-blue)}
+.modal-box .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.modal-box .hint{font-size:11px;color:var(--andi-text-light);margin-top:4px}
+.modal-box .error-text{font-size:11px;color:#c62828;margin-top:4px;display:none}
+.toast{position:fixed;top:20px;right:20px;padding:11px 18px;border-radius:6px;font-size:13px;z-index:2000;box-shadow:0 4px 12px rgba(0,0,0,.15);animation:slideIn .3s ease}
+.toast-success{background:#2e7d32;color:#fff}
+.toast-error{background:#c62828;color:#fff}
+.toast-info{background:var(--andi-blue);color:#fff}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* Login screen */
+#login-screen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#e8ecf1 0%,#d5dce6 100%);z-index:500;display:flex;align-items:center;justify-content:center}
+#login-screen .login-box{width:420px;padding:36px 32px;background:#fff;border-radius:8px;box-shadow:0 6px 30px rgba(0,0,0,.12);text-align:center}
+#login-screen .login-box .logo-section{margin-bottom:20px}
+#login-screen .login-box .logo-section .logo-icon{width:56px;height:56px;margin:0 auto 12px;background:linear-gradient(135deg,var(--andi-header-start),var(--andi-header-end));border-radius:10px;display:flex;align-items:center;justify-content:center}
+#login-screen .login-box .logo-section h1{font-size:17px;font-weight:600;color:var(--andi-text)}
+#login-screen .login-box .logo-section .sub{font-size:12px;color:var(--andi-text-light);margin-top:2px}
+#login-screen .login-box .field{text-align:left;margin-bottom:14px}
+#login-screen .login-box .field label{font-size:12px;color:var(--andi-text-secondary);display:block;margin-bottom:4px}
+#login-screen .login-box .field input{width:100%;padding:9px 12px;border:1px solid var(--andi-border);border-radius:4px;font-size:13px;box-sizing:border-box;outline:none;color:var(--andi-text)}
+#login-screen .login-box .field input:focus{border-color:var(--andi-blue)}
+#login-screen .login-box .hint-accounts{font-size:11px;color:#c62828;text-align:left;margin-bottom:16px;line-height:1.6;padding:8px 10px;background:#fff5f5;border-radius:4px}
+</style>
+</head>
+<body>
+
+<h2 class="sr-only">USB安全管理系统 - 安帝科技交互原型</h2>
+
+<!-- ===== Login Screen ===== -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="logo-section">
+      <div class="logo-icon">
+        <svg width="28" height="28" viewBox="0 0 16 16" fill="none"><path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="rgba(255,255,255,.9)"/><path d="M8 3L5 5v3.5c0 2.2 1.3 4 3 4.6 1.7-.6 3-2.4 3-4.6V5L8 3z" fill="var(--andi-blue)"/><text x="8" y="9" text-anchor="middle" font-size="5" font-weight="700" fill="#fff">A</text></svg>
+      </div>
+      <h1>USB安全管理系统</h1>
+      <p class="sub">北京安帝科技有限公司</p>
+    </div>
+    <div class="field">
+      <label>用户名</label>
+      <input id="login-user" type="text" value="admin" placeholder="请输入用户名">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input id="login-pass" type="password" value="admin@123" placeholder="请输入密码">
+    </div>
+    <div class="field">
+      <label>装置IP</label>
+      <input id="login-ip" type="text" value="192.168.1.100" placeholder="请输入装置IP地址">
+    </div>
+    <div class="hint-accounts">
+      内置账户: admin / admin@123 &nbsp;|&nbsp; operator / operator@123 &nbsp;|&nbsp; audit / audit@123<br>
+      出厂默认装置IP: 19.19.19.16
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:10px;font-size:13px" onclick="doLogin()">登 录</button>
+    <div style="margin-top:16px;font-size:11px;color:var(--andi-text-light);display:flex;justify-content:center;gap:16px">
+      <a href="javascript:clearAuth()" style="color:#999;text-decoration:none;border-bottom:1px dashed #ccc">重置授权状态</a>
+      <a href="javascript:clearAuthAndRefresh()" style="color:#999;text-decoration:none;border-bottom:1px dashed #ccc">清空缓存并重置</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Authorization Screen (shown after login attempt if not authorized) ===== -->
+<div id="auth-screen" style="display:none">
+  <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f0f2f5;position:fixed;top:0;left:0;z-index:600">
+    <div style="width:400px;padding:40px 32px;background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.08);text-align:center">
+      <div style="width:52px;height:52px;border-radius:10px;background:#dbeafe;margin:0 auto 16px;display:flex;align-items:center;justify-content:center">
+        <svg width="24" height="24" viewBox="0 0 16 16" fill="none"><path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="var(--andi-blue)"/><text x="8" y="10" text-anchor="middle" font-size="6" font-weight="700" fill="#fff">A</text></svg>
+      </div>
+      <h2 style="font-size:16px;font-weight:600;margin-bottom:4px">设备授权</h2>
+      <p style="font-size:12px;color:var(--andi-text-light);margin-bottom:24px">请先完成设备授权后再登录</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px" onclick="openModal('machine-code')">下载机器码</button>
+        <button class="btn" style="width:100%;padding:12px;font-size:14px;border:1px solid var(--andi-blue);color:var(--andi-blue)" onclick="openModal('auth-upload-license')">上传授权文件</button>
+      </div>
+      <p style="font-size:11px;color:var(--andi-text-light);margin-top:20px">授权成功后自动返回登录页</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Main Application ===== -->
+<div id="main-app" style="display:none">
+<div id="app">
+  <div class="main-wrap">
+
+    <!-- Header Bar -->
+    <div class="header-bar">
+      <div class="title-area">
+        <div class="andi-logo">
+          <div class="shield">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L3 4v4c0 3.3 2.2 6.2 5 7 2.8-.8 5-3.7 5-7V4L8 1z" fill="var(--andi-blue)"/><text x="8" y="10" text-anchor="middle" font-size="6" font-weight="700" fill="#fff">A</text></svg>
+          </div>
+          <div class="brand">
+            <div class="cn">安帝科技</div>
+            <div class="en">ANDISEC</div>
+          </div>
+        </div>
+        <span style="width:1px;height:24px;background:rgba(255,255,255,.25)"></span>
+        <div>
+          <div class="product-name">USB安全管理系统</div>
+          <div class="product-sub">运维管理控制台 V1.0</div>
+        </div>
+      </div>
+      <div class="win-controls">
+        <span>─</span><span>□</span><span>✕</span>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="body-wrap">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-nav">
+          <div class="nav-item active" data-page="file-access" onclick="switchPage('file-access')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 3h4l2 2h4v8H3V3z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg> 文件访问控制
+          </div>
+          <div class="nav-item" data-page="usb-control" onclick="switchPage('usb-control')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="4" y="1" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M7 6v3M9 6v3M6 12h4v3H6z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg> U盘设备控制
+          </div>
+          <div class="nav-item" data-page="policy" onclick="switchPage('policy')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 2h10l-2 6H5L3 2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6 12h4v2H6z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg> 策略管理
+          </div>
+          <div class="nav-item" data-page="log" onclick="switchPage('log')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 2h10v12H3V2z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> 日志管理
+          </div>
+          <div class="nav-item" data-page="system" onclick="switchPage('system')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> 系统管理
+          </div>
+          <div class="nav-item" data-page="user" onclick="switchPage('user')">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg> 用户管理
+          </div>
+        </div>
+        <div class="sidebar-footer">安帝科技 · 系统状态：正常</div>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+
+        <!-- ===== 文件访问控制 ===== -->
+        <div class="page active" id="page-file-access">
+          <div class="page-header">
+            <div><h1>文件访问控制</h1><div class="desc">管理移动存储设备的文件访问策略</div></div>
+            <span class="role-badge role-operator" style="background:#e8f5e9;color:#2e7d32">操作员</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="card-padded" style="padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" id="fa-exec" onchange="logOp('勾选/取消勾选「禁止访问移动存储设备中的可执行文件」')" style="width:16px;height:16px;accent-color:var(--andi-blue);margin-top:2px;cursor:pointer">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:600;color:var(--andi-text)">可执行程序访问控制</div>
+                  <label for="fa-exec" style="font-size:12px;color:#555;cursor:pointer;display:block;margin-top:6px">禁止访问移动存储设备中的可执行文件</label>
+                  <div style="font-size:11px;color:var(--andi-text-light);margin-top:4px">可执行程序指对以下程序进行控制：dll、exe、scr、msi、ps1、vbs、js、bat、cmd、pif、com、wsf、hta、jar、lnk、reg、ELF、sh、bin、run、AppImage、py、msc，共计23种。勾选=禁止访问；取消勾选=允许访问。默认：未勾选（允许访问）</div>
+                  <p style="font-size:10px;color:var(--andi-text-light);margin-top:6px">&#9432; 系统内置23种可执行程序类型，不可删除，只能通过上方复选框控制启用/禁用</p>
+                </div>
+              </div>
+            </div>
+            <div class="card-padded" style="padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <input type="checkbox" id="fa-autorun" onchange="logOp('启用/禁用「介质自动读取功能控制」')" style="width:16px;height:16px;accent-color:var(--andi-blue);margin-top:2px;cursor:pointer">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:600;color:var(--andi-text)">介质自动读取功能控制</div>
+                  <label for="fa-autorun" style="font-size:12px;color:#555;cursor:pointer;display:block;margin-top:6px">启用介质自动读取功能控制</label>
+                  <div style="font-size:11px;color:var(--andi-text-light);margin-top:4px">介质自动读取指对U盘中autorun配置文件进行控制。启用=含.sh文件的U盘映射后，.sh文件内容显示为空（不可读）；禁用=.sh文件可正常读写。仅对U盘根目录下的.sh后缀文件生效。默认：未勾选（禁用）</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-padded" style="padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px">
+                <input type="checkbox" id="fa-type" onchange="toggleFileTypeControl()" style="width:16px;height:16px;accent-color:var(--andi-blue);margin-top:2px;cursor:pointer">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:600;color:var(--andi-text)">文件类型访问控制</div>
+                  <label for="fa-type" style="font-size:12px;color:#555;cursor:pointer;display:block;margin-top:6px">启用文件类型访问控制</label>
+                  <div style="font-size:11px;color:var(--andi-text-light);margin-top:4px">通过后缀类型管理移动存储设备中的文件。启用并添加文件类型黑名单后，移动存储设备完成映射后禁止访问黑名单中对应后缀类型的文件。默认：未勾选</div>
+                </div>
+              </div>
+              <div id="file-type-control-body">
+                <div style="border:1px solid var(--andi-border);border-radius:4px;overflow:hidden">
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--andi-border);background:var(--andi-blue-bg)">
+                    <span style="font-size:12px;font-weight:600;color:var(--andi-text)">文件类型黑名单</span>
+                    <button class="btn btn-primary" onclick="openModal('add-blacklist')" style="padding:5px 12px;font-size:11px">+ 添加</button>
+                  </div>
+                  <div id="blacklist-table-wrap">
+                    <table>
+                      <thead><tr><th style="width:22%">后缀名</th><th style="width:55%">说明</th><th style="width:23%;text-align:right">操作</th></tr></thead>
+                      <tbody id="blacklist-table-body"></tbody>
+                    </table>
+                    <div id="blacklist-pagination" class="pagination" style="padding:8px 12px;border-top:1px solid var(--andi-border)">
+                      <span id="blacklist-page-info">显示 1-6，共 18 条</span>
+                      <div class="pagination-btns" id="blacklist-page-btns"></div>
+                    </div>
+                  </div>
+                </div>
+                <p style="font-size:11px;color:var(--andi-text-light);margin-top:6px">黑名单支持添加单个文件后缀（如 .exe, .bat, .vbs, .js 等）；添加时需输入后缀名和说明文字。</p>
+              </div>
+            </div>
+          </div>
+          <p style="margin-top:10px;font-size:11px;color:var(--andi-text-light)">策略更改后需重新拔插移动存储设备或等待装置重新扫描映射后生效。策略更改记录至管理员操作日志。</p>
+        </div>
+
+        <!-- ===== USB设备控制 ===== -->
+        <div class="page" id="page-usb-control">
+          <div class="page-header">
+            <div><h1>U盘设备控制</h1><div class="desc">管理受信任移动存储设备白名单</div></div>
+            <span class="role-badge role-operator" style="background:#e8f5e9;color:#2e7d32">操作员</span>
+          </div>
+          <div class="card">
+            <label class="checkbox-row">
+              <input type="checkbox" id="usb-secure" checked onchange="logOp('开启/关闭「安全U盘自由使用」')">
+              <div><div class="label-text">开启安全U盘自由使用</div><div class="label-desc">（延后实现）开启：安全U盘插入后经扫描即可使用；关闭：所有安全U盘需认证。默认勾选</div></div>
+            </label>
+          </div>
+          <div class="card-white">
+            <div class="card-header" style="flex-wrap:wrap;gap:8px">
+              <h3>受信任普通移动存储设备白名单</h3>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn" onclick="openModal('device-add')" style="padding:5px 10px;font-size:11px">装置端添加</button>
+                <button class="btn btn-primary" onclick="openModal('console-add')" style="padding:5px 10px;font-size:11px">管理端添加</button>
+              </div>
+            </div>
+            <table>
+              <thead><tr><th>序列号</th><th>描述</th><th style="text-align:center">权限</th><th>添加方式</th><th>添加时间</th><th style="text-align:right">操作</th></tr></thead>
+              <tbody id="whitelist-table">
+                <tr data-sn="SN-20240601-001"><td><code>SN-20240601-001</code></td><td>团队数据盘</td><td style="text-align:center"><span class="badge badge-green">读写</span></td><td>装置端</td><td>2026-06-01 10:30</td><td style="text-align:right"><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDelete(this,'SN-20240601-001','whitelist')">删除</button></td></tr>
+                <tr data-sn="SN-20260528-042"><td><code>SN-20260528-042</code></td><td>项目备份</td><td style="text-align:center"><span class="badge badge-amber">只读</span></td><td>管理端</td><td>2026-05-28 14:15</td><td style="text-align:right"><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDelete(this,'SN-20260528-042','whitelist')">删除</button></td></tr>
+                <tr data-sn="SN-20260515-103"><td><code>SN-20260515-103</code></td><td>演示素材</td><td style="text-align:center"><span class="badge badge-amber">只读</span></td><td>装置端</td><td>2026-05-15 09:45</td><td style="text-align:right"><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDelete(this,'SN-20260515-103','whitelist')">删除</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="margin-top:10px;font-size:11px;color:var(--andi-text-light)">白名单设备重新插入后经过扫描审计方可使用。未授权设备显示黄色指示灯常亮。添加完成后需重新拔插U盘生效。</p>
+        </div>
+
+        <!-- ===== 策略管理 ===== -->
+        <div class="page" id="page-policy">
+          <div class="page-header">
+            <div><h1>策略管理</h1><div class="desc">导入和导出安全策略配置</div></div>
+            <span class="role-badge role-operator" style="background:#e8f5e9;color:#2e7d32">操作员</span>
+          </div>
+          <div class="grid-2">
+            <div class="card-padded">
+              <div style="width:36px;height:36px;border-radius:6px;background:var(--andi-blue-light);display:flex;align-items:center;justify-content:center;margin-bottom:10px">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="var(--andi-blue)" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </div>
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--andi-text)">策略导出</h3>
+              <p style="font-size:12px;color:var(--andi-text-light);margin-bottom:12px">将当前配置导出为加密 .bin 文件</p>
+              <div style="font-size:11px;color:var(--andi-text-secondary);background:var(--andi-blue-bg);padding:7px 10px;border-radius:4px;margin-bottom:10px">默认文件名: <code>安全策略-20260609-133536.bin</code></div>
+              <div style="font-size:11px;color:#c62828;margin-bottom:10px">导出的策略文件为加密格式</div>
+              <button class="btn btn-primary" onclick="openModal('export-policy')">导出</button>
+            </div>
+            <div class="card-padded">
+              <div style="width:36px;height:36px;border-radius:6px;background:#e8f5e9;display:flex;align-items:center;justify-content:center;margin-bottom:10px">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3v10" stroke="#2e7d32" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </div>
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--andi-text)">策略导入</h3>
+              <p style="font-size:12px;color:var(--andi-text-light);margin-bottom:12px">从本地或安全U盘导入 .bin 策略文件</p>
+              <div style="font-size:11px;color:var(--andi-text-secondary);background:var(--andi-blue-bg);padding:7px 10px;border-radius:4px;margin-bottom:10px">支持本装置和其他装置导出的策略（需版本兼容）</div>
+              <button class="btn" onclick="openModal('import-policy')">导入</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 日志管理 ===== -->
+        <div class="page" id="page-log">
+          <div class="page-header">
+            <div><h1>日志管理</h1><div class="desc">USB操作和安全事件的审计追踪</div></div>
+            <span class="role-badge role-auditor" style="background:#f3e5f5;color:#7b1fa2">审计员</span>
+          </div>
+          <div class="tabs" id="log-tabs">
+            <div class="tab active" onclick="switchLogTab(this,'usb')">USB审计日志</div>
+            <div class="tab" onclick="switchLogTab(this,'malware-log')">恶意代码检测日志</div>
+            <div class="tab" onclick="switchLogTab(this,'operation')">操作日志</div>
+          </div>
+          <!-- USB审计日志 -->
+          <div class="log-panel" id="log-usb" style="display:block">
+            <div class="filter-bar">
+              <input type="text" placeholder="搜索内容..." style="flex:1;min-width:110px">
+              <input type="text" placeholder="2026-06-01 00:00" style="width:140px">
+              <input type="text" placeholder="2026-06-09 23:59" style="width:140px">
+              <select style="padding:6px 10px;border:1px solid var(--andi-border);border-radius:4px;font-size:12px">
+                <option>全部类型</option><option>USB插入成功</option><option>USB移除成功</option>
+              </select>
+              <button class="btn btn-primary" onclick="showToast('查询完成，找到3条匹配记录','success')" style="padding:6px 12px">搜索</button>
+              <button class="btn" onclick="showToast('日志已导出: USBUsageLog20260609133536.zip','success')" style="padding:6px 12px">导出 .zip</button>
+              <button class="btn btn-danger" onclick="openModal('clear-log','usb')" style="padding:6px 12px">清理</button>
+            </div>
+            <div class="card-white">
+              <table>
+                <thead><tr><th>时间</th><th>设备名称</th><th>序列号</th><th>插拔类型</th><th>内容</th></tr></thead>
+                <tbody>
+                  <tr><td>2026-06-09 13:35:12</td><td>Kingston DT</td><td><code>SN-20240601-001</code></td><td><span class="badge badge-green">USB插入成功</span></td><td>授权设备, 读写, 32GB</td></tr>
+                  <tr><td>2026-06-09 13:30:45</td><td>SanDisk Ultra</td><td><code>SN-20260528-042</code></td><td><span class="badge badge-red">USB移除成功</span></td><td>授权设备, 只读</td></tr>
+                  <tr><td>2026-06-09 13:25:10</td><td>未知设备</td><td><code>SN-20260609-TEST</code></td><td><span class="badge badge-amber">USB插入成功</span></td><td>未授权设备, 16GB</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination"><span>显示 1-3，共 128 条</span><div class="pagination-btns"><button class="active">1</button><button>2</button><button>3</button><button>...</button></div></div>
+          </div>
+          <!-- 恶意代码检测日志 -->
+          <div class="log-panel" id="log-malware-log" style="display:none">
+            <div class="filter-bar">
+              <input type="text" placeholder="搜索内容..." style="flex:1;min-width:110px">
+              <input type="text" placeholder="2026-06-01 00:00" style="width:140px">
+              <input type="text" placeholder="2026-06-09 23:59" style="width:140px">
+              <button class="btn btn-primary" onclick="showToast('查询完成，找到1条匹配记录','success')" style="padding:6px 12px">搜索</button>
+              <button class="btn" onclick="showToast('日志已导出: MalwareDetectionLog20260609133536.zip','success')" style="padding:6px 12px">导出 .zip</button>
+              <button class="btn btn-danger" onclick="openModal('clear-log','malware')" style="padding:6px 12px">清理</button>
+            </div>
+            <div class="card-white">
+              <table>
+                <thead><tr><th>时间</th><th>设备名称</th><th>序列号</th><th>内容</th></tr></thead>
+                <tbody>
+                  <tr><td>2026-06-09 13:25:10</td><td>SanDisk Ultra</td><td><code>SN-20260515-103</code></td><td>文件: D:\[病毒禁止访问]malware.exe, 病毒: Trojan.Generic</td></tr>
+                  <tr><td>2026-06-09 13:20:00</td><td>Kingston DT</td><td><code>SN-20240601-001</code></td><td>未发现病毒文件</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination"><span>显示 1-2，共 56 条</span><div class="pagination-btns"><button class="active">1</button><button>2</button><button>3</button><button>...</button></div></div>
+          </div>
+          <!-- 操作日志 -->
+          <div class="log-panel" id="log-operation" style="display:none">
+            <div class="filter-bar">
+              <input type="text" placeholder="搜索内容..." style="flex:1;min-width:110px">
+              <input type="text" placeholder="2026-06-01 00:00" style="width:140px">
+              <input type="text" placeholder="2026-06-09 23:59" style="width:140px">
+              <button class="btn btn-primary" onclick="showToast('查询完成，找到3条匹配记录','success')" style="padding:6px 12px">搜索</button>
+              <button class="btn" onclick="showToast('日志已导出: OperationLog20260609133536.zip','success')" style="padding:6px 12px">导出 .zip</button>
+              <button class="btn btn-danger" onclick="openModal('clear-log','operation')" style="padding:6px 12px">清理</button>
+            </div>
+            <div class="card-white">
+              <table>
+                <thead><tr><th>时间</th><th>用户</th><th>内容</th></tr></thead>
+                <tbody>
+                  <tr><td>2026-06-09 13:35:12</td><td>admin</td><td>用户登录, 用户名：admin, 成功</td></tr>
+                  <tr><td>2026-06-09 13:30:00</td><td>operator</td><td>开启U盘设备控制策略功能, 成功</td></tr>
+                  <tr><td>2026-06-09 13:25:10</td><td>audit</td><td>病毒库升级, 版本升级至V3.0.0.3, 成功</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination"><span>显示 1-3，共 64 条</span><div class="pagination-btns"><button class="active">1</button><button>2</button><button>3</button><button>...</button></div></div>
+          </div>
+        </div>
+
+        <!-- ===== 系统管理 ===== -->
+        <div class="page" id="page-system">
+          <div class="page-header">
+            <div><h1>系统管理</h1><div class="desc">系统升级、授权管理和设备配置</div></div>
+            <span class="role-badge role-admin" style="background:#fbe9e7;color:#bf360c">系统管理员</span>
+          </div>
+          <div class="grid-2">
+            <div class="card-padded">
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--andi-text)">系统升级</h3>
+              <p style="font-size:11px;color:var(--andi-text-light);margin-bottom:10px">当前版本: V3.0.0.1</p>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="openModal('sys-upgrade')" style="padding:5px 10px;font-size:11px">上传 .bin 升级包</button>
+                <button class="btn" onclick="showToast('安全U盘升级文件 usbBoxSelfUpgrade.bin 已检测，正在自动升级...','info')" style="padding:5px 10px;font-size:11px">安全U盘自动升级</button>
+              </div>
+              <p style="font-size:10px;color:var(--andi-text-light);margin-top:6px">版本校验：升级包版本必须大于当前系统版本</p>
+            </div>
+            <div class="card-padded">
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--andi-text)">病毒库升级</h3>
+              <p style="font-size:11px;color:var(--andi-text-light);margin-bottom:10px">当前: V3.0.0.3 | 更新时间: 2025-12-11 23:59:59</p>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="openModal('vdb-upgrade')" style="padding:5px 10px;font-size:11px">上传 .zip 升级包</button>
+                <button class="btn" onclick="showToast('安全U盘升级文件 VirusUpgrade.zip 已检测，正在自动升级...','info')" style="padding:5px 10px;font-size:11px">安全U盘自动升级</button>
+              </div>
+            </div>
+            <div class="card-padded">
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--andi-text)">授权信息管理</h3>
+              <p style="font-size:12px;margin-bottom:2px">状态: <span style="color:#2e7d32;font-weight:600">已授权</span></p>
+              <p style="font-size:11px;color:var(--andi-text-light);margin-bottom:10px">授权截止时间: 2025-12-11 23:59:59</p>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn" onclick="openModal('machine-code')" style="padding:5px 10px;font-size:11px">下载机器码</button>
+                <button class="btn btn-primary" onclick="openModal('upload-license')" style="padding:5px 10px;font-size:11px">上传授权文件</button>
+              </div>
+            </div>
+            <div class="card-padded">
+              <h3 style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--andi-text)">自定义设备描述</h3>
+              <p style="font-size:11px;color:var(--andi-text-light);margin-bottom:2px">当前: <code>(AD USB protection dev)USB Device</code></p>
+              <p style="font-size:10px;color:#e65100;background:#fff8e1;padding:4px 8px;border-radius:4px;margin-bottom:10px">修改完成后需重启设备，此时设备上请勿连接USB设备。描述长度最大32位，仅字母数字下划线。</p>
+              <button class="btn" onclick="openModal('device-desc')" style="padding:5px 10px;font-size:11px">修改</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 用户管理 ===== -->
+        <div class="page" id="page-user">
+          <div class="page-header">
+            <div><h1>用户管理</h1><div class="desc">三权分立: 系统管理员 / 操作员 / 审计员</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="openModal('new-user')">+ 新建用户</button>
+              <span class="role-badge role-admin" style="background:#fbe9e7;color:#bf360c">系统管理员</span>
+            </div>
+          </div>
+          <div class="card-white">
+            <table>
+              <thead><tr><th>用户名</th><th>角色</th><th style="text-align:center">状态</th><th>创建时间</th><th style="text-align:right">操作</th></tr></thead>
+              <tbody id="user-table">
+                <tr data-user="admin"><td>admin</td><td><span class="badge" style="background:#fbe9e7;color:#bf360c">系统管理员</span></td><td style="text-align:center"><span class="badge badge-green">正常</span></td><td>内置</td><td style="text-align:right"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openModal('reset-pwd','admin')">重置密码</button></td></tr>
+                <tr data-user="operator"><td>operator</td><td><span class="badge" style="background:#fff8e1;color:#e65100">操作员</span></td><td style="text-align:center"><span class="badge badge-green">正常</span></td><td>内置</td><td style="text-align:right"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openModal('reset-pwd','operator')">重置密码</button></td></tr>
+                <tr data-user="audit"><td>audit</td><td><span class="badge" style="background:#f3e5f5;color:#7b1fa2">审计员</span></td><td style="text-align:center"><span class="badge badge-green">正常</span></td><td>内置</td><td style="text-align:right"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openModal('reset-pwd','audit')">重置密码</button></td></tr>
+                <tr data-user="zhang_wei"><td>zhang_wei</td><td><span class="badge" style="background:#fff8e1;color:#e65100">操作员</span></td><td style="text-align:center"><span class="badge badge-green">正常</span></td><td>2026-05-20</td><td style="text-align:right;display:flex;gap:4px;justify-content:flex-end"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openModal('reset-pwd','zhang_wei')">重置密码</button><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDeleteUser('zhang_wei')">删除</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;padding:10px 14px;background:var(--andi-blue-bg);border-radius:6px;border:1px solid var(--andi-border)">
+            <p style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--andi-text)">三权分立角色权限</p>
+            <p style="font-size:11px;color:var(--andi-text-secondary)">系统管理员: 系统管理、用户管理 | 操作员: 文件访问控制、U盘设备控制、策略管理 | 审计员: 日志管理</p>
+            <p style="font-size:11px;color:var(--andi-text-light);margin-top:4px">出厂默认: admin/admin@123 | operator/operator@123 | audit/audit@123 | 三个内置用户不可删除</p>
+            <p style="font-size:11px;color:var(--andi-text-light)">连续5次密码失败后，账户锁定5分钟，提示："用户已被锁定，请过5分钟后重试"</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== Modal Overlay ===== -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box" id="modal-content"></div>
+</div>
+
+<!-- ===== Toast Container ===== -->
+<div id="toast-container"></div>
+
+<script>
+// ===== Navigation =====
+function switchPage(pageId) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  var page=document.getElementById('page-'+pageId);
+  if(page) page.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  var nav=document.querySelector('.nav-item[data-page="'+pageId+'"]');
+  if(nav) nav.classList.add('active');
+}
+
+// ===== Factory Reset Helpers =====
+function clearAuth(){
+  localStorage.removeItem('usb_authorized');
+  showToast('授权状态已重置，重新登录将进入授权页面','info');
+}
+function clearAuthAndRefresh(){
+  localStorage.removeItem('usb_authorized');
+  location.reload();
+}
+
+// ===== Login =====
+function doLogin(){
+  var user=document.getElementById('login-user').value.trim();
+  var pass=document.getElementById('login-pass').value;
+  var ip=document.getElementById('login-ip').value.trim();
+  if(!user||!pass||!ip){showToast('用户名、密码、装置IP均为必填项','error');return}
+  if(pass.length<8){showToast('密码长度至少为8位','error');return}
+  // IP address validation
+  var ipParts=ip.split('.');
+  if(ipParts.length!==4||ipParts.some(function(p){var n=parseInt(p,10);return isNaN(n)||n<0||n>255||p!==String(n)})){
+    showToast('请输入有效的IP地址','error');return;
+  }
+  // Check if authorized (first time must authorize before login)
+  var authorized=localStorage.getItem('usb_authorized');
+  if(!authorized){
+    // Show authorization page
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('auth-screen').style.display='block';
+    return;
+  }
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('main-app').style.display='block';
+  showToast('登录成功，欢迎 '+user,'success');
+}
+
+// ===== Auth Modal Upload License (redirects to login on success) =====
+function authModalUploadLicense(){
+  var path=document.getElementById('auth-license-path').value;
+  if(!path||path==='已选择文件: 无'){
+    showToast('请先选择授权文件','error');
+    return;
+  }
+  closeModal();
+  var success=Math.random()>0.3;
+  if(success){
+    localStorage.setItem('usb_authorized','true');
+    showToast('授权成功！自动返回登录页','success');
+    setTimeout(function(){
+      document.getElementById('auth-screen').style.display='none';
+      document.getElementById('login-screen').style.display='flex';
+    },800);
+  } else {
+    showToast('授权失败：授权文件无效或已过期','error');
+  }
+}
+
+// ===== Upload License (modal version, system page) =====
+function modalUploadLicense(){
+  var path=document.getElementById('modal-license-path').value;
+  if(!path||path==='已选择文件: 无'){
+    showToast('请先选择授权文件','error');
+    return;
+  }
+  closeModal();
+  var success=Math.random()>0.3;
+  if(success){
+    localStorage.setItem('usb_authorized','true');
+    showToast('授权成功！请登录系统','success');
+  } else {
+    showToast('授权失败：授权文件无效或已过期','error');
+  }
+}
+
+// ===== Modal System =====
+function openModal(type,param){
+  var html='';
+  switch(type){
+    case 'machine-code':
+      html='<h3>机器码</h3>'+
+        '<div style="background:var(--andi-blue-bg);padding:16px;border-radius:6px;text-align:center;margin-bottom:16px">'+
+        '<p style="font-size:12px;color:var(--andi-text-secondary);margin-bottom:10px">机器码（可复制文本）:</p>'+
+        '<div style="display:flex;align-items:center;gap:8px;justify-content:center">'+
+        '<code id="machine-code-text" style="font-size:14px;padding:8px 14px;display:inline-block;background:#fff;border:1px solid var(--andi-border);border-radius:4px;user-select:all;color:var(--andi-blue-dark)">USB-DEVICE-RK3568-2026-001</code>'+
+        '<button class="btn btn-primary" style="padding:6px 12px" onclick="navigator.clipboard.writeText(document.getElementById(\'machine-code-text\').textContent);showToast(\'机器码已复制\',\'success\')">复制</button></div>'+
+        '<div style="margin-top:20px;border:1px solid var(--andi-border);border-radius:6px;padding:16px;display:inline-block;background:#fff">'+
+        '<svg width="120" height="120" viewBox="0 0 120 120"><rect x="8" y="8" width="104" height="104" fill="#fff" stroke="var(--andi-border)" stroke-width="1"/><rect x="16" y="16" width="88" height="88" fill="none"/><rect x="22" y="22" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="40" y="22" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="58" y="22" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="76" y="22" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="22" y="40" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="40" y="40" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="58" y="40" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="76" y="40" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="22" y="58" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="40" y="58" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="58" y="58" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="76" y="58" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="22" y="76" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="40" y="76" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="58" y="76" width="14" height="14" fill="var(--andi-blue-dark)"/><rect x="76" y="76" width="14" height="14" fill="var(--andi-blue-dark)"/></svg>'+
+        '<p style="font-size:10px;color:var(--andi-text-light);margin-top:6px">二维码（支持下载）</p></div>'+
+        '<p style="font-size:11px;color:var(--andi-text-light);margin-top:12px">将机器码（文本或二维码）发送至厂商获取授权文件</p></div>'+
+        '<div class="modal-actions"><button class="btn" onclick="closeModal()">关闭</button><button class="btn btn-primary" onclick="closeModal();showToast(\'二维码图片已下载\',\'success\')">下载二维码</button></div>';
+      break;
+    case 'upload-license':
+      html='<h3>上传授权文件</h3>'+
+        '<div style="border:2px dashed var(--andi-border);border-radius:6px;padding:20px;text-align:center;margin-bottom:16px">'+
+        '<svg width="32" height="32" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4-4 4 4M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="var(--andi-text-light)" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>'+
+        '<p style="font-size:13px;color:var(--andi-text-secondary);margin-top:8px">点击选择或拖拽授权文件到此处</p>'+
+        '<p style="font-size:11px;color:var(--andi-text-light);margin-top:4px">支持 .txt 格式授权文件</p>'+
+        '<input type="text" id="modal-license-path" placeholder="已选择文件: 无" style="width:100%;padding:8px 12px;border:1px solid var(--andi-border);border-radius:4px;font-size:12px;margin-top:12px;box-sizing:border-box;background:var(--andi-blue-bg);color:var(--andi-text)" readonly onclick="this.value=\'C:/Users/Admin/Downloads/license_2026.txt\';showToast(\'已选择授权文件\',\'info\')">'+
+        '</div>'+
+        '<p style="font-size:11px;color:var(--andi-text-light);margin-bottom:4px">选定文件后进行校验，授权成功提示"授权成功"，授权失败提示"授权失败"</p>'+
+        '<div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="modalUploadLicense()">确定上传</button></div>';
+      break;
+    case 'auth-upload-license':
+      html='<h3>上传授权文件</h3>'+
+        '<div style="border:2px dashed var(--andi-border);border-radius:6px;padding:20px;text-align:center;margin-bottom:16px">'+
+        '<svg width="32" height="32" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4-4 4 4M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="var(--andi-text-light)" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>'+
+        '<p style="font-size:13px;color:var(--andi-text-secondary);margin-top:8px">点击选择或拖拽授权文件到此处</p>'+
+        '<p style="font-size:11px;color:var(--andi-text-light);margin-top:4px">支持 .txt 格式授权文件</p>'+
+        '<input type="text" id="auth-license-path" placeholder="已选择文件: 无" style="width:100%;padding:8px 12px;border:1px solid var(--andi-border);border-radius:4px;font-size:12px;margin-top:12px;box-sizing:border-box;background:var(--andi-blue-bg);color:var(--andi-text)" readonly onclick="this.value=\'C:/Users/Admin/Downloads/license_2026.txt\';showToast(\'已选择授权文件\',\'info\')">'+
+        '</div>'+
+        '<p style="font-size:11px;color:var(--andi-text-light);margin-bottom:4px">选定文件后进行校验，授权成功返回登录页，授权失败提示"授权失败"</p>'+
+        '<div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="authModalUploadLicense()">确定上传</button></div>';
+      break;
+    case 'add-blacklist':
+      html='<h3>添加文件后缀黑名单</h3><label>文件后缀</label><input type="text" placeholder="例如 .exe" id="bl-ext" style="margin-top:4px"><p class="hint">输入文件后缀名，每次仅能添加一个</p><label>说明</label><input type="text" placeholder="描述该项的作用" id="bl-desc" style="margin-top:4px"><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="addBlacklistItem()">确定</button></div>';
+      break;
+    case 'device-add':
+      html='<h3>装置端添加 - 受信任设备</h3><label>选择设备</label><select id="da-device" style="margin-top:4px"><option>SanDisk Ultra (SN-20260609-001)</option><option>Kingston DT (SN-20260609-002)</option><option>未知设备 (SN-20260609-003)</option></select><label>描述（可选）</label><input type="text" placeholder="自定义描述" id="da-desc" style="margin-top:4px"><label>权限</label><select id="da-perm" style="margin-top:4px"><option value="读写">读写</option><option value="只读">只读</option></select><p class="hint">添加完成后需重新拔插U盘，策略生效</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="addWhitelistItem(\'装置端\')">确定</button></div>';
+      break;
+    case 'console-add':
+      html='<h3>管理端添加 - 受信任设备</h3><label>选择设备</label><select id="ca-device" style="margin-top:4px"><option>SanDisk Ultra (SN-20260609-004)</option><option>Kingston DT (SN-20260609-005)</option></select><label>描述（可选）</label><input type="text" placeholder="自定义描述" id="ca-desc" style="margin-top:4px"><label>权限</label><select id="ca-perm" style="margin-top:4px"><option value="读写">读写</option><option value="只读">只读</option></select><p class="hint">管理端含义：USB通过网口连接的笔记本，可安装USB管理软件；非受控主机</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="addWhitelistItem(\'管理端\')">确定</button></div>';
+      break;
+    case 'export-policy':
+      html='<h3>策略导出</h3><label>选择导出目录</label><select id="export-dir" style="margin-top:4px"><option>C:/Users/Admin/Documents/</option><option>D:/Backup/</option><option>E:/Security/</option></select><p class="hint">默认文件名: <code>安全策略-20260609-133536.bin</code></p><p class="hint">仅支持导出到有权限的目录，导出的策略文件为加密格式</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="closeModal();showToast(\'策略导出成功: 安全策略-20260609-133536.bin\',\'success\')">导出</button></div>';
+      break;
+    case 'import-policy':
+      html='<h3>策略导入</h3><label>选择策略文件 (.bin)</label><input type="text" placeholder="请选择 .bin 策略文件..." id="import-file" style="margin-top:4px"><p class="hint">支持本装置和其他装置导出的策略（需版本兼容）。导入时验证文件完整性和加密签名。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="closeModal();showToast(\'策略导入成功，已更新安全配置\',\'success\')">导入</button></div>';
+      break;
+    case 'vdb-upgrade':
+      html='<h3>病毒库升级</h3><label>选择升级包 (.zip)</label><input type="text" placeholder="请选择 .zip 升级包..." id="vdb-file" style="margin-top:4px"><p class="hint">版本必须大于当前病毒库版本（V3.0.0.3）。病毒库版本规则：从V3.0.0.0开始向上递增，每到4跳过。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="closeModal();showToast(\'病毒库升级成功，版本为V3.0.0.5\',\'success\')">升级</button></div>';
+      break;
+    case 'sys-upgrade':
+      html='<h3>系统升级</h3><label>选择升级包 (.bin)</label><input type="text" placeholder="请选择 .bin 格式升级包..." id="sys-file" style="margin-top:4px"><p class="hint">升级包版本必须大于当前系统版本（V3.0.0.1）。版本校验通过后升级。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="closeModal();showToast(\'系统升级成功，版本为V3.0.0.2\',\'success\')">升级</button></div>';
+      break;
+    case 'device-desc':
+      html='<h3>修改自定义设备描述</h3><label>自定义设备描述</label><input type="text" value="USB_DEVICE_01" id="dev-desc-input" style="margin-top:4px"><p class="hint">描述长度最大32位，仅可以使用字母数字下划线，不能存在空格</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="updateDeviceDesc()">确定</button></div>';
+      break;
+    case 'new-user':
+      html='<h3>新建用户</h3><label>用户名</label><input type="text" placeholder="请输入用户名" id="nu-name" style="margin-top:4px"><label>角色</label><select id="nu-role" style="margin-top:4px"><option value="系统管理员">系统管理员</option><option value="操作员">操作员</option><option value="审计员">审计员</option></select><label>密码</label><input type="password" placeholder="至少8位，包含字母、数字、特殊字符中的两类" id="nu-pass" style="margin-top:4px"><p class="error-text" id="nu-pass-err">密码长度至少为8位，且需至少包含英文字母、数字、特殊字符中的两类。</p><label>确认密码</label><input type="password" placeholder="再次输入密码" id="nu-pass2" style="margin-top:4px"><p class="error-text" id="nu-pass2-err">两次输入的密码不一致，请再次确认。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="createUser()">确定</button></div>';
+      break;
+    case 'reset-pwd':
+      var uname=param||'admin';
+      html='<h3>重置密码</h3><label>用户名</label><input type="text" value="'+uname+'" disabled style="margin-top:4px;background:var(--andi-blue-bg);color:var(--andi-text)"><label>新密码</label><input type="password" placeholder="至少8位" id="rp-pass" style="margin-top:4px"><p class="error-text" id="rp-pass-err">密码长度至少为8位，且需至少包含英文字母、数字、特殊字符中的两类。</p><label>确认密码</label><input type="password" placeholder="再次输入新密码" id="rp-pass2" style="margin-top:4px"><p class="error-text" id="rp-pass2-err">两次输入的密码不一致，请再次确认。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="resetPassword(\''+uname+'\')">确定</button></div>';
+      break;
+    case 'clear-log':
+      var logType='';
+      if(param==='usb') logType='U盘审计日志';
+      else if(param==='malware') logType='恶意代码检测日志';
+      else logType='操作日志';
+      html='<h3>清理日志</h3><label>开始时间</label><input type="text" value="2026-01-01 00:00:00" id="cl-start" style="margin-top:4px"><label>结束时间</label><input type="text" value="2026-01-05 23:59:59" id="cl-end" style="margin-top:4px"><p style="font-size:13px;color:var(--andi-text);margin-top:16px;padding:12px;background:#ffebee;border-radius:6px" id="cl-confirm-msg">请确认是否清除 2026-01-01 00:00:00 - 2026-01-05 23:59:59 的'+logType+'？</p><p class="hint">清理完成后会记录为操作日志。日志清理只能清除半年以上日志，清理半年以内日志提示：禁止清除半年内的日志，请重新选择时间段。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="executeClearLog(\''+param+'\')">确认清理</button></div>';
+      break;
+  }
+  document.getElementById('modal-content').innerHTML=html;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+// ===== Toast =====
+function showToast(msg,type){
+  var c=document.getElementById('toast-container');
+  var t=document.createElement('div');
+  t.className='toast toast-'+type;
+  t.textContent=msg;
+  c.appendChild(t);
+  setTimeout(function(){t.remove()},3000);
+}
+
+// ===== Add Blacklist Item =====
+function addBlacklistItem(){
+  var ext=document.getElementById('bl-ext').value.trim();
+  var desc=document.getElementById('bl-desc').value.trim()||'自定义规则';
+  if(!ext||!ext.startsWith('.')){showToast('请输入有效的文件后缀（如 .exe）','error');return}
+  // Add to data array and re-render
+  blacklistData.push({ext:ext,desc:desc});
+  // Go to last page to show the new item
+  var totalPages=Math.ceil(blacklistData.length/blPageSize);
+  renderBlacklistPage(totalPages);
+  closeModal();
+  showToast('已添加黑名单: '+ext,'success');
+  logOp('添加文件类型黑名单: '+ext);
+}
+
+// ===== Add Whitelist Item =====
+function addWhitelistItem(source){
+  var prefix=(source==='装置端'?'da':'ca');
+  var device=document.getElementById(prefix+'-device');
+  var desc=document.getElementById(prefix+'-desc').value.trim()||'自定义设备';
+  var perm=document.getElementById(prefix+'-perm').value;
+  if(!device){showToast('请选择设备','error');return}
+  var sn='SN-'+Date.now().toString(36).toUpperCase();
+  var now=new Date();
+  var time=now.getFullYear()+'-'+(now.getMonth()+1).toString().padStart(2,'0')+'-'+now.getDate().toString().padStart(2,'0')+' '+now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  var tbody=document.getElementById('whitelist-table');
+  var tr=document.createElement('tr');
+  tr.setAttribute('data-sn',sn);
+  tr.innerHTML='<td><code>'+sn+'</code></td><td>'+desc+'</td><td style="text-align:center"><span class="badge '+(perm==='读写'?'badge-green':'badge-amber')+'">'+perm+'</span></td><td>'+source+'</td><td>'+time+'</td><td style="text-align:right"><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDelete(this,\''+sn+'\',\'whitelist\')">删除</button></td>';
+  tbody.appendChild(tr);
+  closeModal();
+  showToast('已通过'+source+'添加白名单设备: '+sn,'success');
+  logOp('添加受信任设备: '+sn+' 权限: '+perm+' 方式: '+source);
+}
+
+// ===== Confirm Delete =====
+var pendingDelete=null;
+function confirmDelete(btn,id,type){
+  pendingDelete={btn:btn,id:id,type:type};
+  var label=type==='blacklist'?'后缀 '+id:'设备 '+id;
+  var modal=document.getElementById('modal-content');
+  modal.innerHTML='<h3>确认删除</h3><p style="font-size:13px;color:var(--andi-text);padding:12px 0;text-align:center">是否要删除 '+label+'？</p><div class="modal-actions"><button class="btn" onclick="closeModal();pendingDelete=null">取消</button><button class="btn btn-danger" onclick="executeDelete()">确定</button></div>';
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function executeDelete(){
+  if(!pendingDelete) return;
+  var row=pendingDelete.btn.closest?pendingDelete.btn.closest('tr'):null;
+  if(row) row.remove();
+  closeModal();
+  showToast('已删除: '+pendingDelete.id,'success');
+  logOp('删除: '+pendingDelete.id);
+  pendingDelete=null;
+}
+
+// ===== User Management =====
+function confirmDeleteUser(uname){
+  var modal=document.getElementById('modal-content');
+  modal.innerHTML='<h3>确认删除用户</h3><p style="font-size:13px;color:var(--andi-text);padding:12px 0;text-align:center">是否要删除 '+uname+' 用户？</p><p class="hint">注意：三个内置用户不可删除。</p><div class="modal-actions"><button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="deleteUser(\''+uname+'\')">确定</button></div>';
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function deleteUser(uname){
+  var tr=document.querySelector('#user-table tr[data-user="'+uname+'"]');
+  if(tr) tr.remove();
+  closeModal();
+  showToast('用户 '+uname+' 已删除','success');
+  logOp('删除用户: '+uname);
+}
+function createUser(){
+  var name=document.getElementById('nu-name').value.trim();
+  var role=document.getElementById('nu-role').value;
+  var pass=document.getElementById('nu-pass').value;
+  var pass2=document.getElementById('nu-pass2').value;
+  var err1=document.getElementById('nu-pass-err');
+  var err2=document.getElementById('nu-pass2-err');
+  err1.style.display='none';err2.style.display='none';
+  if(!name){showToast('请输入用户名','error');return}
+  if(pass.length<8){err1.style.display='block';return}
+  if(pass!==pass2){err2.style.display='block';return}
+  var now=new Date();
+  var time=now.getFullYear()+'-'+(now.getMonth()+1).toString().padStart(2,'0')+'-'+now.getDate().toString().padStart(2,'0');
+  var tbody=document.getElementById('user-table');
+  var tr=document.createElement('tr');
+  tr.setAttribute('data-user',name);
+  var roleStyle=role==='系统管理员'?'background:#fbe9e7;color:#bf360c':role==='操作员'?'background:#fff8e1;color:#e65100':'background:#f3e5f5;color:#7b1fa2';
+  tr.innerHTML='<td>'+name+'</td><td><span class="badge" style="'+roleStyle+'">'+role+'</span></td><td style="text-align:center"><span class="badge badge-green">正常</span></td><td>'+time+'</td><td style="text-align:right;display:flex;gap:4px;justify-content:flex-end"><button class="btn" style="padding:2px 8px;font-size:11px" onclick="openModal(\'reset-pwd\',\''+name+'\')">重置密码</button><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmDeleteUser(\''+name+'\')">删除</button></td>';
+  tbody.appendChild(tr);
+  closeModal();
+  showToast('用户 '+name+' ('+role+') 创建成功','success');
+  logOp('新建用户: '+name+' 角色: '+role);
+}
+function resetPassword(uname){
+  var pass=document.getElementById('rp-pass').value;
+  var pass2=document.getElementById('rp-pass2').value;
+  var err1=document.getElementById('rp-pass-err');
+  var err2=document.getElementById('rp-pass2-err');
+  err1.style.display='none';err2.style.display='none';
+  if(pass.length<8){err1.style.display='block';return}
+  if(pass!==pass2){err2.style.display='block';return}
+  closeModal();
+  showToast('密码已重置: '+uname,'success');
+  logOp('重置密码: '+uname);
+}
+function updateDeviceDesc(){
+  var val=document.getElementById('dev-desc-input').value.trim();
+  if(val.length>32){showToast('描述长度最大32位','error');return}
+  if(!/^[a-zA-Z0-9_]+$/.test(val)){showToast('仅可以使用字母数字下划线，不能存在空格','error');return}
+  closeModal();
+  showToast('设备描述已修改为: '+val+'，请重启设备生效','success');
+  logOp('修改设备描述: '+val);
+}
+function switchLogTab(el,type){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.log-panel').forEach(p=>p.style.display='none');
+  var panel=document.getElementById('log-'+type);
+  if(panel) panel.style.display='block';
+}
+// ===== Clear Log with Half-Year Validation =====
+function executeClearLog(param){
+  var startStr=document.getElementById('cl-start').value.trim();
+  var endStr=document.getElementById('cl-end').value.trim();
+  var now=new Date();
+  var halfYearAgo=new Date(now);
+  halfYearAgo.setMonth(halfYearAgo.getMonth()-6);
+  var startDate=new Date(startStr.replace(/-/g,'/'));
+  var endDate=new Date(endStr.replace(/-/g,'/'));
+  if(startDate>halfYearAgo||endDate>halfYearAgo){
+    showToast('禁止清除半年内的日志，请重新选择时间段。','error');
+    return;
+  }
+  var logType='';
+  if(param==='usb') logType='U盘审计日志';
+  else if(param==='malware') logType='恶意代码检测日志';
+  else logType='操作日志';
+  closeModal();
+  showToast(logType+'已清理，操作已记录至操作日志','success');
+  logOp('日志清理：'+startStr+' - '+endStr+' 的'+logType+'已被清理');
+}
+function logOp(msg){
+  console.log('[操作日志] '+new Date().toLocaleString()+' | '+msg);
+}
+// ===== Auth State: always show auth section on login page =====
+function toggleFileTypeControl(){
+  var checked=document.getElementById('fa-type').checked;
+  var body=document.getElementById('file-type-control-body');
+  body.style.opacity=checked?'1':'0.4';
+  body.style.pointerEvents=checked?'auto':'none';
+  logOp(checked?'启用「文件类型访问控制」':'禁用「文件类型访问控制」');
+}
+// ===== Blacklist Pagination =====
+var blacklistData=[
+  {ext:'.jse',desc:'编码后的 JavaScript 脚本'},
+  {ext:'.vbe',desc:'编码后的 VBScript 脚本'},
+  {ext:'.vb',desc:'VBScript 文件变体'},
+  {ext:'.psm1',desc:'PowerShell 模块文件'},
+  {ext:'.psd1',desc:'PowerShell 模块数据文件'},
+  {ext:'.cpl',desc:'控制面板扩展项（本质是 DLL）'},
+  {ext:'.msp',desc:'Windows Installer 补丁'},
+  {ext:'.mst',desc:'Windows Installer 转换文件'},
+  {ext:'.appref-ms',desc:'ClickOnce 部署引用'},
+  {ext:'.docm',desc:'含宏的 Word 文档'},
+  {ext:'.xlsm',desc:'含宏的 Excel 文档'},
+  {ext:'.pptm',desc:'含宏的 PowerPoint 文档'},
+  {ext:'.dotm',desc:'含宏的 Word 模板'},
+  {ext:'.pl',desc:'Perl 脚本'},
+  {ext:'.rb',desc:'Ruby 脚本'},
+  {ext:'.php',desc:'PHP 脚本'},
+  {ext:'.pyc',desc:'Python 编译字节码'},
+  {ext:'.gadget',desc:'Windows 桌面小工具'}
+];
+var blPageSize=6,blCurrentPage=1;
+function renderBlacklistPage(page){
+  var total=blacklistData.length;
+  var totalPages=Math.ceil(total/blPageSize);
+  if(page<1) page=1;
+  if(page>totalPages) page=totalPages;
+  blCurrentPage=page;
+  var start=(page-1)*blPageSize;
+  var end=Math.min(start+blPageSize,total);
+  var items=blacklistData.slice(start,end);
+  var tbody=document.getElementById('blacklist-table-body');
+  if(!tbody) return;
+  tbody.innerHTML='';
+  for(var i=0;i<items.length;i++){
+    tbody.innerHTML+='<tr data-ext="'+items[i].ext+'">'+
+      '<td><code>'+items[i].ext+'</code></td>'+
+      '<td>'+items[i].desc+'</td>'+
+      '<td style="text-align:right"><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="confirmBlacklistRow(this,\''+items[i].ext+'\')">删除</button></td>'+
+      '</tr>';
+  }
+  document.getElementById('blacklist-page-info').textContent='显示 '+(start+1)+'-'+end+'，共 '+total+' 条';
+  var btnWrap=document.getElementById('blacklist-page-btns');
+  btnWrap.innerHTML='';
+  for(var p=1;p<=totalPages;p++){
+    btnWrap.innerHTML+='<button class="'+(p===page?'active':'')+'" onclick="renderBlacklistPage('+p+')" style="padding:3px 8px;border:1px solid var(--andi-border);border-radius:3px;font-size:11px;cursor:pointer;background:'+(p===page?'var(--andi-blue)':'transparent')+';color:'+(p===page?'#fff':'var(--andi-text)')+'">'+p+'</button>';
+  }
+}
+function confirmBlacklistRow(el,ext){
+  if(!confirm('确定删除后缀 '+ext+' 吗？')) return;
+  // Remove from data
+  for(var i=0;i<blacklistData.length;i++){
+    if(blacklistData[i].ext===ext){
+      blacklistData.splice(i,1);
+      break;
+    }
+  }
+  // Re-render current page
+  renderBlacklistPage(blCurrentPage);
+  logOp('已删除黑名单后缀: '+ext);
+}
+// Init blacklist on page load
+setTimeout(function(){renderBlacklistPage(1);},50);
+setTimeout(function(){
+  var body=document.getElementById('file-type-control-body');
+  if(body) body.style.transition='opacity .2s';
+},100);
+</script>
+</body>
+</html>
