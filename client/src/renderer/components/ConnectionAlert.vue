@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
+import { emitPageRefresh } from '@/services/page-refresh-events'
 
 const connection = useConnectionStore()
 const session = useSessionStore()
@@ -21,6 +22,7 @@ async function handleReconnect(): Promise<void> {
       await router.push('/login')
       return
     }
+    emitPageRefresh('reconnect')
     ElMessage.success('USB 管控装置重新连接成功')
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : 'USB 管控装置重新连接失败')

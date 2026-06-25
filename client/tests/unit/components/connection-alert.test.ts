@@ -7,6 +7,7 @@ import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 
 const push = vi.hoisted(() => vi.fn())
+const emitPageRefresh = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
@@ -14,6 +15,10 @@ vi.mock('vue-router', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn() },
+}))
+
+vi.mock('../../../src/renderer/services/page-refresh-events', () => ({
+  emitPageRefresh,
 }))
 
 function mountAlert() {
@@ -68,6 +73,7 @@ describe('ConnectionAlert', () => {
     await flushPromises()
 
     expect(reconnect).toHaveBeenCalledTimes(1)
+    expect(emitPageRefresh).toHaveBeenCalledWith('reconnect')
     expect(ElMessage.success).toHaveBeenCalledWith('USB 管控装置重新连接成功')
     expect(push).not.toHaveBeenCalled()
   })
@@ -83,6 +89,7 @@ describe('ConnectionAlert', () => {
     await flushPromises()
 
     expect(push).toHaveBeenCalledWith('/login')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
   })
 
   it('建链失败时留在当前页并展示错误', async () => {
@@ -97,6 +104,7 @@ describe('ConnectionAlert', () => {
     await flushPromises()
 
     expect(push).not.toHaveBeenCalled()
+    expect(emitPageRefresh).not.toHaveBeenCalled()
     expect(ElMessage.error).toHaveBeenCalledWith('USB 管控装置重新连接失败，请检查网络或设备连接。')
   })
 
