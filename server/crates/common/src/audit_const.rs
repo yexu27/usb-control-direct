@@ -1,6 +1,6 @@
 //! 业务日志常量模块，与架构 08 枚举严格一致。
 
-/// T05 USB 审计日志 event_type（架构 08 枚举，共 9 个）。
+/// T05 USB 审计日志 event_type（共 7 个）。
 pub mod event_type {
     pub const DEVICE_INSERT: &str = "device_insert";
     pub const DEVICE_REMOVE: &str = "device_remove";
@@ -8,8 +8,6 @@ pub mod event_type {
     pub const MAPPED: &str = "mapped";
     pub const MAP_FAILED: &str = "map_failed";
     pub const FILE_ACCESS_DENIED: &str = "file_access_denied";
-    pub const KEYBOARD_VERIFY_PASS: &str = "keyboard_verify_pass";
-    pub const KEYBOARD_VERIFY_FAIL: &str = "keyboard_verify_fail";
     pub const SCAN_INTERRUPTED: &str = "scan_interrupted";
 }
 

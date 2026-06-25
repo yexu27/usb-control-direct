@@ -355,15 +355,15 @@ impl DeviceOrchestrator {
             match interceptor.run(&evdev_path) {
                 Ok(KeyboardRunResult::VerifiedThenRemoved) => {
                     info!(dev = %device_name, "键盘拦截器正常退出");
-                    write_audit_generic_static(&audit, &info4audit, event_type::KEYBOARD_VERIFY_PASS,
-                        "success", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+                    write_audit_generic_static(&audit, &info4audit, event_type::MAPPED,
+                        "mapped", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
                 }
                 Ok(KeyboardRunResult::RemovedDuringVerify) => {
                     info!(dev = %device_name, "键盘验证阶段设备拔出");
                 }
                 Err(e) => {
                     warn!(dev = %device_name, error = %e, "键盘拦截器异常退出");
-                    write_audit_generic_static(&audit, &info4audit, event_type::KEYBOARD_VERIFY_FAIL,
+                    write_audit_generic_static(&audit, &info4audit, event_type::MAP_FAILED,
                         "failed", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
                 }
             }
