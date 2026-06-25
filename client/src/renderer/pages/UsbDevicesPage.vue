@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import AddWhitelistDialog from '@/components/whitelist/AddWhitelistDialog.vue'
 import EditWhitelistDialog from '@/components/whitelist/EditWhitelistDialog.vue'
@@ -130,6 +130,21 @@ const tableError = computed(() => whitelist.errorMessage === '' ? '' : WHITELIST
 watch([() => rows.value.length, pageSize], ([total, size]) => {
   page.value = Math.min(page.value, Math.max(1, Math.ceil(total / size)))
 })
+
+onMounted(() => {
+  void refreshWhitelist()
+})
+
+async function refreshWhitelist(): Promise<void> {
+  if (!connection.isConnected) {
+    return
+  }
+  try {
+    await whitelist.listWhitelist(session.token)
+  } catch {
+    // no-op: 表格错误态已覆盖被动加载失败提示，不弹阻塞弹窗
+  }
+}
 
 async function showError(error: unknown, fallback: string): Promise<void> {
   await showErrorDialog(fallback, errorMessage(error, fallback))

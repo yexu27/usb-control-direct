@@ -106,6 +106,41 @@ describe('UsbDevicesPage', () => {
     vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as never)
   })
 
+  it('页面挂载时重新从装置读取白名单', async () => {
+    const listWhitelist = vi.spyOn(useWhitelistStore(), 'listWhitelist').mockResolvedValue()
+
+    mountPage()
+    await flushPromises()
+
+    expect(listWhitelist).toHaveBeenCalledWith('token')
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
+  it('页面挂载读取白名单失败时只展示表格错误态，不弹阻塞错误弹窗', async () => {
+    const store = useWhitelistStore()
+    vi.spyOn(store, 'listWhitelist').mockImplementation(async () => {
+      store.errorMessage = 'device read failed'
+      throw new Error('device read failed')
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="table-error"]').text()).toBe('U盘白名单加载失败，请重试')
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
+  it('断开连接时进入页面不主动读取白名单且保留当前内存列表', async () => {
+    useConnectionStore().updateStatus('DISCONNECTED')
+    const listWhitelist = vi.spyOn(useWhitelistStore(), 'listWhitelist').mockResolvedValue()
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(listWhitelist).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-testid="row"]')).toHaveLength(20)
+  })
+
   it('仅展示六个白名单列，前端分页默认20并格式化Unix秒', async () => {
     const wrapper = mountPage()
     expect(wrapper.get('[data-testid="columns"]').text()).toBe('序列号|描述|权限|添加方式|添加时间|操作')
