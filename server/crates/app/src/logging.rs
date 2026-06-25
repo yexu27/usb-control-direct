@@ -22,7 +22,7 @@ use tracing_subscriber::EnvFilter;
 const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
 /// 每组保留的历史文件数。
-const MAX_FILE_COUNT: usize = 5;
+const MAX_FILE_COUNT: usize = 3;
 
 /// 动态日志级别配置文件路径。
 const LOG_LEVEL_CONF: &str = "/etc/usb-control/log.conf";

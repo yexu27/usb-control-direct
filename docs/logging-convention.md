@@ -2,7 +2,7 @@
 
 ## 日志框架
 
-本项目使用 `tracing` + `tracing-subscriber`。通过 `RUST_LOG` 环境变量控制日志级别。
+本项目使用 `tracing` + `tracing-subscriber`，配合 `rolling-file` + `tracing-appender` 实现按模块分组的滚动日志文件输出。日志级别通过 `RUST_LOG` 环境变量或 `/etc/usb-control/log.conf` 配置文件控制。
 
 ## 日志等级定义
 
@@ -78,17 +78,46 @@ trace!(key = %key_code, "按键事件");
 - ❌ 禁止模块零日志（运行时黑盒）
 - ❌ 禁止静默吞掉错误（`let _ = ...` 不记录日志）
 
-## 生产环境配置
+## 日志文件输出
 
-默认 `RUST_LOG=info`，按需调整：
+运行日志按模块 target 分组输出到 `/var/log/usb-control/` 下的 4 个滚动日志文件：
+
+| 文件 | 路由的 target |
+|------|-------------|
+| `usb.log` | `usb_identify`, `hid_access`, `malware_scan`, `file_access` |
+| `protocol.log` | `protocol_gateway`, `auth_session` |
+| `system.log` | `license_upgrade`, `storage`, `usb_control` |
+| `audit.log` | `log_audit`, `whitelist`, `policy_import_export` |
+
+每组文件按大小滚动：单文件上限 10 MB，保留 3 个历史文件。
+stdout 始终有彩色输出，文件输出无 ANSI 着色。
+
+## 环境配置
+
+### 级别控制优先级
+
+1. 设置了 `RUST_LOG` 环境变量 → 以环境变量为准，忽略 `log.conf`
+2. 未设置 `RUST_LOG` → 读取 `/etc/usb-control/log.conf` 作为初始级别，进程每 30 秒检查文件变更并热加载
+3. `log.conf` 也不存在 → 默认 `info` 级别
+
+### 生产环境
+
+部署后默认通过 `/etc/usb-control/log.conf` 控制，内容为 `info`。排障时修改文件，30 秒后自动生效，无需重启：
+
+```
+info,protocol_gateway=debug
+```
+
+### 开发/测试环境
+
+直接设置 `RUST_LOG` 环境变量覆盖文件配置：
 
 ```bash
-# 生产：只看关键业务事件
-RUST_LOG=info
+export RUST_LOG=info,protocol_gateway=debug
+```
 
-# 排障：开启协议层调试
-RUST_LOG=info,protocol_gateway=debug
+深度调试：
 
-# 深度调试：开启全模块 trace
-RUST_LOG=info,usb_control=trace
+```bash
+export RUST_LOG=info,usb_control=trace
 ```
