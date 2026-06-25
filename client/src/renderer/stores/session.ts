@@ -37,6 +37,10 @@ function parseAuthStatus(authStatus: string): AuthStatus {
   return ''
 }
 
+function shouldKeepConnectionAfterLoginError(error: unknown): boolean {
+  return error instanceof ServiceError && error.kind === 'business'
+}
+
 export const useSessionStore = defineStore('session', () => {
   const token = ref('')
   const username = ref('')
@@ -107,9 +111,8 @@ export const useSessionStore = defineStore('session', () => {
     password: string,
   ): Promise<LoginResult> {
     const connection = useConnectionStore()
-    await connection.connect(ip)
-
     try {
+      await connection.connect(ip)
       const response = await requestLogin(loginUsername, password)
       setSession({
         token: response.sessionToken,
@@ -127,6 +130,10 @@ export const useSessionStore = defineStore('session', () => {
       } catch {
         // 连接错误可能已由主进程状态机处理。
       }
+      if (!shouldKeepConnectionAfterLoginError(error)) {
+        await connection.disconnect(true).catch(() => {})
+      }
+      clearSession()
       throw error
     }
   }
@@ -140,8 +147,10 @@ export const useSessionStore = defineStore('session', () => {
       if (currentToken !== '' && !connection.isDisconnected) {
         await requestLogout(currentToken)
       }
-    } catch {
-      // 本地登出必须继续，远端失败交由装置侧会话超时兜底。
+    } catch (error: unknown) {
+      if (!(error instanceof ServiceError && error.kind === 'unauthenticated')) {
+        console.warn('远端登出未确认，执行本地会话清理', error)
+      }
     } finally {
       bootstrapStore.clear()
       clearSession()

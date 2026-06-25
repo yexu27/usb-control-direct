@@ -234,10 +234,65 @@ describe('useSessionStore', () => {
     expect(disconnect).toHaveBeenCalledWith()
   })
 
+  it('主动登出成功后清空本地状态并断开连接以允许同 IP 重新登录', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'operator',
+      role: 'operator',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    logoutMock.mockResolvedValue(undefined)
+
+    await store.logout()
+
+    expect(logoutMock).toHaveBeenCalledWith('token')
+    expect(store.token).toBe('')
+    expect(store.username).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledWith()
+  })
+
+  it('主动登出时远端会话已失效也执行本地清理', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'expired-token',
+      username: 'operator',
+      role: 'operator',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    useConnectionStore().updateStatus('CONNECTED')
+    logoutMock.mockRejectedValue(new ServiceError('会话已失效', 0x0001, 'unauthenticated'))
+
+    await store.logout()
+
+    expect(store.isLoggedIn).toBe(false)
+    expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('登录连接级失败后断开连接并恢复可重新提交状态', async () => {
+    const store = useSessionStore()
+    connect.mockRejectedValueOnce(new Error('connect failed'))
+
+    await expect(store.login('19.19.19.16', 'operator', 'operator@123')).rejects.toThrow(
+      'connect failed',
+    )
+
+    expect(store.token).toBe('')
+    expect(disconnect).toHaveBeenCalled()
+  })
+
   it('认证失败后重试密码时复用当前 TLS 连接', async () => {
     loginMock
-      .mockRejectedValueOnce(new Error('用户名或密码错误'))
-      .mockRejectedValueOnce(new Error('用户名或密码错误'))
+      .mockRejectedValueOnce(new ServiceError('用户名或密码错误', 0x0101, 'business'))
+      .mockRejectedValueOnce(new ServiceError('用户名或密码错误', 0x0101, 'business'))
     const store = useSessionStore()
 
     await expect(store.login('19.19.19.16', 'admin', 'wrong-1')).rejects.toThrow()

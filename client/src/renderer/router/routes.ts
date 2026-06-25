@@ -7,6 +7,7 @@ declare module 'vue-router' {
     licenseFlow?: boolean
     requiresAuth?: boolean
     roles?: UserRole[]
+    rootEntry?: boolean
   }
 }
 
@@ -65,7 +66,9 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: '',
-        redirect: '/login',
+        name: 'RootEntry',
+        component: { render: () => null },
+        meta: { rootEntry: true },
       },
     ],
   },

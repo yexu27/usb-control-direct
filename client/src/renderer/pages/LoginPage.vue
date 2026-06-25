@@ -86,10 +86,25 @@ function mapLoginError(error: unknown): string {
   if (error instanceof ServiceError) {
     return error.message
   }
-  if (error instanceof Error && error.message === '版本不兼容，请升级管理端') {
+  if (!(error instanceof Error)) {
+    return '装置连接失败，请检查网络连接'
+  }
+  if (error.message === '版本不兼容，请升级管理端') {
     return error.message
   }
-  return '装置连接失败，请检查网络或 IP 地址'
+  if (error.message.includes('已有管理端连接')) {
+    return '装置已有管理端连接，请稍后重试'
+  }
+  if (error.message.startsWith('Request timeout:')) {
+    return '装置响应超时，请检查装置状态或稍后重试'
+  }
+  if (error.message === '装置 IP 格式错误') {
+    return error.message
+  }
+  if (error.message.includes('certificate') || error.message.includes('指纹')) {
+    return error.message
+  }
+  return error.message || '装置连接失败，请检查网络连接'
 }
 
 async function handleSubmit(): Promise<void> {

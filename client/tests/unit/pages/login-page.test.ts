@@ -153,6 +153,38 @@ describe('LoginPage', () => {
     expect(component.errorMessage).toBe('用户已被锁定，请5分钟后重试')
   })
 
+  it('服务端连接占用时展示连接占用文案而不是 IP 格式错误', async () => {
+    const session = useSessionStore()
+    vi.spyOn(session, 'login').mockRejectedValue(new Error('装置已有管理端连接，请稍后重试'))
+    const wrapper = mountPage()
+    const component = wrapper.vm as unknown as LoginPageVm
+    Object.assign(component.form, {
+      ip: '19.19.19.16',
+      username: 'operator',
+      password: 'operator@123',
+    })
+
+    await component.handleSubmit()
+
+    expect(component.errorMessage).toBe('装置已有管理端连接，请稍后重试')
+  })
+
+  it('请求超时时展示超时文案而不是 IP 格式错误', async () => {
+    const session = useSessionStore()
+    vi.spyOn(session, 'login').mockRejectedValue(new Error('Request timeout: msgType=0x1, seqId=1'))
+    const wrapper = mountPage()
+    const component = wrapper.vm as unknown as LoginPageVm
+    Object.assign(component.form, {
+      ip: '19.19.19.16',
+      username: 'operator',
+      password: 'operator@123',
+    })
+
+    await component.handleSubmit()
+
+    expect(component.errorMessage).toBe('装置响应超时，请检查装置状态或稍后重试')
+  })
+
   it('提交过程中拒绝重复登录请求', async () => {
     const session = useSessionStore()
     const login = vi.spyOn(session, 'login').mockResolvedValue({
