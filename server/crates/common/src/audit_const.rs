@@ -43,3 +43,19 @@ pub mod action_type {
     pub const LOG_EXPORT: &str = "log_export";
     pub const MACHINE_CODE_DOWNLOAD: &str = "machine_code_download";
 }
+
+/// T06 恶意代码检测日志 scan_result。
+pub mod scan_result {
+    pub const CLEAN: i32 = 0;
+    pub const INFECTED: i32 = 1;
+    pub const FAILED: i32 = 2;
+    pub const CANCELLED: i32 = 3;
+}
+
+/// T06 恶意代码检测日志 process_result。
+pub mod process_result {
+    pub const MARKED: i32 = 0;
+    pub const BLOCKED: i32 = 1;
+    pub const FAILED: i32 = 2;
+    pub const NO_ACTION: i32 = 3;
+}
