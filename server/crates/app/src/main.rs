@@ -174,6 +174,18 @@ async fn main() {
         usb_identify::udev_monitor::enumerate_and_send(enum_tx);
     });
 
+    // 启动 session 过期清理任务
+    {
+        let auth_for_cleanup = Arc::clone(&state.auth_service);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                auth_for_cleanup.session_manager().cleanup_expired();
+            }
+        });
+    }
+
     let mut router = Router::new();
     register_auth_handlers(&mut router);
     register_whitelist_handlers(&mut router);
