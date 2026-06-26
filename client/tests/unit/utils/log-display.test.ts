@@ -23,7 +23,6 @@ describe('log display utils', () => {
       '设备名称',
       '序列号',
       '内容',
-      '病毒',
     ])
     expect(getLogColumns('operation').map((column) => column.label)).toEqual([
       '时间',
