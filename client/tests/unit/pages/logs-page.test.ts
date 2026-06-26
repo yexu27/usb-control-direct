@@ -213,6 +213,95 @@ describe('LogsPage', () => {
     expect(wrapper.find('[data-testid="log-event-chip"]').exists()).toBe(true)
   })
 
+  it('USB审计日志内容列按 PRD 9.2 组合展示结构化字段', async () => {
+    vi.mocked(queryLogs).mockResolvedValue({
+      success: true,
+      total: 5,
+      usbAuditEntries: [{
+        id: 1,
+        eventTime: 1_767_225_610,
+        deviceName: 'Kingston',
+        deviceSn: 'SN001',
+        deviceType: 'storage',
+        interfaceType: 'mass_storage',
+        eventType: 'insert_success',
+        permission: 'readwrite',
+        capacityBytes: 32_000_000_000,
+        result: 'success',
+        failReason: '',
+        detail: '',
+      }, {
+        id: 2,
+        eventTime: 1_767_225_611,
+        deviceName: 'Unknown USB',
+        deviceSn: '',
+        deviceType: 'unsupported',
+        interfaceType: 'unsupported',
+        eventType: 'insert_failed',
+        permission: '',
+        capacityBytes: 0,
+        result: 'failed',
+        failReason: '不支持的设备类型',
+        detail: '',
+      }, {
+        id: 3,
+        eventTime: 1_767_225_612,
+        deviceName: 'Keyboard',
+        deviceSn: '',
+        deviceType: 'keyboard',
+        interfaceType: 'hid_keyboard',
+        eventType: 'insert_success',
+        permission: '',
+        capacityBytes: 0,
+        result: 'success',
+        failReason: '',
+        detail: '验证通过',
+      }, {
+        id: 4,
+        eventTime: 1_767_225_613,
+        deviceName: 'Mouse',
+        deviceSn: '',
+        deviceType: 'mouse',
+        interfaceType: 'hid_mouse',
+        eventType: 'insert_failed',
+        permission: '',
+        capacityBytes: 0,
+        result: 'failed',
+        failReason: '映射失败',
+        detail: '',
+      }, {
+        id: 5,
+        eventTime: 1_767_225_614,
+        deviceName: 'Kingston',
+        deviceSn: 'SN001',
+        deviceType: 'storage',
+        interfaceType: 'mass_storage',
+        eventType: 'device_remove',
+        permission: 'readonly',
+        capacityBytes: 32_000_000_000,
+        result: 'removed',
+        failReason: '',
+        detail: '',
+      }],
+      malwareEntries: [],
+      operationEntries: [],
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('授权设备, 读写, 32GB, 映射完成')
+    expect(text).toContain('不支持的 USB 设备类型, 禁止使用')
+    expect(text).toContain('键盘, 验证通过, 映射完成')
+    expect(text).toContain('鼠标, 映射失败')
+    expect(text).toContain('授权设备, 只读')
+    expect(text).not.toContain('结果：success')
+    expect(text).not.toContain('结果：failed')
+  })
+
   it('切换日志类型时清空搜索条件并恢复默认分页', async () => {
     const wrapper = mountPage()
     await flushPromises()
