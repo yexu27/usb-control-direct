@@ -89,10 +89,6 @@ pub struct UsbAuditLog {
     pub event_type: String,
     pub permission: Option<i32>,
     pub capacity_bytes: Option<i64>,
-    pub file_path: Option<String>,
-    pub matched_policy: Option<String>,
-    pub result: String,
-    pub fail_reason: Option<String>,
     pub detail: Option<String>,
 }
 
@@ -112,10 +108,6 @@ pub struct UsbAuditLogInsert {
     pub event_type: String,
     pub permission: Option<i32>,
     pub capacity_bytes: Option<i64>,
-    pub file_path: Option<String>,
-    pub matched_policy: Option<String>,
-    pub result: String,
-    pub fail_reason: Option<String>,
     pub detail: Option<String>,
 }
 

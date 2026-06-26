@@ -1,9 +1,8 @@
 //! 业务日志常量模块，与架构 08 枚举严格一致。
 
-/// T05 USB 审计日志 event_type（共 3 个）。
+/// T05 USB 审计日志 event_type（共 2 个）。
 pub mod event_type {
     pub const INSERT_SUCCESS: &str = "insert_success";
-    pub const INSERT_FAILED: &str = "insert_failed";
     pub const DEVICE_REMOVE: &str = "device_remove";
 }
 

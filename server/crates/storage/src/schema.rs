@@ -104,16 +104,11 @@ fn create_all_tables(conn: &Connection) -> Result<(), StorageError> {
             event_type          TEXT    NOT NULL,
             permission          INTEGER,
             capacity_bytes      INTEGER,
-            file_path           TEXT,
-            matched_policy      TEXT,
-            result              TEXT    NOT NULL,
-            fail_reason         TEXT,
             detail              TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_usb_audit_log_time ON usb_audit_log(event_time);
         CREATE INDEX IF NOT EXISTS idx_usb_audit_log_sn ON usb_audit_log(device_sn);
         CREATE INDEX IF NOT EXISTS idx_usb_audit_log_type ON usb_audit_log(event_type);
-        CREATE INDEX IF NOT EXISTS idx_usb_audit_log_policy ON usb_audit_log(matched_policy);
         CREATE INDEX IF NOT EXISTS idx_usb_audit_log_time_type ON usb_audit_log(event_time, event_type);
 
         -- T06 恶意代码检测日志表

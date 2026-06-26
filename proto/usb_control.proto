@@ -246,13 +246,10 @@ message UsbAuditLogEntry {
     string device_name = 4;
     string device_type = 5;
     string interface_type = 6;
-    string event_type = 7;
+    string event_type = 7;          // insert_success / device_remove
     string permission = 8;
     int64 capacity_bytes = 9;
-    string file_path = 10;
-    string matched_policy = 11;
-    string result = 12;
-    string fail_reason = 13;
+    reserved 10, 11, 12, 13;
     string detail = 14;
 }
 

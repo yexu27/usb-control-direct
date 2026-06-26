@@ -423,10 +423,6 @@ fn map_usb_audit(item: &storage::model::UsbAuditLog) -> UsbAuditLogEntry {
             .unwrap_or("")
             .to_string(),
         capacity_bytes: item.capacity_bytes.unwrap_or(0),
-        file_path: item.file_path.clone().unwrap_or_default(),
-        matched_policy: item.matched_policy.clone().unwrap_or_default(),
-        result: item.result.clone(),
-        fail_reason: item.fail_reason.clone().unwrap_or_default(),
         detail: item.detail.clone().unwrap_or_default(),
     }
 }
@@ -483,28 +479,40 @@ fn map_operation(item: &storage::model::OperationLog) -> OperationLogEntry {
 /// 生成 USB 审计日志 CSV。
 fn generate_usb_audit_csv(items: &[storage::model::UsbAuditLog]) -> String {
     let mut csv = String::from(
-        "ID,事件时间,设备序列号,设备名称,设备类型,接口类型,事件类型,权限,容量,文件路径,匹配策略,结果,失败原因,详情\n",
+        "ID,事件时间,设备序列号,设备名称,设备类型,接口类型,事件类型,权限,容量,详情\n",
     );
     for item in items {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{}\n",
             item.id,
             item.event_time,
             item.device_sn.as_deref().unwrap_or(""),
             escape_csv(item.device_name.as_deref().unwrap_or("")),
             item.device_type.as_deref().unwrap_or(""),
             item.interface_type.as_deref().unwrap_or(""),
-            item.event_type,
-            item.permission.unwrap_or(0),
+            event_type_to_chinese(&item.event_type),
+            permission_to_chinese(item.permission),
             item.capacity_bytes.unwrap_or(0),
-            escape_csv(item.file_path.as_deref().unwrap_or("")),
-            escape_csv(item.matched_policy.as_deref().unwrap_or("")),
-            item.result,
-            escape_csv(item.fail_reason.as_deref().unwrap_or("")),
             escape_csv(item.detail.as_deref().unwrap_or("")),
         ));
     }
     csv
+}
+
+fn event_type_to_chinese(value: &str) -> &'static str {
+    match value {
+        "insert_success" => "USB 插入成功",
+        "device_remove" => "USB 移除成功",
+        _ => "未知",
+    }
+}
+
+fn permission_to_chinese(value: Option<i32>) -> &'static str {
+    match value {
+        Some(0) => "只读",
+        Some(1) => "读写",
+        _ => "",
+    }
 }
 
 /// 扫描结果数字转中文（CSV 导出用）。
