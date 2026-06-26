@@ -530,22 +530,93 @@ fn generate_malware_csv(items: &[storage::model::MalwareLog]) -> String {
     csv
 }
 
+/// 操作结果数字转中文。
+fn result_int_to_str(result: i32) -> &'static str {
+    match result {
+        0 => "成功",
+        _ => "失败",
+    }
+}
+
+/// 角色数字转中文。
+fn role_int_to_chinese(role: i32) -> &'static str {
+    match role {
+        0 => "管理员",
+        1 => "操作员",
+        2 => "审计员",
+        _ => "未知",
+    }
+}
+
+/// log_type 转 PRD 页面分类中文名。
+fn log_type_to_display(log_type: &str) -> &'static str {
+    match log_type {
+        "login_auth" => "登录认证",
+        "user_management" => "用户管理",
+        "security_config" => "安全配置变更",
+        "auth_management" => "授权管理",
+        "system_management" => "系统管理",
+        "program_upgrade" => "程序升级",
+        "log_management" => "日志管理",
+        _ => "未知",
+    }
+}
+
+/// action_type 转中文动作描述。
+fn action_type_to_display(action_type: &str) -> &'static str {
+    match action_type {
+        "login" => "用户登录",
+        "logout" => "用户登出",
+        "login_failed" => "用户登录失败",
+        "password_change" => "修改密码",
+        "password_reset" => "重置密码",
+        "user_create" => "新建用户",
+        "user_delete" => "删除用户",
+        "whitelist_add" => "添加白名单设备",
+        "whitelist_remove" => "删除白名单设备",
+        "whitelist_update" => "修改白名单",
+        "file_policy_update" => "修改文件访问控制策略",
+        "blacklist_add" => "添加文件类型黑名单",
+        "blacklist_remove" => "删除文件类型黑名单",
+        "policy_import" => "导入策略",
+        "policy_export" => "导出策略",
+        "system_upgrade" => "系统升级",
+        "virusdb_upgrade" => "病毒库升级",
+        "auth_upload" => "上传授权文件",
+        "machine_code_download" => "下载机器码",
+        "device_desc_update" => "修改设备描述",
+        "log_clean" => "清理日志",
+        "log_export" => "导出日志",
+        _ => "未知",
+    }
+}
+
 /// 生成操作日志 CSV。
 fn generate_operation_csv(items: &[storage::model::OperationLog]) -> String {
     let mut csv = String::from(
-        "ID,操作时间,用户名,角色,日志分类,操作类型,操作目标,结果,失败原因,来源IP,详情\n",
+        "ID,操作时间,用户名,角色,日志分类,操作类型,操作目标,操作前值,操作后值,关联文件,关联版本,结果,失败原因,来源IP,详情\n",
     );
     for item in items {
+        let role = role_int_to_chinese(item.role);
+        let log_type_display = log_type_to_display(&item.log_type);
+        let action_display =
+            action_type_to_display(item.action_type.as_deref().unwrap_or(""));
+        let result_display = result_int_to_str(item.result);
+
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             item.id,
             item.op_time,
             item.username,
-            item.role,
-            item.log_type,
-            item.action_type.as_deref().unwrap_or(""),
+            role,
+            log_type_display,
+            action_display,
             escape_csv(item.target.as_deref().unwrap_or("")),
-            item.result,
+            escape_csv(item.before_value.as_deref().unwrap_or("")),
+            escape_csv(item.after_value.as_deref().unwrap_or("")),
+            escape_csv(item.related_file.as_deref().unwrap_or("")),
+            item.related_version.as_deref().unwrap_or(""),
+            result_display,
             escape_csv(item.fail_reason.as_deref().unwrap_or("")),
             item.source_ip.as_deref().unwrap_or(""),
             escape_csv(item.detail.as_deref().unwrap_or("")),
