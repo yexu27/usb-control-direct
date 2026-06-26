@@ -157,7 +157,7 @@ describe('LogsPage', () => {
         eventTime: 1_767_225_610,
         deviceName: 'Kingston',
         deviceSn: 'SN001',
-        eventType: 'mapped',
+        eventType: 'insert_success',
         detail: '映射成功',
       }],
       malwareEntries: [],
@@ -175,8 +175,6 @@ describe('LogsPage', () => {
     expect(queryLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       eventType: '',
-      logCategory: '',
-      actionType: '',
     }))
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('设备名称')
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('序列号')
@@ -220,7 +218,7 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     wrapper.getComponent(DataTableStub).vm.$emit('page-size-change', 50)
     await flushPromises()
 
@@ -231,7 +229,6 @@ describe('LogsPage', () => {
       logType: 'operation',
       keyword: '',
       eventType: '',
-      logCategory: '',
       page: 1,
       pageSize: 20,
     }))
@@ -242,15 +239,14 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
 
     expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       keyword: 'Kingston',
-      eventType: 'mapped',
-      logCategory: '',
+      eventType: 'insert_success',
       page: 1,
     }))
   })
@@ -260,7 +256,7 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
     vi.mocked(queryLogs).mockClear()
@@ -271,8 +267,7 @@ describe('LogsPage', () => {
     expect(queryLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       keyword: 'Kingston',
-      eventType: 'mapped',
-      logCategory: '',
+      eventType: 'insert_success',
       page: 1,
       pageSize: 20,
     }))
@@ -292,7 +287,6 @@ describe('LogsPage', () => {
       logType: 'malware',
       keyword: 'EICAR',
       eventType: '',
-      logCategory: '',
       page: 1,
     }))
   })
@@ -323,7 +317,7 @@ describe('LogsPage', () => {
     expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户管理')
   })
 
-  it('操作日志按类型筛选并在导出时携带相同类型', async () => {
+  it('操作日志不展示分类筛选且查询和导出不携带分类字段', async () => {
     vi.mocked(exportLogs).mockResolvedValue({
       success: true,
       zipData: new Uint8Array([1, 2, 3]),
@@ -345,14 +339,17 @@ describe('LogsPage', () => {
 
     await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
     await flushPromises()
-    await wrapper.get('[data-testid="log-operation-category"]').setValue('user_management')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.find('[data-testid="log-operation-category"]').exists()).toBe(false)
     expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
       logType: 'operation',
       eventType: '',
-      logCategory: 'user_management',
+    }))
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.not.objectContaining({
+      logCategory: expect.anything(),
+      actionType: expect.anything(),
     }))
 
     await wrapper.get('[data-testid="log-export"]').trigger('click')
@@ -361,7 +358,10 @@ describe('LogsPage', () => {
     expect(exportLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'operation',
       eventType: '',
-      logCategory: 'user_management',
+    }))
+    expect(exportLogs).toHaveBeenCalledWith('token', expect.not.objectContaining({
+      logCategory: expect.anything(),
+      actionType: expect.anything(),
     }))
   })
 

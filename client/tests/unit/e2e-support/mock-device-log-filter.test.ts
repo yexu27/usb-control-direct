@@ -5,13 +5,13 @@ const usbAuditLogs = [{
   id: 1,
   deviceName: 'Kingston DataTraveler',
   deviceSn: 'USB-AUDIT-001',
-  eventType: 'mapped',
+  eventType: 'insert_success',
   detail: '白名单设备映射成功',
 }, {
   id: 2,
   deviceName: 'Blocked USB',
   deviceSn: 'USB-AUDIT-002',
-  eventType: 'whitelist_denied',
+  eventType: 'insert_failed',
   detail: '未授权设备禁止接入',
 }]
 
@@ -53,9 +53,7 @@ describe('mock-device log filter', () => {
   it('按 USB 事件类型和关键字过滤 USB 审计日志', () => {
     const result = filterMockLogsForQuery(usbAuditLogs, {
       keyword: 'Blocked',
-      eventType: 'whitelist_denied',
-      logCategory: '',
-      actionType: '',
+      eventType: 'insert_failed',
     })
 
     expect(result.map((entry) => entry.id)).toEqual([2])
@@ -65,19 +63,15 @@ describe('mock-device log filter', () => {
     const result = filterMockLogsForQuery(malwareLogs, {
       keyword: 'EICAR',
       eventType: '',
-      logCategory: '',
-      actionType: '',
     })
 
     expect(result.map((entry) => entry.id)).toEqual([1])
   })
 
-  it('按操作日志类型和关键字过滤操作日志', () => {
+  it('按关键字过滤操作日志', () => {
     const result = filterMockLogsForQuery(operationLogs, {
       keyword: '审计员',
       eventType: '',
-      logCategory: 'login_auth',
-      actionType: '',
     })
 
     expect(result.map((entry) => entry.id)).toEqual([2])
