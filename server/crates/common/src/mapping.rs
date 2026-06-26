@@ -89,18 +89,19 @@ pub fn permission_str_to_enum(value: &str) -> Result<Permission, CommonError> {
 }
 
 // =====================================================================
-// ScanResult 映射（本阶段约定 clean/infected/failed，详见 P00 计划）
+// ScanResult 映射（本阶段约定 clean/infected/failed/cancelled，详见 P00 计划）
 // =====================================================================
 
 /// 扫描结果协议字符串转数据库整数。
 ///
 /// 参数:
-///   - `value`: `clean` / `infected` / `failed`。
+///   - `value`: `clean` / `infected` / `failed` / `cancelled`。
 pub fn scan_result_str_to_int(value: &str) -> Result<i32, CommonError> {
     match value {
         "clean" => Ok(0),
         "infected" => Ok(1),
         "failed" => Ok(2),
+        "cancelled" => Ok(3),
         other => Err(CommonError::UnknownEnum(format!("scan_result={}", other))),
     }
 }
@@ -111,7 +112,37 @@ pub fn scan_result_int_to_str(value: i32) -> Result<&'static str, CommonError> {
         0 => Ok("clean"),
         1 => Ok("infected"),
         2 => Ok("failed"),
+        3 => Ok("cancelled"),
         other => Err(CommonError::UnknownEnum(format!("scan_result_int={}", other))),
+    }
+}
+
+// =====================================================================
+// ProcessResult 映射
+// =====================================================================
+
+/// 处理结果协议字符串转数据库整数。
+///
+/// 参数:
+///   - `value`: `marked` / `blocked` / `failed` / `no_action`。
+pub fn process_result_str_to_int(value: &str) -> Result<i32, CommonError> {
+    match value {
+        "marked" => Ok(0),
+        "blocked" => Ok(1),
+        "failed" => Ok(2),
+        "no_action" => Ok(3),
+        other => Err(CommonError::UnknownEnum(format!("process_result={}", other))),
+    }
+}
+
+/// 处理结果数据库整数转协议字符串。
+pub fn process_result_int_to_str(value: i32) -> Result<&'static str, CommonError> {
+    match value {
+        0 => Ok("marked"),
+        1 => Ok("blocked"),
+        2 => Ok("failed"),
+        3 => Ok("no_action"),
+        other => Err(CommonError::UnknownEnum(format!("process_result_int={}", other))),
     }
 }
 
@@ -181,7 +212,7 @@ mod tests {
 
     #[test]
     fn scan_result_round_trip() {
-        for (s, i) in [("clean", 0), ("infected", 1), ("failed", 2)] {
+        for (s, i) in [("clean", 0), ("infected", 1), ("failed", 2), ("cancelled", 3)] {
             assert_eq!(scan_result_str_to_int(s).unwrap(), i);
             assert_eq!(scan_result_int_to_str(i).unwrap(), s);
         }
@@ -199,5 +230,19 @@ mod tests {
     fn add_method_unknown_returns_error() {
         assert!(add_method_str_to_int("unknown").is_err());
         assert!(add_method_int_to_str(9).is_err());
+    }
+
+    #[test]
+    fn process_result_round_trip() {
+        for (s, i) in [("marked", 0), ("blocked", 1), ("failed", 2), ("no_action", 3)] {
+            assert_eq!(process_result_str_to_int(s).unwrap(), i);
+            assert_eq!(process_result_int_to_str(i).unwrap(), s);
+        }
+    }
+
+    #[test]
+    fn process_result_unknown_returns_error() {
+        assert!(process_result_str_to_int("unknown").is_err());
+        assert!(process_result_int_to_str(9).is_err());
     }
 }
