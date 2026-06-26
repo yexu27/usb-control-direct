@@ -7257,7 +7257,7 @@ export const usb_control = $root.usb_control = (() => {
             if (message.capacityBytes != null && Object.hasOwnProperty.call(message, "capacityBytes"))
                 writer.uint32(/* id 9, wireType 0 =*/72).int64(message.capacityBytes);
             if (message.detail != null && Object.hasOwnProperty.call(message, "detail"))
-                writer.uint32(/* id 14, wireType 2 =*/114).string(message.detail);
+                writer.uint32(/* id 10, wireType 2 =*/82).string(message.detail);
             return writer;
         };
 
@@ -7334,7 +7334,7 @@ export const usb_control = $root.usb_control = (() => {
                         message.capacityBytes = reader.int64();
                         break;
                     }
-                case 14: {
+                case 10: {
                         message.detail = reader.string();
                         break;
                     }
