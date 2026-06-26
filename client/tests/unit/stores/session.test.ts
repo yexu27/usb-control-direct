@@ -9,6 +9,7 @@ import { ServiceError } from '../../../src/renderer/services/send-command'
 import { usb_control } from '../../../src/shared/proto/usb_control'
 import type { ConnectionEvent, ConnectionStatus } from '../../../src/shared/connection-state'
 import { ConnectionStateMachine } from '../../../src/main/tls/connection-state'
+import { useBootstrapStore } from '../../../src/renderer/stores/bootstrap'
 
 vi.mock('../../../src/renderer/services/auth-service', () => ({
   login: vi.fn(),
@@ -317,11 +318,28 @@ describe('useSessionStore', () => {
 
   it('本地无 token 时重连校验要求重新登录且不访问装置', async () => {
     const store = useSessionStore()
+    store.setSession({
+      token: 'stale-token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    store.token = ''
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    const clearBootstrap = vi.spyOn(useBootstrapStore(), 'clear')
 
     await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(queryAuthStatusMock).not.toHaveBeenCalled()
     expect(connect).not.toHaveBeenCalled()
+    expect(clearBootstrap).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('重连校验授权状态后恢复会话', async () => {
@@ -503,7 +521,7 @@ describe('useSessionStore', () => {
     },
   )
 
-  it('重新建链失败时保留当前会话状态', async () => {
+  it('重新建链失败时清空状态并要求重新登录', async () => {
     const store = useSessionStore()
     store.setSession({
       token: 'token',
@@ -517,14 +535,15 @@ describe('useSessionStore', () => {
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
     connect.mockRejectedValueOnce(new Error('connect failed'))
+    const clearBootstrap = vi.spyOn(useBootstrapStore(), 'clear')
 
-    await expect(store.reconnectAndValidate()).rejects.toThrow(
-      'USB 管控装置重新连接失败，请检查网络或设备连接。',
-    )
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(queryAuthStatusMock).not.toHaveBeenCalled()
-    expect(store.token).toBe('token')
-    expect(store.deviceDescription).toBe('USB_DEVICE')
-    expect(connection.deviceIp).toBe('19.19.19.16')
+    expect(clearBootstrap).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('')
+    expect(store.deviceDescription).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 })

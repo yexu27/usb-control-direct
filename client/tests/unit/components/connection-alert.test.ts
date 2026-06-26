@@ -130,20 +130,20 @@ describe('ConnectionAlert', () => {
     expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
-  it('建链失败时留在当前页并展示错误', async () => {
+  it('建链失败被会话重连吸收后返回登录页且不弹错误', async () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
     vi.spyOn(useSessionStore(), 'reconnectAndValidate')
-      .mockRejectedValue(new Error('USB 管控装置重新连接失败，请检查网络或设备连接。'))
+      .mockResolvedValue('login-required')
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
     await flushPromises()
 
-    expect(push).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith('/login')
     expect(emitPageRefresh).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('USB 管控装置重新连接失败，请检查网络或设备连接。')
+    expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
   it('重连进行中时防止重复点击', async () => {

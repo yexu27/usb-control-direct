@@ -160,8 +160,18 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function clearReconnectState(
+    connection = useConnectionStore(),
+    bootstrapStore = useBootstrapStore(),
+  ): Promise<void> {
+    bootstrapStore.clear()
+    clearSession()
+    await connection.disconnect(true).catch(() => {})
+  }
+
   async function validateReconnectSession(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
+      await clearReconnectState()
       return 'login-required'
     }
 
@@ -176,18 +186,14 @@ export const useSessionStore = defineStore('session', () => {
       await finishAuthentication()
 
       if (authStatus.value !== 'authorized' || role.value === '' || !connection.isConnected) {
-        bootstrapStore.clear()
-        clearSession()
-        await connection.disconnect(true).catch(() => {})
+        await clearReconnectState(connection, bootstrapStore)
         return 'login-required'
       }
 
       return 'resumable'
     } catch (error: unknown) {
       if (error instanceof ServiceError && error.kind === 'unauthenticated') {
-        bootstrapStore.clear()
-        clearSession()
-        await connection.disconnect(true).catch(() => {})
+        await clearReconnectState(connection, bootstrapStore)
         return 'login-required'
       }
       throw error
@@ -196,11 +202,14 @@ export const useSessionStore = defineStore('session', () => {
 
   async function reconnectAndValidate(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
+      await clearReconnectState()
       return 'login-required'
     }
-    const reconnected = await useConnectionStore().reconnect()
+    const connection = useConnectionStore()
+    const reconnected = await connection.reconnect().catch(() => false)
     if (!reconnected) {
-      throw new Error('USB 管控装置重新连接失败，请检查网络或设备连接。')
+      await clearReconnectState(connection)
+      return 'login-required'
     }
     return validateReconnectSession()
   }
