@@ -7124,10 +7124,6 @@ export const usb_control = $root.usb_control = (() => {
          * @property {string|null} [eventType] UsbAuditLogEntry eventType
          * @property {string|null} [permission] UsbAuditLogEntry permission
          * @property {number|Long|null} [capacityBytes] UsbAuditLogEntry capacityBytes
-         * @property {string|null} [filePath] UsbAuditLogEntry filePath
-         * @property {string|null} [matchedPolicy] UsbAuditLogEntry matchedPolicy
-         * @property {string|null} [result] UsbAuditLogEntry result
-         * @property {string|null} [failReason] UsbAuditLogEntry failReason
          * @property {string|null} [detail] UsbAuditLogEntry detail
          */
 
@@ -7219,38 +7215,6 @@ export const usb_control = $root.usb_control = (() => {
         UsbAuditLogEntry.prototype.capacityBytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
         /**
-         * UsbAuditLogEntry filePath.
-         * @member {string} filePath
-         * @memberof usb_control.UsbAuditLogEntry
-         * @instance
-         */
-        UsbAuditLogEntry.prototype.filePath = "";
-
-        /**
-         * UsbAuditLogEntry matchedPolicy.
-         * @member {string} matchedPolicy
-         * @memberof usb_control.UsbAuditLogEntry
-         * @instance
-         */
-        UsbAuditLogEntry.prototype.matchedPolicy = "";
-
-        /**
-         * UsbAuditLogEntry result.
-         * @member {string} result
-         * @memberof usb_control.UsbAuditLogEntry
-         * @instance
-         */
-        UsbAuditLogEntry.prototype.result = "";
-
-        /**
-         * UsbAuditLogEntry failReason.
-         * @member {string} failReason
-         * @memberof usb_control.UsbAuditLogEntry
-         * @instance
-         */
-        UsbAuditLogEntry.prototype.failReason = "";
-
-        /**
          * UsbAuditLogEntry detail.
          * @member {string} detail
          * @memberof usb_control.UsbAuditLogEntry
@@ -7292,14 +7256,6 @@ export const usb_control = $root.usb_control = (() => {
                 writer.uint32(/* id 8, wireType 2 =*/66).string(message.permission);
             if (message.capacityBytes != null && Object.hasOwnProperty.call(message, "capacityBytes"))
                 writer.uint32(/* id 9, wireType 0 =*/72).int64(message.capacityBytes);
-            if (message.filePath != null && Object.hasOwnProperty.call(message, "filePath"))
-                writer.uint32(/* id 10, wireType 2 =*/82).string(message.filePath);
-            if (message.matchedPolicy != null && Object.hasOwnProperty.call(message, "matchedPolicy"))
-                writer.uint32(/* id 11, wireType 2 =*/90).string(message.matchedPolicy);
-            if (message.result != null && Object.hasOwnProperty.call(message, "result"))
-                writer.uint32(/* id 12, wireType 2 =*/98).string(message.result);
-            if (message.failReason != null && Object.hasOwnProperty.call(message, "failReason"))
-                writer.uint32(/* id 13, wireType 2 =*/106).string(message.failReason);
             if (message.detail != null && Object.hasOwnProperty.call(message, "detail"))
                 writer.uint32(/* id 14, wireType 2 =*/114).string(message.detail);
             return writer;
@@ -7376,22 +7332,6 @@ export const usb_control = $root.usb_control = (() => {
                     }
                 case 9: {
                         message.capacityBytes = reader.int64();
-                        break;
-                    }
-                case 10: {
-                        message.filePath = reader.string();
-                        break;
-                    }
-                case 11: {
-                        message.matchedPolicy = reader.string();
-                        break;
-                    }
-                case 12: {
-                        message.result = reader.string();
-                        break;
-                    }
-                case 13: {
-                        message.failReason = reader.string();
                         break;
                     }
                 case 14: {
@@ -7479,14 +7419,6 @@ export const usb_control = $root.usb_control = (() => {
                     message.capacityBytes = object.capacityBytes;
                 else if (typeof object.capacityBytes === "object")
                     message.capacityBytes = new $util.LongBits(object.capacityBytes.low >>> 0, object.capacityBytes.high >>> 0).toNumber();
-            if (object.filePath != null)
-                message.filePath = String(object.filePath);
-            if (object.matchedPolicy != null)
-                message.matchedPolicy = String(object.matchedPolicy);
-            if (object.result != null)
-                message.result = String(object.result);
-            if (object.failReason != null)
-                message.failReason = String(object.failReason);
             if (object.detail != null)
                 message.detail = String(object.detail);
             return message;
@@ -7531,10 +7463,6 @@ export const usb_control = $root.usb_control = (() => {
                     object.capacityBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
                 } else
                     object.capacityBytes = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
-                object.filePath = "";
-                object.matchedPolicy = "";
-                object.result = "";
-                object.failReason = "";
                 object.detail = "";
             }
             if (message.id != null && Object.hasOwnProperty.call(message, "id"))
@@ -7570,14 +7498,6 @@ export const usb_control = $root.usb_control = (() => {
                     object.capacityBytes = options.longs === String ? String(message.capacityBytes) : message.capacityBytes;
                 else
                     object.capacityBytes = options.longs === String ? $util.Long.prototype.toString.call(message.capacityBytes) : options.longs === Number ? new $util.LongBits(message.capacityBytes.low >>> 0, message.capacityBytes.high >>> 0).toNumber() : message.capacityBytes;
-            if (message.filePath != null && Object.hasOwnProperty.call(message, "filePath"))
-                object.filePath = message.filePath;
-            if (message.matchedPolicy != null && Object.hasOwnProperty.call(message, "matchedPolicy"))
-                object.matchedPolicy = message.matchedPolicy;
-            if (message.result != null && Object.hasOwnProperty.call(message, "result"))
-                object.result = message.result;
-            if (message.failReason != null && Object.hasOwnProperty.call(message, "failReason"))
-                object.failReason = message.failReason;
             if (message.detail != null && Object.hasOwnProperty.call(message, "detail"))
                 object.detail = message.detail;
             return object;

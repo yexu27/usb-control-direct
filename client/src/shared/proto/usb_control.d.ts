@@ -2777,18 +2777,6 @@ export namespace usb_control {
         /** UsbAuditLogEntry capacityBytes */
         capacityBytes?: (number|Long|null);
 
-        /** UsbAuditLogEntry filePath */
-        filePath?: (string|null);
-
-        /** UsbAuditLogEntry matchedPolicy */
-        matchedPolicy?: (string|null);
-
-        /** UsbAuditLogEntry result */
-        result?: (string|null);
-
-        /** UsbAuditLogEntry failReason */
-        failReason?: (string|null);
-
         /** UsbAuditLogEntry detail */
         detail?: (string|null);
     }
@@ -2828,18 +2816,6 @@ export namespace usb_control {
 
         /** UsbAuditLogEntry capacityBytes. */
         public capacityBytes: (number|Long);
-
-        /** UsbAuditLogEntry filePath. */
-        public filePath: string;
-
-        /** UsbAuditLogEntry matchedPolicy. */
-        public matchedPolicy: string;
-
-        /** UsbAuditLogEntry result. */
-        public result: string;
-
-        /** UsbAuditLogEntry failReason. */
-        public failReason: string;
 
         /** UsbAuditLogEntry detail. */
         public detail: string;
