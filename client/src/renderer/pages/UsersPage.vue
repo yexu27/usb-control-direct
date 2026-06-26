@@ -4,6 +4,7 @@ import { type FormInstance, type FormRules } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
 import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import {
   createUser,
@@ -11,7 +12,6 @@ import {
   listUsers,
   resetPassword,
 } from '@/services/user-service'
-import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { validatePasswordComplexity } from '@/utils/password-validator'
 import { confirmAction } from '@/utils/confirm-action'
@@ -50,7 +50,8 @@ const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,32}$/
 const DISCONNECTED_MESSAGE = 'USB 管控装置已断开连接，操作失败。'
 
 const session = useSessionStore()
-const connection = useConnectionStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 const users = ref<UserRow[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -125,12 +126,16 @@ const columns = computed<DataTableColumn[]>(() => [
 
 useDeviceBackedPageRefresh(loadUsers)
 
-async function canOperate(): Promise<boolean> {
-  if (connection.isConnected) {
+async function canWriteToDevice(): Promise<boolean> {
+  if (canReadFromDevice()) {
     return true
   }
   await showErrorDialog('操作失败', DISCONNECTED_MESSAGE)
   return false
+}
+
+async function canOperate(): Promise<boolean> {
+  return canWriteToDevice()
 }
 
 async function showError(error: unknown, fallback: string): Promise<void> {
@@ -148,7 +153,7 @@ function mapUserItem(item: usb_control.IUserItem): UserRow {
 }
 
 async function loadUsers(): Promise<void> {
-  if (!(await canOperate())) {
+  if (!canReadFromDevice()) {
     return
   }
   isLoading.value = true
@@ -293,6 +298,7 @@ async function submitResetPassword(): Promise<void> {
         type="primary"
         class="users-create-button"
         data-testid="create-user-open"
+        :disabled="isBusinessActionDisabled"
         @click="openCreateDialog"
       >
         + 新建用户
@@ -343,6 +349,7 @@ async function submitResetPassword(): Promise<void> {
             <el-button
               :data-testid="`reset-password-${row.username}`"
               plain
+              :disabled="isBusinessActionDisabled"
               @click="openResetDialog(row.username)"
             >
               重置密码
@@ -352,6 +359,7 @@ async function submitResetPassword(): Promise<void> {
               :data-testid="`delete-user-${row.username}`"
               type="danger"
               plain
+              :disabled="isBusinessActionDisabled"
               @click="handleDeleteUser(row.username)"
             >
               删除
@@ -420,6 +428,7 @@ async function submitResetPassword(): Promise<void> {
           type="primary"
           data-testid="create-user-submit"
           :loading="createSubmitting"
+          :disabled="createSubmitting || isBusinessActionDisabled"
           @click="submitCreateUser"
         >
           创建
@@ -469,6 +478,7 @@ async function submitResetPassword(): Promise<void> {
           type="primary"
           data-testid="reset-password-submit"
           :loading="resetSubmitting"
+          :disabled="resetSubmitting || isBusinessActionDisabled"
           @click="submitResetPassword"
         >
           保存
