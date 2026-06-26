@@ -174,8 +174,6 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         },
         keyword: optional_str(&cmd.keyword),
         event_type: optional_str(&cmd.event_type),
-        log_category: optional_str(&cmd.log_category),
-        action_type: optional_str(&cmd.action_type),
         page: 1,
         page_size: EXPORT_PAGE_SIZE,
     };
@@ -395,8 +393,6 @@ fn build_query_params(cmd: &CmdQueryLogs) -> LogQueryParams {
         },
         keyword: optional_str(&cmd.keyword),
         event_type: optional_str(&cmd.event_type),
-        log_category: optional_str(&cmd.log_category),
-        action_type: optional_str(&cmd.action_type),
         page,
         page_size,
     }

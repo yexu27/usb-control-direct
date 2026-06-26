@@ -269,8 +269,6 @@ pub struct LogQueryParams {
     pub end_time: Option<i64>,
     pub keyword: Option<String>,
     pub event_type: Option<String>,
-    pub log_category: Option<String>,
-    pub action_type: Option<String>,
     pub page: i32,
     pub page_size: i32,
 }

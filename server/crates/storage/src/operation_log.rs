@@ -115,18 +115,6 @@ impl Storage {
                     bind_values.push(Box::new(escape_like_keyword(keyword)));
                 }
             }
-            if let Some(ref log_category) = params.log_category {
-                if !log_category.is_empty() {
-                    conditions.push(format!("log_type = ?{}", bind_values.len() + 1));
-                    bind_values.push(Box::new(log_category.clone()));
-                }
-            }
-            if let Some(ref action_type) = params.action_type {
-                if !action_type.is_empty() {
-                    conditions.push(format!("action_type = ?{}", bind_values.len() + 1));
-                    bind_values.push(Box::new(action_type.clone()));
-                }
-            }
 
             let where_clause = if conditions.is_empty() {
                 String::new()
