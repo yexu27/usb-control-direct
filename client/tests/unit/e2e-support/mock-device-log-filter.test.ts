@@ -6,13 +6,19 @@ const usbAuditLogs = [{
   deviceName: 'Kingston DataTraveler',
   deviceSn: 'USB-AUDIT-001',
   eventType: 'insert_success',
-  detail: '白名单设备映射成功',
+  detail: '授权设备',
 }, {
   id: 2,
   deviceName: 'Blocked USB',
   deviceSn: 'USB-AUDIT-002',
-  eventType: 'insert_failed',
-  detail: '未授权设备禁止接入',
+  eventType: 'insert_success',
+  detail: '未授权设备',
+}, {
+  id: 3,
+  deviceName: 'Kingston DataTraveler',
+  deviceSn: 'USB-AUDIT-001',
+  eventType: 'device_remove',
+  detail: '授权设备',
 }]
 
 const malwareLogs = [{
@@ -54,11 +60,11 @@ const operationLogs = [{
 describe('mock-device log filter', () => {
   it('按 USB 事件类型和关键字过滤 USB 审计日志', () => {
     const result = filterMockLogsForQuery(usbAuditLogs, {
-      keyword: 'Blocked',
-      eventType: 'insert_failed',
+      keyword: 'Kingston',
+      eventType: 'device_remove',
     })
 
-    expect(result.map((entry) => entry.id)).toEqual([2])
+    expect(result.map((entry) => entry.id)).toEqual([3])
   })
 
   it('按关键字过滤恶意代码检测日志', () => {
