@@ -17,13 +17,13 @@ async function handleReconnect(): Promise<void> {
   }
   isReconnecting.value = true
   try {
-    const isValidSession = await session.reconnectAndValidate()
-    if (!isValidSession) {
+    const result = await session.reconnectAndValidate()
+    if (result !== 'resumable') {
       await router.push('/login')
       return
     }
-    if (connection.status === 'AUTH_REQUIRED' || connection.status === 'LICENSE_EXPIRED') {
-      await router.push('/license')
+    if (!connection.isConnected) {
+      await router.push('/login')
       return
     }
     emitPageRefresh('reconnect')

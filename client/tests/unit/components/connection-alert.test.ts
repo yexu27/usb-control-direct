@@ -66,7 +66,10 @@ describe('ConnectionAlert', () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(true)
+    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockImplementation(async () => {
+      connection.updateStatus('CONNECTED')
+      return 'resumable'
+    })
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
@@ -82,7 +85,7 @@ describe('ConnectionAlert', () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(false)
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue('login-required')
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
@@ -92,20 +95,37 @@ describe('ConnectionAlert', () => {
     expect(emitPageRefresh).not.toHaveBeenCalled()
   })
 
-  it('重连后进入授权态时跳转授权页且不刷新业务页面', async () => {
+  it('重连校验后不能恢复 CONNECTED 时返回登录页且不刷新业务页面', async () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
     vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockImplementation(async () => {
       connection.updateStatus('AUTH_REQUIRED')
-      return true
+      return 'login-required'
     })
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
     await flushPromises()
 
-    expect(push).toHaveBeenCalledWith('/license')
+    expect(push).toHaveBeenCalledWith('/login')
+    expect(push).not.toHaveBeenCalledWith('/license')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('返回 resumable 但状态不是 CONNECTED 时返回登录页且不刷新业务页面', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue('resumable')
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith('/login')
+    expect(push).not.toHaveBeenCalledWith('/license')
     expect(emitPageRefresh).not.toHaveBeenCalled()
     expect(ElMessage.success).not.toHaveBeenCalled()
   })
@@ -130,7 +150,7 @@ describe('ConnectionAlert', () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    let resolveReconnect!: (value: boolean) => void
+    let resolveReconnect!: (value: 'resumable') => void
     const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate')
       .mockReturnValue(new Promise((resolve) => { resolveReconnect = resolve }))
     const wrapper = mountAlert()
@@ -140,7 +160,8 @@ describe('ConnectionAlert', () => {
     await button.trigger('click')
 
     expect(reconnect).toHaveBeenCalledTimes(1)
-    resolveReconnect(true)
+    connection.updateStatus('CONNECTED')
+    resolveReconnect('resumable')
     await flushPromises()
   })
 })
