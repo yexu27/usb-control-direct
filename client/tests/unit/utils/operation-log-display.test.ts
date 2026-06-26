@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { buildOperationLogContent } from '../../../src/renderer/utils/operation-log-display'
+import {
+  buildOperationLogContent,
+  formatOperationLogType,
+} from '../../../src/renderer/utils/operation-log-display'
 
 describe('operation log display utils', () => {
+  it('按服务端 log_type 字典格式化操作日志类型', () => {
+    expect(formatOperationLogType('login_auth')).toBe('登录认证')
+    expect(formatOperationLogType('user_management')).toBe('用户管理')
+    expect(formatOperationLogType('security_config')).toBe('安全配置变更')
+    expect(formatOperationLogType('auth_management')).toBe('授权管理')
+    expect(formatOperationLogType('system_management')).toBe('系统管理')
+    expect(formatOperationLogType('program_upgrade')).toBe('程序升级')
+    expect(formatOperationLogType('log_management')).toBe('日志管理')
+    expect(formatOperationLogType('custom_type')).toBe('custom_type')
+  })
+
   it('按动作类型、目标和结果组装登录成功内容', () => {
     expect(buildOperationLogContent({
       actionType: 'login',

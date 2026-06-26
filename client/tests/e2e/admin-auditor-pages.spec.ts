@@ -129,7 +129,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
 
         await page.getByTestId('logs-tab-operation').click()
         await expect(page.getByTestId('logs-tab-operation')).toHaveClass(/active/)
-        await expect(page.getByRole('columnheader')).toHaveText(['时间', '用户', '内容'])
+        await expect(page.getByRole('columnheader')).toHaveText(['时间', '用户', '操作日志类型', '内容'])
         await expect(page.getByTestId('log-event-type')).toHaveCount(0)
 
         await page.getByTestId('logs-tab-usb_audit').click()

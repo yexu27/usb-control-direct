@@ -29,12 +29,27 @@ const ACTION_LABELS: Record<string, string> = {
   log_export: '导出日志',
 }
 
+const LOG_TYPE_LABELS: Record<string, string> = {
+  login_auth: '登录认证',
+  user_management: '用户管理',
+  security_config: '安全配置变更',
+  auth_management: '授权管理',
+  system_management: '系统管理',
+  program_upgrade: '程序升级',
+  log_management: '日志管理',
+}
+
 interface OperationChange {
   beforeText: string
   afterText: string
 }
 
 type OperationValue = Record<string, unknown>
+
+export function formatOperationLogType(value: string | null | undefined): string {
+  const logType = text(value)
+  return LOG_TYPE_LABELS[logType] ?? logType
+}
 
 export function buildOperationLogContent(entry: OperationLogDisplayEntry): string {
   const actionType = text(entry.actionType)
