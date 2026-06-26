@@ -18,7 +18,6 @@ use tracing::{debug, info, warn};
 use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
 
 use common::audit_const::event_type;
-use common::time::now_unix;
 use log_audit::AuditService;
 use storage::model::UsbAuditLogInsert;
 use whitelist::WhitelistManager;
@@ -190,25 +189,25 @@ impl DeviceOrchestrator {
 
     /// 处理大容量存储设备。
     async fn handle_storage(&mut self, info: UsbDeviceInfo) {
-        // ===== Phase 1: Event Loop 同步判断 =====
         let parent_path = crate::monitor::parent_device_path(&info.sys_path);
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
-        self.write_audit_storage(&info, event_type::DEVICE_INSERT, "success", None);
 
         let serial = info.serial_number.clone();
         if serial.is_empty() {
-            self.write_audit_storage(&info, event_type::WHITELIST_DENIED, "blocked",
-                Some("序列号为空"));
+            let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+            log.fail_reason = Some("序列号为空".into());
+            let _ = self.audit.log_usb_audit(&mut log);
             return;
         }
         let whitelist_entry = match self.whitelist.is_whitelisted(&serial) {
             Some(e) => e,
             None => {
                 debug!(serial = %serial, "U 盘不在白名单中");
-                self.write_audit_storage(&info, event_type::WHITELIST_DENIED, "blocked",
-                    Some("不在白名单"));
+                let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                log.fail_reason = Some("不在白名单".into());
+                let _ = self.audit.log_usb_audit(&mut log);
                 return;
             }
         };
@@ -219,15 +218,15 @@ impl DeviceOrchestrator {
             Some(idx) => idx,
             None => {
                 warn!("NBD 设备号池耗尽，拒绝映射");
-                self.write_audit_storage(&info, event_type::MAP_FAILED, "failed",
-                    Some("NBD 设备号池耗尽"));
+                let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                log.fail_reason = Some("NBD 设备号池耗尽".into());
+                let _ = self.audit.log_usb_audit(&mut log);
                 return;
             }
         };
 
         debug!(serial = %serial, nbd = nbd_index, "NBD 设备已分配");
 
-        // 注册 ActiveSession
         let (cancel_tx, mut cancel_rx) = watch::channel(false);
         self.active_sessions.insert(parent_path.clone(), ActiveSession {
             device_type: common::types::DeviceType::Storage,
@@ -238,18 +237,18 @@ impl DeviceOrchestrator {
 
         info!(serial = %serial, nbd = nbd_index, "Storage 设备开始编排");
 
-        // 克隆 Arc 供 spawned task
         let scan_service = Arc::clone(&self.scan_service);
         let file_access_engine = Arc::clone(&self.file_access_engine);
         let audit = Arc::clone(&self.audit);
         let permission = whitelist_entry.permission;
 
-        // ===== Phase 2: spawn 独立 task =====
         tokio::spawn(async move {
             let dev_path = match &info.dev_path {
                 Some(p) if !p.is_empty() => p.clone(),
                 _ => {
-                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, "dev_path 为空");
+                    let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                    log.fail_reason = Some("dev_path 为空".into());
+                    let _ = audit.log_usb_audit(&mut log);
                     return;
                 }
             };
@@ -257,20 +256,19 @@ impl DeviceOrchestrator {
             let mount_point = crate::mount::mount_path_for(dev_name);
             let mount_ops = RealMountOps;
 
-            // 1. Mount
             let read_only = permission == 0;
             if let Err(e) = crate::mount::mount_partition(&dev_path, &mount_point.to_string_lossy(), read_only) {
-                write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
+                let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                log.fail_reason = Some(e.to_string());
+                let _ = audit.log_usb_audit(&mut log);
                 return;
             }
             let mount_path_str = mount_point.to_string_lossy().to_string();
 
-            // 2. Scan（可取消）
             let scan_result = tokio::select! {
                 r = scan_service.scan(&mount_point, &serial, &info.device_name) => r,
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "扫描被取消（设备拔出）");
-                    write_audit_fail(&audit, &info, event_type::SCAN_INTERRUPTED, "设备拔出");
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
@@ -278,13 +276,14 @@ impl DeviceOrchestrator {
             let scan_result = match scan_result {
                 Ok(r) => r,
                 Err(e) => {
-                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
+                    let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                    log.fail_reason = Some(e.to_string());
+                    let _ = audit.log_usb_audit(&mut log);
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
             };
 
-            // 3. Map（可取消）
             let map_ctx = crate::traits::MapContext {
                 mount_path: mount_path_str.clone(),
                 scan_result: scan_result.clone(),
@@ -294,18 +293,21 @@ impl DeviceOrchestrator {
                 r = file_access_engine.map_device(map_ctx) => r,
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "映射被取消（设备拔出）");
-                    write_audit_fail(&audit, &info, event_type::SCAN_INTERRUPTED, "设备拔出");
                     let _ = mount_ops.umount(&mount_path_str);
                     return;
                 }
             };
             match map_result {
                 Ok(_session) => {
-                    write_audit_storage_static(&audit, &info, event_type::MAPPED, "mapped", None, Some(permission));
+                    let mut log = build_audit_log(&info, event_type::INSERT_SUCCESS, "success");
+                    log.permission = Some(permission);
+                    let _ = audit.log_usb_audit(&mut log);
                     info!(serial = %serial, "U 盘映射成功");
                 }
                 Err(e) => {
-                    write_audit_fail(&audit, &info, event_type::MAP_FAILED, &e.to_string());
+                    let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                    log.fail_reason = Some(e.to_string());
+                    let _ = audit.log_usb_audit(&mut log);
                     let _ = mount_ops.umount(&mount_path_str);
                 }
             }
@@ -316,23 +318,21 @@ impl DeviceOrchestrator {
     async fn handle_keyboard(&mut self, info: UsbDeviceInfo) {
         let parent_path = crate::monitor::parent_device_path(&info.sys_path);
 
-        // DeviceManager 登记
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
-        self.write_audit_generic(&info, event_type::DEVICE_INSERT, "success",
-            "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
 
-        // 发现 evdev 设备节点
         let evdev_path = match find_evdev_path(&info.sys_path) {
             Some(p) => p,
             None => {
                 warn!(dev = %info.device_name, "键盘: 找不到对应 evdev 设备");
+                let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                log.fail_reason = Some("找不到 evdev 设备节点".into());
+                let _ = self.audit.log_usb_audit(&mut log);
                 return;
             }
         };
 
-        // 注册 ActiveSession
         let (cancel_tx, _cancel_rx) = watch::channel(false);
         self.active_sessions.insert(parent_path.clone(), ActiveSession {
             device_type: common::types::DeviceType::Keyboard,
@@ -348,23 +348,24 @@ impl DeviceOrchestrator {
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "键盘: 启动拦截器");
 
-        // spawn_blocking: evdev IO 是阻塞的，拔出时 read 报错自然退出
         tokio::task::spawn_blocking(move || {
             use hid_access::evdev_interceptor::{KeyboardInterceptor, KeyboardRunResult};
             let mut interceptor = KeyboardInterceptor::new(hidg_kb);
             match interceptor.run(&evdev_path) {
                 Ok(KeyboardRunResult::VerifiedThenRemoved) => {
                     info!(dev = %device_name, "键盘拦截器正常退出");
-                    write_audit_generic_static(&audit, &info4audit, event_type::MAPPED,
-                        "mapped", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+                    let mut log = build_audit_log(&info4audit, event_type::INSERT_SUCCESS, "success");
+                    log.detail = Some("验证通过".into());
+                    let _ = audit.log_usb_audit(&mut log);
                 }
                 Ok(KeyboardRunResult::RemovedDuringVerify) => {
                     info!(dev = %device_name, "键盘验证阶段设备拔出");
                 }
                 Err(e) => {
                     warn!(dev = %device_name, error = %e, "键盘拦截器异常退出");
-                    write_audit_generic_static(&audit, &info4audit, event_type::MAP_FAILED,
-                        "failed", "keyboard", "hid_keyboard", 0x03, 0x01, 0x01);
+                    let mut log = build_audit_log(&info4audit, event_type::INSERT_FAILED, "failed");
+                    log.fail_reason = Some(e.to_string());
+                    let _ = audit.log_usb_audit(&mut log);
                 }
             }
         });
@@ -377,36 +378,14 @@ impl DeviceOrchestrator {
         if let Ok(mut dm) = self.device_manager.write() {
             dm.add(info.clone());
         }
-        self.write_audit_generic(&info, event_type::DEVICE_INSERT, "success",
-            "mouse", "hid_mouse", 0x03, 0x01, 0x02);
 
         let evdev_path = match find_evdev_path(&info.sys_path) {
             Some(p) => p,
             None => {
                 warn!(dev = %info.device_name, "鼠标: 找不到对应 evdev 设备");
-                {
-                    let mut log = UsbAuditLogInsert {
-                        event_time: now_unix(),
-                        device_type: Some("mouse".into()),
-                        interface_type: Some("hid_mouse".into()),
-                        interface_class: Some(0x03),
-                        interface_subclass: Some(0x01),
-                        interface_protocol: Some(0x02),
-                        device_name: Some(info.device_name.clone()),
-                        device_sn: Some(info.serial_number.clone()),
-                        vid: Some(info.vid.clone()),
-                        pid: Some(info.pid.clone()),
-                        event_type: event_type::MAP_FAILED.to_string(),
-                        permission: None,
-                        capacity_bytes: None,
-                        file_path: None,
-                        matched_policy: None,
-                        result: "failed".to_string(),
-                        fail_reason: Some("找不到 evdev 设备节点".into()),
-                        detail: None,
-                    };
-                    let _ = self.audit.log_usb_audit(&mut log);
-                }
+                let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+                log.fail_reason = Some("找不到 evdev 设备节点".into());
+                let _ = self.audit.log_usb_audit(&mut log);
                 return;
             }
         };
@@ -423,8 +402,9 @@ impl DeviceOrchestrator {
         let device_name = info.device_name.clone();
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "鼠标: 启动转发器");
-        self.write_audit_generic(&info, event_type::MAPPED, "mapped",
-            "mouse", "hid_mouse", 0x03, 0x01, 0x02);
+
+        let mut log = build_audit_log(&info, event_type::INSERT_SUCCESS, "success");
+        let _ = self.audit.log_usb_audit(&mut log);
 
         tokio::task::spawn_blocking(move || {
             use hid_access::mouse_forwarder::MouseForwarder;
@@ -443,51 +423,8 @@ impl DeviceOrchestrator {
             dm.add(info.clone());
         }
 
-        // device_insert 审计
-        {
-            let mut insert_log = UsbAuditLogInsert {
-                event_time: now_unix(),
-                device_type: Some("unsupported".into()),
-                interface_type: Some("unsupported".into()),
-                interface_class: Some(info.interface_class as i32),
-                interface_subclass: Some(info.interface_subclass as i32),
-                interface_protocol: Some(info.interface_protocol as i32),
-                device_name: Some(info.device_name.clone()),
-                device_sn: Some(info.serial_number.clone()),
-                vid: Some(info.vid.clone()),
-                pid: Some(info.pid.clone()),
-                event_type: event_type::DEVICE_INSERT.to_string(),
-                permission: None,
-                capacity_bytes: None,
-                file_path: None,
-                matched_policy: None,
-                result: "success".to_string(),
-                fail_reason: None,
-                detail: None,
-            };
-            let _ = self.audit.log_usb_audit(&mut insert_log);
-        }
-
-        let mut log = UsbAuditLogInsert {
-            event_time: now_unix(),
-            device_type: Some("unsupported".into()),
-            interface_type: Some("unsupported".into()),
-            interface_class: Some(info.interface_class as i32),
-            interface_subclass: Some(info.interface_subclass as i32),
-            interface_protocol: Some(info.interface_protocol as i32),
-            device_name: Some(info.device_name.clone()),
-            device_sn: Some(info.serial_number.clone()),
-            vid: Some(info.vid.clone()),
-            pid: Some(info.pid.clone()),
-            event_type: event_type::WHITELIST_DENIED.to_string(),
-            permission: None,
-            capacity_bytes: None,
-            file_path: None,
-            matched_policy: None,
-            result: "blocked".to_string(),
-            fail_reason: Some(reason),
-            detail: None,
-        };
+        let mut log = build_audit_log(&info, event_type::INSERT_FAILED, "failed");
+        log.fail_reason = Some(reason);
         let _ = self.audit.log_usb_audit(&mut log);
     }
 
@@ -495,7 +432,6 @@ impl DeviceOrchestrator {
     async fn handle_removed(&mut self, sys_path: String) {
         let parent_path = crate::monitor::parent_device_path(&sys_path);
 
-        // DeviceManager: 移除接口。只有最后一个接口移除才返回 Some
         let removed = if let Ok(mut dm) = self.device_manager.write() {
             dm.remove_interface(&sys_path)
         } else {
@@ -503,16 +439,14 @@ impl DeviceOrchestrator {
         };
 
         let Some(device_record) = removed else {
-            return; // 还有其他接口，物理设备未完全拔出
+            return;
         };
 
         info!(dev = %device_record.info.device_name, type = ?device_record.info.device_type, "设备完全拔出");
 
-        // ActiveSession: 发取消信号 + 兜底清理
         if let Some(session) = self.active_sessions.remove(&parent_path) {
-            let _ = session.cancel_tx.send(true); // 幂等
+            let _ = session.cancel_tx.send(true);
 
-            // Storage 兜底清理
             if session.device_type == common::types::DeviceType::Storage {
                 if let Some(mount_path) = &session.mount_path {
                     let _ = self.mount_ops.umount(&mount_path.to_string_lossy());
@@ -523,148 +457,51 @@ impl DeviceOrchestrator {
             }
         }
 
-        // 记移除日志
-        let (dev_type_str, iface_str) = match device_record.info.device_type {
-            common::types::DeviceType::Storage => ("storage", "mass_storage"),
-            common::types::DeviceType::Keyboard => ("keyboard", "hid_keyboard"),
-            common::types::DeviceType::Mouse => ("mouse", "hid_mouse"),
-            _ => ("unsupported", "unsupported"),
-        };
-        self.write_audit_generic(&device_record.info, event_type::DEVICE_REMOVE, "success",
-            dev_type_str, iface_str,
-            device_record.info.interface_class as i32,
-            device_record.info.interface_subclass as i32,
-            device_record.info.interface_protocol as i32,
-        );
-    }
-
-    // ===== 审计日志写入辅助方法 =====
-
-    fn write_audit_storage(&self, info: &UsbDeviceInfo, event_type: &str,
-        result: &str, fail_reason: Option<&str>) {
-        let mut log = UsbAuditLogInsert {
-            event_time: now_unix(),
-            device_type: Some("storage".into()),
-            interface_type: Some("mass_storage".into()),
-            interface_class: Some(0x08),
-            interface_subclass: None,
-            interface_protocol: None,
-            device_name: Some(info.device_name.clone()),
-            device_sn: Some(info.serial_number.clone()),
-            vid: Some(info.vid.clone()),
-            pid: Some(info.pid.clone()),
-            event_type: event_type.to_string(),
-            permission: None,
-            capacity_bytes: info.capacity_bytes,
-            file_path: None,
-            matched_policy: None,
-            result: result.to_string(),
-            fail_reason: fail_reason.map(|s| s.to_string()),
-            detail: None,
-        };
+        let mut log = build_audit_log(&device_record.info, event_type::DEVICE_REMOVE, "success");
         let _ = self.audit.log_usb_audit(&mut log);
     }
-
-    fn write_audit_generic(&self, info: &UsbDeviceInfo, event_type: &str,
-        result: &str, device_type: &str, interface_type: &str,
-        iface_class: i32, iface_subclass: i32, iface_proto: i32) {
-        let mut log = UsbAuditLogInsert {
-            event_time: now_unix(),
-            device_type: Some(device_type.into()),
-            interface_type: Some(interface_type.into()),
-            interface_class: Some(iface_class),
-            interface_subclass: Some(iface_subclass),
-            interface_protocol: Some(iface_proto),
-            device_name: Some(info.device_name.clone()),
-            device_sn: Some(info.serial_number.clone()),
-            vid: Some(info.vid.clone()),
-            pid: Some(info.pid.clone()),
-            event_type: event_type.to_string(),
-            permission: None,
-            capacity_bytes: None,
-            file_path: None,
-            matched_policy: None,
-            result: result.to_string(),
-            fail_reason: None,
-            detail: None,
-        };
-        let _ = self.audit.log_usb_audit(&mut log);
-    }
-
 }
 
-fn write_audit_storage_static(
-    audit: &log_audit::AuditService,
+/// 设备类型字符串（审计日志用）。
+fn device_type_str(device_type: common::types::DeviceType) -> &'static str {
+    match device_type {
+        common::types::DeviceType::Storage => "storage",
+        common::types::DeviceType::Keyboard => "keyboard",
+        common::types::DeviceType::Mouse => "mouse",
+        common::types::DeviceType::Unsupported => "unsupported",
+        common::types::DeviceType::Unknown => "unknown",
+    }
+}
+
+/// 构建 USB 审计日志记录。
+///
+/// 从 UsbDeviceInfo 提取设备属性，填充 UsbAuditLogInsert 的公共字段。
+/// 调用方通过修改返回值的可选字段（permission、fail_reason、detail）补充业务信息。
+fn build_audit_log(
     info: &UsbDeviceInfo,
     event_type: &str,
     result: &str,
-    fail_reason: Option<&str>,
-    permission: Option<i32>,
-) {
-    let mut log = UsbAuditLogInsert {
-        event_time: now_unix(),
-        device_type: Some("storage".into()),
-        interface_type: Some("mass_storage".into()),
-        interface_class: Some(0x08),
-        interface_subclass: None,
-        interface_protocol: None,
+) -> UsbAuditLogInsert {
+    UsbAuditLogInsert {
+        event_time: 0,
+        device_type: Some(device_type_str(info.device_type).into()),
+        interface_type: Some(crate::descriptor::interface_type_str(info).into()),
+        interface_class: Some(info.interface_class as i32),
+        interface_subclass: Some(info.interface_subclass as i32),
+        interface_protocol: Some(info.interface_protocol as i32),
         device_name: Some(info.device_name.clone()),
         device_sn: Some(info.serial_number.clone()),
         vid: Some(info.vid.clone()),
         pid: Some(info.pid.clone()),
-        event_type: event_type.to_string(),
-        permission,
+        event_type: event_type.into(),
+        result: result.into(),
+        permission: None,
         capacity_bytes: info.capacity_bytes,
         file_path: None,
         matched_policy: None,
-        result: result.to_string(),
-        fail_reason: fail_reason.map(|s| s.to_string()),
-        detail: None,
-    };
-    let _ = audit.log_usb_audit(&mut log);
-}
-
-fn write_audit_fail(
-    audit: &log_audit::AuditService,
-    info: &UsbDeviceInfo,
-    event_type: &str,
-    reason: &str,
-) {
-    write_audit_storage_static(audit, info, event_type, "failed", Some(reason), None);
-}
-
-fn write_audit_generic_static(
-    audit: &log_audit::AuditService,
-    info: &crate::descriptor::UsbDeviceInfo,
-    event_type: &str,
-    result: &str,
-    device_type: &str,
-    interface_type: &str,
-    iface_class: i32,
-    iface_subclass: i32,
-    iface_proto: i32,
-) {
-    let mut log = UsbAuditLogInsert {
-        event_time: now_unix(),
-        device_type: Some(device_type.into()),
-        interface_type: Some(interface_type.into()),
-        interface_class: Some(iface_class),
-        interface_subclass: Some(iface_subclass),
-        interface_protocol: Some(iface_proto),
-        device_name: Some(info.device_name.clone()),
-        device_sn: Some(info.serial_number.clone()),
-        vid: Some(info.vid.clone()),
-        pid: Some(info.pid.clone()),
-        event_type: event_type.to_string(),
-        permission: None,
-        capacity_bytes: None,
-        file_path: None,
-        matched_policy: None,
-        result: result.to_string(),
         fail_reason: None,
         detail: None,
-    };
-    let _ = audit.log_usb_audit(&mut log);
+    }
 }
 
 /// 为设备生成挂载路径。

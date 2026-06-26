@@ -235,8 +235,7 @@ message CmdQueryLogs {
     string event_type = 6;          // USB 审计事件类型筛选，可为空
     int32 page = 7;                 // 页码（从 1 开始）
     int32 page_size = 8;            // 每页条数（默认 50）
-    string log_category = 9;        // 操作日志 PRD 页面分类筛选，可为空
-    string action_type = 10;        // 操作日志具体动作筛选，可为空
+    reserved 9, 10;
 }
 
 // USB 审计日志条目
@@ -315,8 +314,7 @@ message CmdExportLogs {
     int64 end_time = 4;             // Unix 秒，包含；0 表示不限
     string keyword = 5;
     string event_type = 6;
-    string log_category = 7;
-    string action_type = 8;
+    reserved 7, 8;
 }
 
 // RSP_EXPORT_LOGS（0x0403）

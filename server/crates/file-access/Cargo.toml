@@ -7,10 +7,8 @@ license.workspace = true
 description = "S04 文件访问控制引擎"
 
 [dependencies]
-common = { workspace = true }
 storage = { workspace = true }
 usb-identify = { path = "../usb-identify" }
-log-audit = { path = "../log-audit" }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }

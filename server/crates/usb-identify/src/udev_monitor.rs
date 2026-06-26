@@ -220,53 +220,16 @@ fn find_sd_device(block_path: &std::path::Path) -> Option<(String, i64)> {
 
 /// 从 udev 事件解析设备信息。
 fn parse_device_info(event: &udev::Event) -> Option<UsbDeviceInfo> {
-    let syspath = event.syspath();
-
-    let interface_class = read_sysfs_attr(syspath, "bInterfaceClass")
-        .and_then(|s| parse_hex_u8(&s))
-        .unwrap_or(0);
-    let interface_subclass = read_sysfs_attr(syspath, "bInterfaceSubClass")
-        .and_then(|s| parse_hex_u8(&s))
-        .unwrap_or(0);
-    let interface_protocol = read_sysfs_attr(syspath, "bInterfaceProtocol")
-        .and_then(|s| parse_hex_u8(&s))
-        .unwrap_or(0);
-
-    let device_type = classify_device(interface_class, interface_subclass, interface_protocol);
-
-    let parent = syspath.parent()?;
-    let vid = read_sysfs_attr(parent, "idVendor").unwrap_or_default();
-    let pid = read_sysfs_attr(parent, "idProduct").unwrap_or_default();
-    let serial = read_sysfs_attr(parent, "serial").unwrap_or_default();
-    let product = read_sysfs_attr(parent, "product").unwrap_or_default();
-
-    let (dev_path, capacity_bytes) = if device_type == common::types::DeviceType::Storage {
-        find_block_device(syspath)
-            .map(|(dev, cap)| (Some(dev), Some(cap)))
-            .unwrap_or((None, None))
-    } else {
-        (None, None)
-    };
-
-    Some(UsbDeviceInfo {
-        sys_path: syspath.to_string_lossy().to_string(),
-        dev_path,
-        serial_number: serial,
-        vid,
-        pid,
-        device_name: product,
-        device_type,
-        interface_class,
-        interface_subclass,
-        interface_protocol,
-        capacity_bytes,
-    })
+    parse_device_info_from_syspath(event.syspath())
 }
 
 /// 从 udev::Device 解析设备信息（用于启动枚举，无 Event 对象）。
 fn parse_device_info_from_device(device: &udev::Device) -> Option<UsbDeviceInfo> {
-    let syspath = device.syspath();
+    parse_device_info_from_syspath(device.syspath())
+}
 
+/// 从 sysfs 路径解析 USB 设备信息。
+fn parse_device_info_from_syspath(syspath: &std::path::Path) -> Option<UsbDeviceInfo> {
     let interface_class = read_sysfs_attr(syspath, "bInterfaceClass")
         .and_then(|s| parse_hex_u8(&s))
         .unwrap_or(0);
