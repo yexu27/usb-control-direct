@@ -6,12 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
-use common::audit_const::event_type;
-use log_audit::AuditService;
 use storage::Storage;
-use storage::model::UsbAuditLogInsert;
 use usb_identify::traits::{DeviceMapper, MapContext, MapError, MappedSession, UnmapError};
 
 use crate::exfat::volume::VirtualVolume;
@@ -26,8 +23,6 @@ use crate::write_back::WriteBackManager;
 pub struct FileAccessEngine {
     /// 数据库。
     storage: Arc<Storage>,
-    /// 审计服务。
-    audit: Arc<AuditService>,
     /// NBD 设备路径。
     nbd_device: String,
     /// 当前映射状态。
@@ -45,12 +40,10 @@ impl FileAccessEngine {
     ///
     /// 参数:
     ///   - storage: 数据库实例。
-    ///   - audit: 审计服务。
     ///   - nbd_device: NBD 设备路径（如 /dev/nbd0）。
-    pub fn new(storage: Arc<Storage>, audit: Arc<AuditService>, nbd_device: &str) -> Self {
+    pub fn new(storage: Arc<Storage>, nbd_device: &str) -> Self {
         FileAccessEngine {
             storage,
-            audit,
             nbd_device: nbd_device.to_string(),
             mapped: Mutex::new(None),
         }
@@ -60,44 +53,17 @@ impl FileAccessEngine {
     pub fn is_mapped(&self) -> bool {
         self.mapped.try_lock().map(|s| s.is_some()).unwrap_or(false)
     }
+}
 
-    /// 记录文件阻断审计日志。
-    fn log_block_event(&self, file_path: &str, matched_policy: &str) {
-        let mut log = UsbAuditLogInsert {
-            event_time: common::time::now_unix(),
-            device_type: None,
-            interface_type: None,
-            interface_class: None,
-            interface_subclass: None,
-            interface_protocol: None,
-            device_name: None,
-            device_sn: None,
-            vid: None,
-            pid: None,
-            event_type: event_type::FILE_ACCESS_DENIED.to_string(),
-            permission: None,
-            capacity_bytes: None,
-            file_path: Some(file_path.to_string()),
-            matched_policy: Some(matched_policy.to_string()),
-            result: "blocked".to_string(),
-            fail_reason: None,
-            detail: None,
-        };
-        if let Err(e) = self.audit.log_usb_audit(&mut log) {
-            error!("写入文件阻断审计日志失败: {}", e);
+/// 递归遍历文件树，对被策略阻断的文件写 tracing 警告日志。
+fn log_blocked_entries(entries: &[ControlledEntry], snapshot: &PolicySnapshot) {
+    for entry in entries {
+        let decision = evaluate_access(entry, snapshot);
+        if let AccessDecision::Deny(ref reason) = decision {
+            warn!(file = %entry.virtual_name, reason = %reason, "文件被策略阻断");
         }
-    }
-
-    /// 递归遍历文件树，记录所有被策略阻断的文件审计日志。
-    fn log_block_events_recursive(&self, entries: &[ControlledEntry], snapshot: &PolicySnapshot) {
-        for entry in entries {
-            let decision = evaluate_access(entry, snapshot);
-            if let AccessDecision::Deny(ref reason) = decision {
-                self.log_block_event(&entry.virtual_name, reason);
-            }
-            if entry.is_dir && !entry.children.is_empty() {
-                self.log_block_events_recursive(&entry.children, snapshot);
-            }
+        if entry.is_dir && !entry.children.is_empty() {
+            log_blocked_entries(&entry.children, snapshot);
         }
     }
 }
@@ -128,8 +94,8 @@ impl DeviceMapper for FileAccessEngine {
             let tree = build_file_tree(mount_path, &ctx.scan_result.infected_files);
             info!("文件树构建完成: {} 个根节点", tree.len());
 
-            // 3. 递归记录阻断事件审计日志
-            self.log_block_events_recursive(&tree, &snapshot);
+            // 3. 记录被策略阻断的文件（仅 tracing 日志，不入审计库）
+            log_blocked_entries(&tree, &snapshot);
 
             // 4. 生成虚拟 exFAT 卷
             let volume = VirtualVolume::build(&tree, &snapshot);

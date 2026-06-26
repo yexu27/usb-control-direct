@@ -126,7 +126,6 @@ async fn main() {
 
     let file_access_engine = Arc::new(FileAccessEngine::new(
         Arc::clone(&storage),
-        Arc::clone(&audit_service),
         "/dev/nbd0",
     ));
 
