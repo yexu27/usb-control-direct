@@ -1,10 +1,13 @@
 import { defineConfig } from '@playwright/test'
 
-const includeManualMock = process.env.E2E_MANUAL_MOCK === '1'
+const manualMockSpec = 'manual-mock.spec.ts'
+const includeManualMock =
+  process.env.E2E_MANUAL_MOCK === '1' ||
+  process.argv.some((arg) => arg.includes(manualMockSpec))
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: includeManualMock ? [] : ['**/manual-mock.spec.ts'],
+  testIgnore: includeManualMock ? [] : [`**/${manualMockSpec}`],
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
