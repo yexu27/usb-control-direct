@@ -6756,8 +6756,6 @@ export const usb_control = $root.usb_control = (() => {
          * @property {string|null} [eventType] CmdQueryLogs eventType
          * @property {number|null} [page] CmdQueryLogs page
          * @property {number|null} [pageSize] CmdQueryLogs pageSize
-         * @property {string|null} [logCategory] CmdQueryLogs logCategory
-         * @property {string|null} [actionType] CmdQueryLogs actionType
          */
 
         /**
@@ -6840,22 +6838,6 @@ export const usb_control = $root.usb_control = (() => {
         CmdQueryLogs.prototype.pageSize = 0;
 
         /**
-         * CmdQueryLogs logCategory.
-         * @member {string} logCategory
-         * @memberof usb_control.CmdQueryLogs
-         * @instance
-         */
-        CmdQueryLogs.prototype.logCategory = "";
-
-        /**
-         * CmdQueryLogs actionType.
-         * @member {string} actionType
-         * @memberof usb_control.CmdQueryLogs
-         * @instance
-         */
-        CmdQueryLogs.prototype.actionType = "";
-
-        /**
          * Encodes the specified CmdQueryLogs message. Does not implicitly {@link usb_control.CmdQueryLogs.verify|verify} messages.
          * @function encode
          * @memberof usb_control.CmdQueryLogs
@@ -6887,10 +6869,6 @@ export const usb_control = $root.usb_control = (() => {
                 writer.uint32(/* id 7, wireType 0 =*/56).int32(message.page);
             if (message.pageSize != null && Object.hasOwnProperty.call(message, "pageSize"))
                 writer.uint32(/* id 8, wireType 0 =*/64).int32(message.pageSize);
-            if (message.logCategory != null && Object.hasOwnProperty.call(message, "logCategory"))
-                writer.uint32(/* id 9, wireType 2 =*/74).string(message.logCategory);
-            if (message.actionType != null && Object.hasOwnProperty.call(message, "actionType"))
-                writer.uint32(/* id 10, wireType 2 =*/82).string(message.actionType);
             return writer;
         };
 
@@ -6961,14 +6939,6 @@ export const usb_control = $root.usb_control = (() => {
                     }
                 case 8: {
                         message.pageSize = reader.int32();
-                        break;
-                    }
-                case 9: {
-                        message.logCategory = reader.string();
-                        break;
-                    }
-                case 10: {
-                        message.actionType = reader.string();
                         break;
                     }
                 default:
@@ -7043,10 +7013,6 @@ export const usb_control = $root.usb_control = (() => {
                 message.page = object.page | 0;
             if (object.pageSize != null)
                 message.pageSize = object.pageSize | 0;
-            if (object.logCategory != null)
-                message.logCategory = String(object.logCategory);
-            if (object.actionType != null)
-                message.actionType = String(object.actionType);
             return message;
         };
 
@@ -7084,8 +7050,6 @@ export const usb_control = $root.usb_control = (() => {
                 object.eventType = "";
                 object.page = 0;
                 object.pageSize = 0;
-                object.logCategory = "";
-                object.actionType = "";
             }
             if (message.sessionToken != null && Object.hasOwnProperty.call(message, "sessionToken"))
                 object.sessionToken = message.sessionToken;
@@ -7113,10 +7077,6 @@ export const usb_control = $root.usb_control = (() => {
                 object.page = message.page;
             if (message.pageSize != null && Object.hasOwnProperty.call(message, "pageSize"))
                 object.pageSize = message.pageSize;
-            if (message.logCategory != null && Object.hasOwnProperty.call(message, "logCategory"))
-                object.logCategory = message.logCategory;
-            if (message.actionType != null && Object.hasOwnProperty.call(message, "actionType"))
-                object.actionType = message.actionType;
             return object;
         };
 
@@ -9060,8 +9020,6 @@ export const usb_control = $root.usb_control = (() => {
          * @property {number|Long|null} [endTime] CmdExportLogs endTime
          * @property {string|null} [keyword] CmdExportLogs keyword
          * @property {string|null} [eventType] CmdExportLogs eventType
-         * @property {string|null} [logCategory] CmdExportLogs logCategory
-         * @property {string|null} [actionType] CmdExportLogs actionType
          */
 
         /**
@@ -9128,22 +9086,6 @@ export const usb_control = $root.usb_control = (() => {
         CmdExportLogs.prototype.eventType = "";
 
         /**
-         * CmdExportLogs logCategory.
-         * @member {string} logCategory
-         * @memberof usb_control.CmdExportLogs
-         * @instance
-         */
-        CmdExportLogs.prototype.logCategory = "";
-
-        /**
-         * CmdExportLogs actionType.
-         * @member {string} actionType
-         * @memberof usb_control.CmdExportLogs
-         * @instance
-         */
-        CmdExportLogs.prototype.actionType = "";
-
-        /**
          * Encodes the specified CmdExportLogs message. Does not implicitly {@link usb_control.CmdExportLogs.verify|verify} messages.
          * @function encode
          * @memberof usb_control.CmdExportLogs
@@ -9171,10 +9113,6 @@ export const usb_control = $root.usb_control = (() => {
                 writer.uint32(/* id 5, wireType 2 =*/42).string(message.keyword);
             if (message.eventType != null && Object.hasOwnProperty.call(message, "eventType"))
                 writer.uint32(/* id 6, wireType 2 =*/50).string(message.eventType);
-            if (message.logCategory != null && Object.hasOwnProperty.call(message, "logCategory"))
-                writer.uint32(/* id 7, wireType 2 =*/58).string(message.logCategory);
-            if (message.actionType != null && Object.hasOwnProperty.call(message, "actionType"))
-                writer.uint32(/* id 8, wireType 2 =*/66).string(message.actionType);
             return writer;
         };
 
@@ -9237,14 +9175,6 @@ export const usb_control = $root.usb_control = (() => {
                     }
                 case 6: {
                         message.eventType = reader.string();
-                        break;
-                    }
-                case 7: {
-                        message.logCategory = reader.string();
-                        break;
-                    }
-                case 8: {
-                        message.actionType = reader.string();
                         break;
                     }
                 default:
@@ -9315,10 +9245,6 @@ export const usb_control = $root.usb_control = (() => {
                 message.keyword = String(object.keyword);
             if (object.eventType != null)
                 message.eventType = String(object.eventType);
-            if (object.logCategory != null)
-                message.logCategory = String(object.logCategory);
-            if (object.actionType != null)
-                message.actionType = String(object.actionType);
             return message;
         };
 
@@ -9354,8 +9280,6 @@ export const usb_control = $root.usb_control = (() => {
                     object.endTime = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
                 object.keyword = "";
                 object.eventType = "";
-                object.logCategory = "";
-                object.actionType = "";
             }
             if (message.sessionToken != null && Object.hasOwnProperty.call(message, "sessionToken"))
                 object.sessionToken = message.sessionToken;
@@ -9379,10 +9303,6 @@ export const usb_control = $root.usb_control = (() => {
                 object.keyword = message.keyword;
             if (message.eventType != null && Object.hasOwnProperty.call(message, "eventType"))
                 object.eventType = message.eventType;
-            if (message.logCategory != null && Object.hasOwnProperty.call(message, "logCategory"))
-                object.logCategory = message.logCategory;
-            if (message.actionType != null && Object.hasOwnProperty.call(message, "actionType"))
-                object.actionType = message.actionType;
             return object;
         };
 
