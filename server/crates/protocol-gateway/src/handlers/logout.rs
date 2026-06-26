@@ -36,7 +36,7 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 role: info.role,
                 log_type: log_type::LOGIN_AUTH.into(),
                 action_type: Some(action_type::LOGOUT.into()),
-                target: None,
+                target: Some(info.username.clone()),
                 before_value: None,
                 after_value: None,
                 related_file: None,
@@ -49,7 +49,9 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 request_id: None,
                 detail: None,
             };
-            let _ = ctx.audit_service.log_operation(&mut log);
+            if let Err(e) = ctx.audit_service.log_operation(&mut log) {
+                warn!("审计日志写入失败: {e}");
+            }
 
             info!(user = %info.username, source_ip = %ctx.source_ip, "用户登出成功");
             make_rsp(ctx.seq_id, true, ResultCode::Success, "")
@@ -68,7 +70,12 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 role: ctx.session.as_ref().map(|s| s.role).unwrap_or(-1),
                 log_type: log_type::LOGIN_AUTH.into(),
                 action_type: Some(action_type::LOGOUT.into()),
-                target: None,
+                target: Some(
+                    ctx.session
+                        .as_ref()
+                        .map(|s| s.username.clone())
+                        .unwrap_or_else(|| "unknown".to_string()),
+                ),
                 before_value: None,
                 after_value: None,
                 related_file: None,
@@ -81,7 +88,9 @@ pub fn handle_logout(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 request_id: None,
                 detail: None,
             };
-            let _ = ctx.audit_service.log_operation(&mut log);
+            if let Err(e) = ctx.audit_service.log_operation(&mut log) {
+                warn!("审计日志写入失败: {e}");
+            }
 
             make_rsp(ctx.seq_id, false, code, &format!("{}", e))
         }

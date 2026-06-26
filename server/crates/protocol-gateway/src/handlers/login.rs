@@ -54,7 +54,7 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         role: result.as_ref().map(|r| r.role).unwrap_or(-1),
         log_type: log_type::LOGIN_AUTH.into(),
         action_type: Some(action.into()),
-        target: None,
+        target: Some(cmd.username.clone()),
         before_value: None,
         after_value: None,
         related_file: None,
@@ -67,7 +67,9 @@ pub fn handle_login(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         request_id: None,
         detail: None,
     };
-    let _ = ctx.audit_service.log_operation(&mut log);
+    if let Err(e) = ctx.audit_service.log_operation(&mut log) {
+        warn!("审计日志写入失败: {e}");
+    }
 
     match result {
         Ok(login_result) => {
