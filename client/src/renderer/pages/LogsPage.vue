@@ -8,7 +8,6 @@ import { useConnectedOperationGuard } from '@/composables/use-connected-operatio
 import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import {
   LOG_TABS,
-  OPERATION_LOG_CATEGORY_OPTIONS,
   USB_EVENT_TYPE_OPTIONS,
   formatOperationLogCategory,
   type LogType,
@@ -20,7 +19,7 @@ import {
   getDefaultLogRange,
   isBeforeRetentionBoundary,
 } from '@/utils/date-time'
-import { deleteLogs, exportLogs, queryLogs, type LogQueryInput } from '@/services/log-service'
+import { deleteLogs, exportLogs, queryLogs, type LogExportInput, type LogQueryInput } from '@/services/log-service'
 import { ServiceError } from '@/services/send-command'
 import { useSessionStore } from '@/stores/session'
 import { confirmAction } from '@/utils/confirm-action'
@@ -49,7 +48,6 @@ const activeLogType = ref<LogType>('usb_audit')
 const dateRange = ref<[Date, Date]>(createDefaultRange())
 const keyword = ref('')
 const selectedEventType = ref('')
-const selectedOperationLogCategory = ref('')
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE)
 const rows = ref<LogRow[]>([])
@@ -65,7 +63,6 @@ const activeTabLabel = computed(() => {
 })
 const columns = computed(() => getLogColumns(activeLogType.value))
 const showUsbEventFilter = computed(() => activeLogType.value === 'usb_audit')
-const showOperationLogCategoryFilter = computed(() => activeLogType.value === 'operation')
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const startTime = computed({
   get: () => dateRange.value[0],
@@ -127,10 +124,8 @@ function buildQueryInput(): LogQueryInput {
     endTime: dateToUnixSeconds(dateRange.value[1]),
     keyword: keyword.value.trim(),
     eventType: activeLogType.value === 'usb_audit' ? selectedEventType.value : '',
-    logCategory: activeLogType.value === 'operation' ? selectedOperationLogCategory.value : '',
     page: page.value,
     pageSize: pageSize.value,
-    actionType: '',
   }
 }
 
@@ -215,19 +210,14 @@ function formatUsbEventType(value: string): string {
 }
 
 function eventChipClass(eventType: string | undefined): string {
-  if (eventType === 'USB插入成功' || eventType === '映射成功' || eventType === '验证成功') {
+  if (eventType === 'USB插入成功') {
     return 'success'
   }
-  if (eventType === 'USB移除成功') {
-    return 'danger'
+  if (eventType === 'USB拔出') {
+    return 'info'
   }
-  if (
-    eventType === '禁止' ||
-    eventType === '阻断' ||
-    eventType === '映射失败' ||
-    eventType === '验证失败'
-  ) {
-    return 'warning'
+  if (eventType === 'USB插入失败') {
+    return 'danger'
   }
   return 'info'
 }
@@ -243,7 +233,6 @@ function resetSearchState(): void {
   dateRange.value = createDefaultRange()
   keyword.value = ''
   selectedEventType.value = ''
-  selectedOperationLogCategory.value = ''
   page.value = 1
   pageSize.value = PAGE_SIZE
 }
@@ -311,7 +300,7 @@ async function handleExport(): Promise<void> {
   }
 }
 
-function buildExportInput(): Omit<LogQueryInput, 'page' | 'pageSize'> {
+function buildExportInput(): LogExportInput {
   const input = buildQueryInput()
   return {
     logType: input.logType,
@@ -319,8 +308,6 @@ function buildExportInput(): Omit<LogQueryInput, 'page' | 'pageSize'> {
     endTime: input.endTime,
     keyword: input.keyword,
     eventType: input.eventType,
-    logCategory: input.logCategory,
-    actionType: input.actionType,
   }
 }
 
@@ -416,7 +403,7 @@ function disabledClearDate(date: Date): boolean {
         <template #filters>
           <div
             class="log-filter-bar"
-            :class="{ 'without-type-filter': !showUsbEventFilter && !showOperationLogCategoryFilter }"
+            :class="{ 'without-type-filter': !showUsbEventFilter }"
           >
             <el-input
               v-model="keyword"
@@ -451,20 +438,6 @@ function disabledClearDate(date: Date): boolean {
             >
               <el-option
                 v-for="option in USB_EVENT_TYPE_OPTIONS"
-                :key="option.value"
-                :label="option.value === '' ? '全部类型' : option.label"
-                :value="option.value"
-              />
-            </el-select>
-            <el-select
-              v-if="showOperationLogCategoryFilter"
-              v-model="selectedOperationLogCategory"
-              class="filter-select"
-              placeholder="全部类型"
-              data-testid="log-operation-category"
-            >
-              <el-option
-                v-for="option in OPERATION_LOG_CATEGORY_OPTIONS"
                 :key="option.value"
                 :label="option.value === '' ? '全部类型' : option.label"
                 :value="option.value"
