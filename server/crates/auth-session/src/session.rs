@@ -71,21 +71,20 @@ impl SessionManager {
             last_active_time: now,
             source_ip: source_ip.to_string(),
         };
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.insert(token.clone(), info);
         token
     }
 
     /// 验证 token 有效性。返回 SessionInfo 的克隆。不更新 last_active_time。
     pub fn validate_token(&self, token: &str) -> Result<SessionInfo, AuthError> {
-        let sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         match sessions.get(token) {
             Some(info) => {
                 let now = now_unix();
                 if now - info.last_active_time > SESSION_TIMEOUT_SECS {
                     warn!(user = %info.username, source_ip = %info.source_ip, "会话超时，token 已失效");
-                    drop(sessions);
-                    self.remove_token(token);
+                    sessions.remove(token);
                     return Err(AuthError::Unauthenticated);
                 }
                 Ok(info.clone())
@@ -96,7 +95,7 @@ impl SessionManager {
 
     /// 刷新 token 的最后活跃时间。由业务请求（非心跳）触发。
     pub fn refresh_token(&self, token: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(info) = sessions.get_mut(token) {
             info.last_active_time = now_unix();
         }
@@ -104,27 +103,27 @@ impl SessionManager {
 
     /// 销毁指定 token。
     pub fn remove_token(&self, token: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.remove(token);
     }
 
     /// 使指定用户的所有 token 失效。用于改密码、删除用户等场景。
     pub fn invalidate_user_sessions(&self, user_id: i64) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.retain(|_, info| info.user_id != user_id);
     }
 
     /// 清理所有过期 session（可定期调用）。
     pub fn cleanup_expired(&self) {
         let now = now_unix();
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         sessions.retain(|_, info| now - info.last_active_time <= SESSION_TIMEOUT_SECS);
     }
 
     /// 当前活跃 session 数（测试用）。
     #[cfg(test)]
     pub fn active_count(&self) -> usize {
-        self.sessions.lock().unwrap().len()
+        self.sessions.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 
@@ -207,7 +206,7 @@ mod tests {
         let mgr = SessionManager::new();
         let token = mgr.create_session(1, "admin", 0, "127.0.0.1");
         {
-            let mut sessions = mgr.sessions.lock().unwrap();
+            let mut sessions = mgr.sessions.lock().unwrap_or_else(|e| e.into_inner());
             sessions.get_mut(&token).unwrap().last_active_time -= SESSION_TIMEOUT_SECS + 1;
         }
         mgr.cleanup_expired();
