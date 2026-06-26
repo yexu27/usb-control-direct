@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { ConnectionStatus } from '../shared/connection-state'
+import type { ConnectionEvent, ConnectionStatus } from '../shared/connection-state'
 import type { TlsResponse } from '../shared/tls-response'
 import { TlsTransport } from './tls/tls-transport'
 import { FrameStreamParser, encodeFrame } from './tls/frame-codec'
@@ -104,8 +104,8 @@ export class TlsClient extends EventEmitter {
     return this.stateMachine.current
   }
 
-  transitionState(event: import('../shared/connection-state').ConnectionEvent): void {
-    this.stateMachine.transition(event)
+  transitionState(event: ConnectionEvent): ConnectionStatus {
+    return this.stateMachine.transition(event)
   }
 
   startHeartbeat(): void {

@@ -7,6 +7,7 @@ import { listWhitelist } from '../../../src/renderer/services/whitelist-service'
 import { getFilePolicy } from '../../../src/renderer/services/file-policy-service'
 import { ServiceError } from '../../../src/renderer/services/send-command'
 import { usb_control } from '../../../src/shared/proto/usb_control'
+import type { ConnectionEvent, ConnectionStatus } from '../../../src/shared/connection-state'
 
 vi.mock('../../../src/renderer/services/auth-service', () => ({
   login: vi.fn(),
@@ -43,13 +44,28 @@ const listWhitelistMock = vi.mocked(listWhitelist)
 const getFilePolicyMock = vi.mocked(getFilePolicy)
 const connect = vi.fn().mockResolvedValue(undefined)
 const disconnect = vi.fn().mockResolvedValue(undefined)
-const applyStateEvent = vi.fn().mockResolvedValue(undefined)
+const applyStateEvent = vi.fn()
+
+function mockApplyStateEvent(event: ConnectionEvent): Promise<ConnectionStatus> {
+  const statusByEvent: Partial<Record<ConnectionEvent, ConnectionStatus>> = {
+    AUTH_SUCCESS: 'CHECK_LICENSE',
+    AUTH_FAIL: 'AUTHENTICATING',
+    LICENSE_AUTHORIZED: 'LOADING_CONFIG',
+    LICENSE_UNAUTHORIZED: 'AUTH_REQUIRED',
+    LICENSE_EXPIRED: 'LICENSE_EXPIRED',
+    CONFIG_LOADED: 'CONNECTED',
+    CONFIG_FAILED: 'DISCONNECTED',
+    LICENSE_UPLOAD_SUCCESS: 'DISCONNECTED',
+  }
+  return Promise.resolve(statusByEvent[event] ?? 'DISCONNECTED')
+}
 
 describe('useSessionStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()
     vi.clearAllMocks()
+    applyStateEvent.mockImplementation(mockApplyStateEvent)
     window.desktopApi = {
       tls: {
         connect,
@@ -322,7 +338,6 @@ describe('useSessionStore', () => {
       authExpireTime: 0,
       deviceDescription: '',
     })
-    useConnectionStore().updateStatus('CONNECTED')
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 0,
@@ -347,11 +362,6 @@ describe('useSessionStore', () => {
     const connection = useConnectionStore()
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
-    applyStateEvent.mockImplementation(async (event) => {
-      if (event === 'CONFIG_LOADED') {
-        connection.updateStatus('CONNECTED')
-      }
-    })
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 123,
@@ -408,6 +418,12 @@ describe('useSessionStore', () => {
     const connection = useConnectionStore()
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
+    applyStateEvent.mockImplementation(async (event: ConnectionEvent) => {
+      if (event === 'CONFIG_LOADED') {
+        return 'LOADING_CONFIG'
+      }
+      return mockApplyStateEvent(event)
+    })
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 123,

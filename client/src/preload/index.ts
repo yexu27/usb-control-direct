@@ -21,7 +21,7 @@ const desktopApi = {
 
     disconnect: (): Promise<void> => ipcRenderer.invoke(IpcChannels.tlsDisconnect),
 
-    applyStateEvent: (event: ConnectionEvent): Promise<void> =>
+    applyStateEvent: (event: ConnectionEvent): Promise<ConnectionStatus> =>
       ipcRenderer.invoke(IpcChannels.tlsApplyStateEvent, event),
 
     send: (

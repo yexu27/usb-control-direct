@@ -31,6 +31,13 @@ describe('TlsClient', () => {
     )
   })
 
+  it('transitionState returns the state after transition', async () => {
+    const client = new TlsClient(new FakeTlsTransport())
+    await client.connect('19.19.19.16', 9600)
+
+    expect(client.transitionState('AUTH_SUCCESS')).toBe('CHECK_LICENSE')
+  })
+
   it('心跳超时时关闭传输层连接', async () => {
     const transport = new FakeTlsTransport()
     const heartbeat = new HeartbeatManager()
