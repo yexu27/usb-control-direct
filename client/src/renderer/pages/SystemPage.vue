@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onUnmounted, ref } from 'vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { getMachineCode, uploadLicense } from '@/services/auth-service'
 import {
   getSystemInfo,
@@ -24,6 +25,8 @@ import type { usb_control } from '../../shared/proto/usb_control'
 
 const session = useSessionStore()
 const connection = useConnectionStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 
 const systemInfo = ref<usb_control.RspSystemInfo | null>(null)
 const isLoadingInfo = ref(false)
@@ -71,9 +74,7 @@ async function waitAtLeast(startedAt: number, minimumMs = 3_000): Promise<void> 
   }
 }
 
-onMounted(() => {
-  void loadSystemInfo()
-})
+useDeviceBackedPageRefresh(loadSystemInfo)
 
 onUnmounted(() => {
   if (qrcodeUrl.value !== '') {
@@ -118,16 +119,16 @@ async function showUploadResult(title: string, message: string, type: 'success' 
   }
 }
 
-function canOperate(): boolean {
-  if (connection.isConnected) {
+async function canWriteToDevice(): Promise<boolean> {
+  if (canReadFromDevice()) {
     return true
   }
-  ElMessage.warning('USB 管控装置已断开连接，操作失败。')
+  await showErrorDialog('操作失败', 'USB 管控装置已断开连接，操作失败。')
   return false
 }
 
 async function loadSystemInfo(): Promise<void> {
-  if (!canOperate()) {
+  if (!canReadFromDevice()) {
     return
   }
   isLoadingInfo.value = true
@@ -143,7 +144,7 @@ async function loadSystemInfo(): Promise<void> {
 }
 
 async function uploadSystemUpgradePackage(): Promise<void> {
-  if (systemUpgrading.value || !canOperate()) {
+  if (systemUpgrading.value || !(await canWriteToDevice())) {
     return
   }
   const result = await window.desktopApi.dialog.openFile({
@@ -189,7 +190,7 @@ async function uploadSystemUpgradePackage(): Promise<void> {
 }
 
 async function uploadVirusdbUpgradePackage(): Promise<void> {
-  if (virusdbUpgrading.value || !canOperate()) {
+  if (virusdbUpgrading.value || !(await canWriteToDevice())) {
     return
   }
   const result = await window.desktopApi.dialog.openFile({
@@ -244,7 +245,7 @@ function replaceQrcodeUrl(bytes: Uint8Array): void {
 }
 
 async function openMachineCode(): Promise<void> {
-  if (machineCodeLoading.value || !canOperate()) {
+  if (machineCodeLoading.value || !(await canWriteToDevice())) {
     return
   }
   machineCodeDialogVisible.value = true
@@ -283,7 +284,7 @@ async function saveQrcode(): Promise<void> {
 }
 
 async function uploadLicenseFile(): Promise<void> {
-  if (licenseUploading.value || !canOperate()) {
+  if (licenseUploading.value || !(await canWriteToDevice())) {
     return
   }
   const result = await window.desktopApi.dialog.openFile({
@@ -332,13 +333,16 @@ function validateDeviceDescription(value: string): string {
   return ''
 }
 
-function openDeviceDescriptionDialog(): void {
+async function openDeviceDescriptionDialog(): Promise<void> {
+  if (!(await canWriteToDevice())) {
+    return
+  }
   deviceDescription.value = systemInfo.value?.deviceDescription ?? ''
   deviceDescriptionDialogVisible.value = true
 }
 
 async function saveDeviceDescription(): Promise<void> {
-  if (deviceDescriptionSaving.value || !canOperate()) {
+  if (deviceDescriptionSaving.value || !(await canWriteToDevice())) {
     return
   }
   const nextDescription = deviceDescription.value.trim()
@@ -389,6 +393,7 @@ async function saveDeviceDescription(): Promise<void> {
           <el-button
             type="primary"
             data-testid="system-upgrade-upload"
+            :disabled="isBusinessActionDisabled || systemUpgrading"
             @click="uploadSystemUpgradePackage"
           >
             上传 .bin 升级包
@@ -404,6 +409,7 @@ async function saveDeviceDescription(): Promise<void> {
           <el-button
             type="primary"
             data-testid="virusdb-upgrade-upload"
+            :disabled="isBusinessActionDisabled || virusdbUpgrading"
             @click="uploadVirusdbUpgradePackage"
           >
             上传 .zip 升级包
@@ -416,10 +422,19 @@ async function saveDeviceDescription(): Promise<void> {
         <p class="auth-line">状态: <span>{{ authStatusText }}</span></p>
         <p class="system-card-meta">授权截止时间: {{ authExpireTime }}</p>
         <div class="system-card-actions">
-          <el-button data-testid="machine-code-open" @click="openMachineCode">
+          <el-button
+            data-testid="machine-code-open"
+            :disabled="isBusinessActionDisabled || machineCodeLoading"
+            @click="openMachineCode"
+          >
             下载机器码
           </el-button>
-          <el-button type="primary" data-testid="license-upload" @click="uploadLicenseFile">
+          <el-button
+            type="primary"
+            data-testid="license-upload"
+            :disabled="isBusinessActionDisabled || licenseUploading"
+            @click="uploadLicenseFile"
+          >
             上传授权文件
           </el-button>
         </div>
@@ -433,7 +448,11 @@ async function saveDeviceDescription(): Promise<void> {
         <p class="device-description-warning">
           修改完成后需重启设备，此时设备上请勿连接USB设备。描述长度最大32位，仅字母数字下划线。
         </p>
-        <el-button data-testid="device-desc-edit" @click="openDeviceDescriptionDialog">
+        <el-button
+          data-testid="device-desc-edit"
+          :disabled="isBusinessActionDisabled"
+          @click="openDeviceDescriptionDialog"
+        >
           修改
         </el-button>
       </section>
@@ -470,6 +489,7 @@ async function saveDeviceDescription(): Promise<void> {
           type="primary"
           data-testid="device-desc-save"
           :loading="deviceDescriptionSaving"
+          :disabled="isBusinessActionDisabled || deviceDescriptionSaving"
           @click="saveDeviceDescription"
         >
           确定

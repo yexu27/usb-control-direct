@@ -10,11 +10,11 @@ export interface MockScenario {
   role: 'admin' | 'operator' | 'auditor'
   uploadedLicenseValid: boolean
   importPolicyFails?: boolean
+  sessionExpiresAfterLogin?: boolean
 }
 
 const PORT = 9600
 const HOST = '127.0.0.1'
-const SESSION_TOKEN = 'e2e-session-token'
 const EXPIRE_TIME = 1_893_427_200
 const QR_CODE_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=',
@@ -24,6 +24,7 @@ const QR_CODE_PNG = Buffer.from(
 type MessageClass = {
   fromObject(object: Record<string, unknown>): unknown
   encode(message: never): { finish(): Uint8Array }
+  decode(reader: Uint8Array): unknown
 }
 
 interface MockResponse {
@@ -154,9 +155,13 @@ function initialPolicy(): StoredPolicy {
 export class MockDevice {
   private server: Server | null = null
   private readonly sockets = new Set<TLSSocket>()
+  private activeSocket: TLSSocket | null = null
   private readonly fallbackRole: MockScenario['role']
   private currentUsername = ''
   private loginAttempts = 0
+  private activeSessionToken = ''
+  private invalidatedSessionTokens = new Set<string>()
+  private sessionExpired = false
   private policy = initialPolicy()
   private deletedUsernames = new Set<string>()
   private users: StoredUser[] = [
@@ -241,6 +246,7 @@ export class MockDevice {
   public systemUpgradeUploadCount = 0
   public virusdbUpgradeUploadCount = 0
   public licenseUploadCount = 0
+  public listUsersCount = 0
 
   constructor(private readonly scenario: MockScenario) {
     const { role } = scenario
@@ -292,13 +298,47 @@ export class MockDevice {
     this.scenario.importPolicyFails = true
   }
 
+  expireCurrentSessionForTest(): void {
+    this.sessionExpired = true
+  }
+
+  setAuthStatusForTest(authStatus: MockScenario['authStatus']): void {
+    this.scenario.authStatus = authStatus
+  }
+
+  async requestForTest(msgType: number, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const payload = this.encodeCommandForTest(msgType, body)
+    const response = this.createResponse(msgType, payload)
+    if (response == null) {
+      throw new Error(`E2E Mock 不支持消息类型 0x${msgType.toString(16)}`)
+    }
+    const message = response.messageClass.fromObject(response.body)
+    const responsePayload = response.messageClass.encode(message as never).finish()
+    const decoded = response.messageClass.decode(responsePayload) as Record<string, unknown>
+    if (response.msgType === 0xff00 && decoded.success === false) {
+      throw new Error(String(decoded.errorMessage || '操作失败'))
+    }
+    return decoded
+  }
+
   disconnectSockets(): void {
     for (const socket of this.sockets) socket.destroy()
   }
 
   private handleConnection(socket: TLSSocket): void {
+    if (this.activeSocket != null && !this.activeSocket.destroyed) {
+      socket.destroy(new Error('装置已有管理端连接，请稍后重试'))
+      return
+    }
+
+    this.activeSocket = socket
     this.sockets.add(socket)
-    socket.once('close', () => this.sockets.delete(socket))
+    socket.once('close', () => {
+      this.sockets.delete(socket)
+      if (this.activeSocket === socket) {
+        this.activeSocket = null
+      }
+    })
 
     const parser = new FrameStreamParser()
     parser.onFrame = (header, payload) => {
@@ -318,6 +358,17 @@ export class MockDevice {
   }
 
   private createResponse(msgType: number, payload: Uint8Array): MockResponse | null {
+    if (msgType !== 0x0001 && msgType !== 0xff01) {
+      const sessionToken = this.sessionTokenForCommand(msgType, payload)
+      if (sessionToken == null) {
+        return null
+      }
+      const sessionError = this.validateSessionToken(sessionToken)
+      if (sessionError != null) {
+        return sessionError
+      }
+    }
+
     switch (msgType) {
       case 0x0001:
         return this.loginResponse(payload)
@@ -332,7 +383,7 @@ export class MockDevice {
       case 0x0007:
         return this.uploadLicenseResponse(payload)
       case 0x0009:
-        return this.commonSuccessResponse()
+        return this.logoutResponse(payload)
       case 0x0400:
         return this.queryLogsResponse(payload)
       case 0x0402:
@@ -403,6 +454,7 @@ export class MockDevice {
       case 0x0504:
         return this.updateDeviceDescriptionResponse(payload)
       case 0x0600:
+        this.listUsersCount += 1
         return {
           msgType: 0x0601,
           messageClass: usb_control.RspListUsers,
@@ -465,12 +517,16 @@ export class MockDevice {
 
     const authorized = this.scenario.authStatus === 'authorized'
     this.currentUsername = command.username
+    const sessionToken = `e2e-session-token-${Date.now()}-${this.loginAttempts}`
+    this.activeSessionToken = sessionToken
+    this.invalidatedSessionTokens.delete(sessionToken)
+    this.sessionExpired = this.scenario.sessionExpiresAfterLogin === true
     return {
       msgType: 0x0002,
       messageClass: usb_control.RspLogin,
       body: {
         success: true,
-        sessionToken: SESSION_TOKEN,
+        sessionToken,
         username: command.username,
         role,
         authorized,
@@ -493,6 +549,104 @@ export class MockDevice {
         deviceDescription: this.systemInfo.deviceDescription,
         authStatus: this.scenario.authStatus,
       },
+    }
+  }
+
+  private logoutResponse(payload: Uint8Array): MockResponse {
+    const command = usb_control.CmdLogout.decode(payload)
+    this.invalidatedSessionTokens.add(command.sessionToken)
+    if (this.activeSessionToken === command.sessionToken) {
+      this.activeSessionToken = ''
+    }
+    this.currentUsername = ''
+    return this.commonSuccessResponse()
+  }
+
+  private validateSessionToken(sessionToken: string): MockResponse | null {
+    if (
+      sessionToken === '' ||
+      sessionToken !== this.activeSessionToken ||
+      this.invalidatedSessionTokens.has(sessionToken) ||
+      this.sessionExpired
+    ) {
+      return this.commonErrorResponse(0x0001, '会话已失效')
+    }
+    return null
+  }
+
+  private sessionTokenForCommand(msgType: number, payload: Uint8Array): string | null {
+    switch (msgType) {
+      case 0x0003:
+        return usb_control.CmdAuthStatusQuery.decode(payload).sessionToken
+      case 0x0005:
+        return usb_control.CmdGetMachineCode.decode(payload).sessionToken
+      case 0x0007:
+        return usb_control.CmdUploadLicense.decode(payload).sessionToken
+      case 0x0009:
+        return usb_control.CmdLogout.decode(payload).sessionToken
+      case 0x0100:
+        return usb_control.CmdListWhitelist.decode(payload).sessionToken
+      case 0x0102:
+        return usb_control.CmdGetConnectedDevices.decode(payload).sessionToken
+      case 0x0104:
+        return usb_control.CmdAddWhitelist.decode(payload).sessionToken
+      case 0x0105:
+        return usb_control.CmdRemoveWhitelist.decode(payload).sessionToken
+      case 0x0106:
+        return usb_control.CmdUpdateWhitelist.decode(payload).sessionToken
+      case 0x0200:
+        return usb_control.CmdGetFilePolicy.decode(payload).sessionToken
+      case 0x0202:
+        return usb_control.CmdUpdateFilePolicySwitch.decode(payload).sessionToken
+      case 0x0203:
+        return usb_control.CmdAddBlacklistExtension.decode(payload).sessionToken
+      case 0x0204:
+        return usb_control.CmdRemoveBlacklistExtension.decode(payload).sessionToken
+      case 0x0300:
+        return usb_control.CmdExportPolicy.decode(payload).sessionToken
+      case 0x0302:
+        return usb_control.CmdImportPolicy.decode(payload).sessionToken
+      case 0x0400:
+        return usb_control.CmdQueryLogs.decode(payload).sessionToken
+      case 0x0402:
+        return usb_control.CmdExportLogs.decode(payload).sessionToken
+      case 0x0404:
+        return usb_control.CmdDeleteLogs.decode(payload).sessionToken
+      case 0x0500:
+        return usb_control.CmdGetSystemInfo.decode(payload).sessionToken
+      case 0x0502:
+        return usb_control.CmdUploadSystemUpgrade.decode(payload).sessionToken
+      case 0x0503:
+        return usb_control.CmdUploadVirusdbUpgrade.decode(payload).sessionToken
+      case 0x0504:
+        return usb_control.CmdUpdateDeviceDesc.decode(payload).sessionToken
+      case 0x0600:
+        return usb_control.CmdListUsers.decode(payload).sessionToken
+      case 0x0602:
+        return usb_control.CmdCreateUser.decode(payload).sessionToken
+      case 0x0603:
+        return usb_control.CmdDeleteUser.decode(payload).sessionToken
+      case 0x0604:
+        return usb_control.CmdResetPassword.decode(payload).sessionToken
+      case 0x0605:
+        return usb_control.CmdChangePassword.decode(payload).sessionToken
+      default:
+        return null
+    }
+  }
+
+  private encodeCommandForTest(msgType: number, body: Record<string, unknown>): Uint8Array {
+    switch (msgType) {
+      case 0x0001:
+        return usb_control.CmdLogin.encode(usb_control.CmdLogin.fromObject(body)).finish()
+      case 0x0003:
+        return usb_control.CmdAuthStatusQuery.encode(
+          usb_control.CmdAuthStatusQuery.fromObject(body),
+        ).finish()
+      case 0x0009:
+        return usb_control.CmdLogout.encode(usb_control.CmdLogout.fromObject(body)).finish()
+      default:
+        throw new Error(`requestForTest 不支持消息类型 0x${msgType.toString(16)}`)
     }
   }
 

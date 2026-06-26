@@ -25,6 +25,24 @@ describe('resolveRouteAccess', () => {
     expect(resolveRouteAccess({ guest: true })).toBe(true)
   })
 
+  it('已授权用户访问根路径时跳转角色默认页', () => {
+    setSession('operator')
+    useConnectionStore().updateStatus('CONNECTED')
+
+    expect(resolveRouteAccess({ rootEntry: true })).toBe('/file-access')
+  })
+
+  it('未登录访问根路径时跳转登录页', () => {
+    expect(resolveRouteAccess({ rootEntry: true })).toBe('/login')
+  })
+
+  it('授权未完成用户访问根路径时跳转授权页', () => {
+    setSession('admin')
+    useConnectionStore().updateStatus('AUTH_REQUIRED')
+
+    expect(resolveRouteAccess({ rootEntry: true })).toBe('/license')
+  })
+
   it('未登录时跳转登录页', () => {
     expect(resolveRouteAccess({ requiresAuth: true })).toBe('/login')
   })

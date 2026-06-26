@@ -160,15 +160,16 @@ describe('PoliciesPage', () => {
   ] satisfies ConnectionStatus[])('%s 状态下警告且不打开文件对话框', async (status) => {
     useConnectionStore().updateStatus(status)
     const wrapper = mountPage()
+    const exportButton = wrapper.get('[data-testid="export-policy"]')
+    const importButton = wrapper.get('[data-testid="import-policy"]')
 
-    await wrapper.get('[data-testid="export-policy"]').trigger('click')
-    await wrapper.get('[data-testid="import-policy"]').trigger('click')
+    expect(exportButton.attributes('disabled')).toBeDefined()
+    expect(importButton.attributes('disabled')).toBeDefined()
+    await exportButton.trigger('click')
+    await importButton.trigger('click')
 
     expect(saveFile).not.toHaveBeenCalled()
     expect(openFile).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledTimes(2)
-    expect(ElMessage.warning).toHaveBeenNthCalledWith(1, '装置已断开连接，无法传输策略')
-    expect(ElMessage.warning).toHaveBeenNthCalledWith(2, '装置已断开连接，无法传输策略')
   })
 
   it('导出取消不请求装置，并阻止重复操作', async () => {
@@ -376,11 +377,13 @@ describe('PoliciesPage', () => {
   it('断线点击和文件对话框返回后均不通信', async () => {
     useConnectionStore().updateStatus('DISCONNECTED')
     const wrapper = mountPage()
-    await wrapper.get('[data-testid="export-policy"]').trigger('click')
+    const exportButton = wrapper.get('[data-testid="export-policy"]')
+    expect(exportButton.attributes('disabled')).toBeDefined()
+    await exportButton.trigger('click')
     expect(saveFile).not.toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalled()
 
     useConnectionStore().updateStatus('CONNECTED')
+    await nextTick()
     const pendingOpen = deferred<{ canceled: boolean; filePaths: string[] }>()
     openFile.mockReturnValue(pendingOpen.promise)
     await wrapper.get('[data-testid="import-policy"]').trigger('click')

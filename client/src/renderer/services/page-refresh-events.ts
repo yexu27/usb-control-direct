@@ -1,0 +1,28 @@
+export type PageRefreshReason = 'reconnect'
+export type PageRefreshListener = (reason: PageRefreshReason) => void | Promise<void>
+
+const pageRefreshListeners = new Set<PageRefreshListener>()
+
+export function emitPageRefresh(reason: PageRefreshReason): void {
+  for (const listener of Array.from(pageRefreshListeners)) {
+    Promise.resolve()
+      .then(() => listener(reason))
+      .catch((error: unknown) => {
+        console.error('页面刷新监听器执行失败', error)
+      })
+  }
+}
+
+export function onPageRefresh(listener: PageRefreshListener): () => void {
+  pageRefreshListeners.add(listener)
+  return () => {
+    pageRefreshListeners.delete(listener)
+  }
+}
+
+export function resetPageRefreshListenersForTest(): void {
+  if (import.meta.env.MODE !== 'test') {
+    return
+  }
+  pageRefreshListeners.clear()
+}

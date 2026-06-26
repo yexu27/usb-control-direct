@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { ConnectionStatus } from '../shared/connection-state'
+import type { ConnectionEvent, ConnectionStatus } from '../shared/connection-state'
 import type { TlsResponse } from '../shared/tls-response'
 import { TlsTransport } from './tls/tls-transport'
 import { FrameStreamParser, encodeFrame } from './tls/frame-codec'
@@ -65,6 +65,7 @@ export class TlsClient extends EventEmitter {
   }
 
   async connect(host: string, port: number): Promise<void> {
+    this.dispatcher.unfreeze()
     this.stateMachine.transition('CONNECT_START')
 
     try {
@@ -82,6 +83,7 @@ export class TlsClient extends EventEmitter {
 
   disconnect(): void {
     this.heartbeat.stop()
+    this.dispatcher.freeze(new Error('主动断开连接'))
     this.transport.disconnect()
     this.dispatcher.rejectAll(new Error('主动断开连接'))
 
@@ -102,8 +104,8 @@ export class TlsClient extends EventEmitter {
     return this.stateMachine.current
   }
 
-  transitionState(event: import('../shared/connection-state').ConnectionEvent): void {
-    this.stateMachine.transition(event)
+  transitionState(event: ConnectionEvent): ConnectionStatus {
+    return this.stateMachine.transition(event)
   }
 
   startHeartbeat(): void {

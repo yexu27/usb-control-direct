@@ -11,6 +11,16 @@ export function resolveRouteAccess(meta: RouteMeta): true | string {
   const session = useSessionStore()
   const connection = useConnectionStore()
 
+  if (meta.rootEntry === true) {
+    if (!session.isLoggedIn) {
+      return '/login'
+    }
+    if (connection.status === 'AUTH_REQUIRED' || connection.status === 'LICENSE_EXPIRED') {
+      return '/license'
+    }
+    return session.role ? ROLE_DEFAULT_ROUTES[session.role] : '/login'
+  }
+
   if (meta.licenseFlow === true) {
     if (!session.isLoggedIn) {
       return '/login'

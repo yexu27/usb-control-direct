@@ -3,19 +3,20 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
 import { exportPolicy, importPolicy } from '@/services/policy-service'
 import { ServiceError } from '@/services/send-command'
-import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore } from '@/stores/file-policy'
 import { useSessionStore } from '@/stores/session'
 import { useWhitelistStore } from '@/stores/whitelist'
 import { confirmAction } from '@/utils/confirm-action'
 import { showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 
-const connection = useConnectionStore()
 const session = useSessionStore()
 const filePolicyStore = useFilePolicyStore()
 const whitelistStore = useWhitelistStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 const defaultPolicyFileNamePreview = computed(() => defaultPolicyFileName(new Date(2026, 5, 9, 13, 35, 36)))
 
 const isTransferring = ref(false)
@@ -87,7 +88,7 @@ function canContinue(operation: PolicyOperation): boolean {
   if (!hasSameSession(operation)) {
     return false
   }
-  if (connection.isConnected) {
+  if (canReadFromDevice()) {
     return true
   }
   warnDisconnected(operation)
@@ -95,7 +96,7 @@ function canContinue(operation: PolicyOperation): boolean {
 }
 
 function warnDisconnected(operation: PolicyOperation): void {
-  if (!hasSameSession(operation) || connection.isConnected || operation.hasWarnedConnection) {
+  if (!hasSameSession(operation) || canReadFromDevice() || operation.hasWarnedConnection) {
     return
   }
   operation.hasWarnedConnection = true
@@ -119,7 +120,7 @@ async function reportOperationFailure(
   if (!hasSameSession(operation)) {
     return
   }
-  if (!connection.isConnected) {
+  if (!canReadFromDevice()) {
     warnDisconnected(operation)
     return
   }
@@ -140,6 +141,9 @@ async function revokeSelectedFileAccess(filePath: string): Promise<void> {
 }
 
 async function handleExport(): Promise<void> {
+  if (!(await canWriteToDevice())) {
+    return
+  }
   const operation = beginOperation('export')
   if (operation == null) {
     return
@@ -224,6 +228,9 @@ async function handleExport(): Promise<void> {
 }
 
 async function handleImport(): Promise<void> {
+  if (!(await canWriteToDevice())) {
+    return
+  }
   const operation = beginOperation('import')
   if (operation == null) {
     return
@@ -306,7 +313,7 @@ async function handleImport(): Promise<void> {
     if (!hasSameSession(operation)) {
       return
     }
-    if (!connection.isConnected) {
+    if (!canReadFromDevice()) {
       await showErrorDialog('策略状态刷新失败', '策略已导入，但状态刷新失败，请稍后重试')
       return
     }
@@ -320,7 +327,7 @@ async function handleImport(): Promise<void> {
       return
     }
     if (
-      !connection.isConnected ||
+      !canReadFromDevice() ||
       refreshResults.some((refreshResult) => refreshResult.status === 'rejected')
     ) {
       await showErrorDialog('策略状态刷新失败', '策略已导入，但状态刷新失败，请稍后重试')
@@ -336,6 +343,14 @@ async function handleImport(): Promise<void> {
     }
     finishOperation(operation)
   }
+}
+
+async function canWriteToDevice(): Promise<boolean> {
+  if (canReadFromDevice()) {
+    return true
+  }
+  await showErrorDialog('操作失败', '装置已断开连接，无法传输策略')
+  return false
 }
 </script>
 
@@ -361,7 +376,7 @@ async function handleImport(): Promise<void> {
           type="primary"
           data-testid="export-policy"
           :loading="activeTransferAction === 'export'"
-          :disabled="isTransferring"
+          :disabled="isBusinessActionDisabled || isTransferring"
           @click="handleExport"
         >
           导出
@@ -377,7 +392,7 @@ async function handleImport(): Promise<void> {
           class="policy-transfer-button"
           data-testid="import-policy"
           :loading="activeTransferAction === 'import'"
-          :disabled="isTransferring"
+          :disabled="isBusinessActionDisabled || isTransferring"
           @click="handleImport"
         >
           导入

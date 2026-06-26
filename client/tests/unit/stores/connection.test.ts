@@ -54,4 +54,18 @@ describe('useConnectionStore', () => {
 
     expect(store.deviceIp).toBe('')
   })
+
+  it('applyStateEvent immediately mirrors the returned connection state', async () => {
+    const applyStateEvent = vi.fn().mockResolvedValue('CONNECTED')
+    window.desktopApi = {
+      tls: { applyStateEvent },
+    } as unknown as Window['desktopApi']
+    const store = useConnectionStore()
+
+    await expect(store.applyStateEvent('CONFIG_LOADED')).resolves.toBe('CONNECTED')
+
+    expect(applyStateEvent).toHaveBeenCalledWith('CONFIG_LOADED')
+    expect(store.status).toBe('CONNECTED')
+    expect(store.wasConnected).toBe(true)
+  })
 })

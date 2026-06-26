@@ -14,7 +14,9 @@ import {
 } from '../../../src/renderer/services/user-service'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
+import { emitPageRefresh, resetPageRefreshListenersForTest } from '../../../src/renderer/services/page-refresh-events'
 import { showErrorDialog, showSuccessToast } from '../../../src/renderer/utils/operation-feedback'
+import type { ConnectionStatus } from '../../../src/shared/connection-state'
 
 vi.mock('../../../src/renderer/services/user-service', () => ({
   listUsers: vi.fn(),
@@ -90,7 +92,11 @@ function mountPage() {
         ConnectionAlert: { template: '<aside />' },
         DataTable: DataTableStub,
         ElCard: { template: '<section v-bind="$attrs"><slot /></section>' },
-        ElButton: { emits: ['click'], template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
+        ElButton: {
+          inheritAttrs: false,
+          props: ['disabled', 'loading'],
+          template: '<button v-bind="$attrs" type="button" :disabled="disabled || loading" :data-loading="loading"><slot /></button>',
+        },
         ElDialog: { props: ['modelValue'], template: '<section v-if="modelValue"><slot /><slot name="footer" /></section>' },
         ElAlert: { props: ['title'], template: '<strong v-bind="$attrs">{{ title }}</strong>' },
         ElForm: ElFormStub,
@@ -122,6 +128,7 @@ describe('UsersPage', () => {
     setActivePinia(pinia)
     seedStores()
     vi.clearAllMocks()
+    resetPageRefreshListenersForTest()
     vi.mocked(listUsers).mockResolvedValue({
       users: [
         { username: 'admin', role: 'admin', status: 'active', isBuiltin: true, createdAt: 0 },
@@ -159,6 +166,57 @@ describe('UsersPage', () => {
     expect(wrapper.find('[data-testid="delete-user-zhang_wei"]').exists()).toBe(true)
   })
 
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] satisfies ConnectionStatus[])('%s 状态下新建、重置、删除按钮禁用且点击无副作用', async (status) => {
+    const wrapper = mountPage()
+    await flushPromises()
+    vi.clearAllMocks()
+    useConnectionStore().updateStatus(status)
+    await flushPromises()
+
+    const createButton = wrapper.get('[data-testid="create-user-open"]')
+    const resetButton = wrapper.get('[data-testid="reset-password-zhang_wei"]')
+    const deleteButton = wrapper.get('[data-testid="delete-user-zhang_wei"]')
+
+    expect(createButton.attributes('disabled')).toBeDefined()
+    expect(resetButton.attributes('disabled')).toBeDefined()
+    expect(deleteButton.attributes('disabled')).toBeDefined()
+
+    await createButton.trigger('click')
+    await resetButton.trigger('click')
+    await deleteButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="create-username"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="reset-password"]').exists()).toBe(false)
+    expect(createUser).not.toHaveBeenCalled()
+    expect(resetPassword).not.toHaveBeenCalled()
+    expect(deleteUser).not.toHaveBeenCalled()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] satisfies ConnectionStatus[])('%s 状态刷新用户列表时保留内存数据且不请求装置', async (status) => {
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="user-row-zhang_wei"]').exists()).toBe(true)
+    vi.clearAllMocks()
+    useConnectionStore().updateStatus(status)
+
+    emitPageRefresh('reconnect')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="user-row-zhang_wei"]').exists()).toBe(true)
+    expect(listUsers).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
   it('按确认原型渲染用户管理页标题、表格和胶囊分页', async () => {
     const wrapper = mountPage()
     await flushPromises()
@@ -177,6 +235,7 @@ describe('UsersPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="create-user-open"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-testid="create-username"]').setValue('new_operator')
     await wrapper.get('[data-testid="create-role"]').setValue('operator')
     await wrapper.get('[data-testid="create-password"]').setValue('NewPass@123')
@@ -189,12 +248,27 @@ describe('UsersPage', () => {
     expect(listUsers).toHaveBeenCalledTimes(2)
   })
 
+  it('断线状态下禁用新建用户按钮且不打开弹窗', async () => {
+    const connection = useConnectionStore()
+    connection.updateStatus('DISCONNECTED')
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="create-user-open"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="create-user-open"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="create-username"]').exists()).toBe(false)
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
   it('keeps create dialog open and shows inline service error when creating user fails', async () => {
     vi.mocked(createUser).mockRejectedValue(new Error('用户名已存在'))
     const wrapper = mountPage()
     await flushPromises()
 
     await wrapper.get('[data-testid="create-user-open"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-testid="create-username"]').setValue('admin')
     await wrapper.get('[data-testid="create-role"]').setValue('operator')
     await wrapper.get('[data-testid="create-password"]').setValue('NewPass@123')
@@ -205,6 +279,17 @@ describe('UsersPage', () => {
     expect(wrapper.get('[data-testid="create-user-error"]').text()).toContain('用户名已存在')
     expect(wrapper.find('[data-testid="create-user-submit"]').exists()).toBe(true)
     expect(showSuccessToast).not.toHaveBeenCalledWith('用户创建成功')
+  })
+
+  it('重连成功事件后重新读取用户列表', async () => {
+    mountPage()
+    await flushPromises()
+    vi.mocked(listUsers).mockClear()
+
+    emitPageRefresh('reconnect')
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenCalledWith('token')
   })
 
   it('deletes non-builtin users only after confirmation', async () => {
@@ -244,6 +329,7 @@ describe('UsersPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="reset-password-zhang_wei"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-testid="reset-password"]').setValue('Reset@123')
     await wrapper.get('[data-testid="reset-confirm-password"]').setValue('Reset@123')
     await wrapper.get('[data-testid="reset-password-submit"]').trigger('click')
@@ -254,12 +340,27 @@ describe('UsersPage', () => {
     expect(listUsers).toHaveBeenCalledTimes(2)
   })
 
+  it('断线状态下禁用重置密码按钮且不打开弹窗', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    useConnectionStore().updateStatus('DISCONNECTED')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="reset-password-zhang_wei"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="reset-password-zhang_wei"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-password"]').exists()).toBe(false)
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
   it('keeps reset dialog open and shows inline service error when reset fails', async () => {
     vi.mocked(resetPassword).mockRejectedValue(new Error('密码复杂度不符合要求'))
     const wrapper = mountPage()
     await flushPromises()
 
     await wrapper.get('[data-testid="reset-password-zhang_wei"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-testid="reset-password"]').setValue('short')
     await wrapper.get('[data-testid="reset-confirm-password"]').setValue('short')
     await wrapper.get('[data-testid="reset-password-submit"]').trigger('click')

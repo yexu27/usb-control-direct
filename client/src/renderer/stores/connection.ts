@@ -13,18 +13,22 @@ export const useConnectionStore = defineStore('connection', () => {
 
   let unsubscribe: (() => void) | null = null
 
+  function setStatus(newStatus: ConnectionStatus): void {
+    if (newStatus === 'CONNECTED') {
+      wasConnected.value = true
+    }
+    if (newStatus === 'DISCONNECTED') {
+      transportConnected = false
+    }
+    status.value = newStatus
+  }
+
   function setupListener(): void {
     if (unsubscribe != null || window.desktopApi?.tls?.onStateChanged == null) {
       return
     }
     unsubscribe = window.desktopApi.tls.onStateChanged((newStatus: ConnectionStatus) => {
-      if (newStatus === 'CONNECTED') {
-        wasConnected.value = true
-      }
-      if (newStatus === 'DISCONNECTED') {
-        transportConnected = false
-      }
-      status.value = newStatus
+      setStatus(newStatus)
     })
   }
 
@@ -47,7 +51,7 @@ export const useConnectionStore = defineStore('connection', () => {
     deviceIp.value = ip
     await window.desktopApi.tls.connect(ip)
     transportConnected = true
-    status.value = 'AUTHENTICATING'
+    setStatus('AUTHENTICATING')
   }
 
   async function disconnect(clearDeviceIp = false): Promise<void> {
@@ -55,19 +59,21 @@ export const useConnectionStore = defineStore('connection', () => {
       await window.desktopApi.tls.disconnect()
     } finally {
       transportConnected = false
-      status.value = 'DISCONNECTED'
+      setStatus('DISCONNECTED')
       if (clearDeviceIp) {
         deviceIp.value = ''
       }
     }
   }
 
-  async function applyStateEvent(event: ConnectionEvent): Promise<void> {
-    await window.desktopApi.tls.applyStateEvent(event)
+  async function applyStateEvent(event: ConnectionEvent): Promise<ConnectionStatus> {
+    const nextStatus = await window.desktopApi.tls.applyStateEvent(event)
+    setStatus(nextStatus)
+    return nextStatus
   }
 
   function updateStatus(newStatus: ConnectionStatus): void {
-    status.value = newStatus
+    setStatus(newStatus)
   }
 
   async function reconnect(): Promise<boolean> {

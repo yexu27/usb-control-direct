@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import ProgressDialog from '@/components/ProgressDialog.vue'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
+import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import {
   LOG_TABS,
   OPERATION_LOG_CATEGORY_OPTIONS,
@@ -20,9 +22,9 @@ import {
 } from '@/utils/date-time'
 import { deleteLogs, exportLogs, queryLogs, type LogQueryInput } from '@/services/log-service'
 import { ServiceError } from '@/services/send-command'
-import { useConnectionStore } from '@/stores/connection'
 import { useSessionStore } from '@/stores/session'
 import { confirmAction } from '@/utils/confirm-action'
+import { showErrorDialog } from '@/utils/operation-feedback'
 import type { usb_control } from '../../shared/proto/usb_control'
 
 const PAGE_SIZE = 20
@@ -41,7 +43,8 @@ interface LogRow {
 }
 
 const session = useSessionStore()
-const connection = useConnectionStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 const activeLogType = ref<LogType>('usb_audit')
 const dateRange = ref<[Date, Date]>(createDefaultRange())
 const keyword = ref('')
@@ -98,9 +101,7 @@ const visiblePages = computed(() => {
 })
 const showPaginationEllipsis = computed(() => visiblePages.value.at(-1) !== totalPages.value)
 
-onMounted(() => {
-  void loadLogs()
-})
+useDeviceBackedPageRefresh(loadLogs)
 
 function createDefaultRange(): [Date, Date] {
   const range = getDefaultLogRange()
@@ -111,11 +112,11 @@ function showError(error: unknown, fallback: string): void {
   ElMessage.error(error instanceof ServiceError || error instanceof Error ? error.message : fallback)
 }
 
-function canOperate(): boolean {
-  if (connection.isConnected) {
+async function canWriteToDevice(): Promise<boolean> {
+  if (canReadFromDevice()) {
     return true
   }
-  ElMessage.warning(DISCONNECTED_MESSAGE)
+  await showErrorDialog('操作失败', DISCONNECTED_MESSAGE)
   return false
 }
 
@@ -134,7 +135,7 @@ function buildQueryInput(): LogQueryInput {
 }
 
 async function loadLogs(): Promise<void> {
-  if (!canOperate()) {
+  if (!canReadFromDevice()) {
     return
   }
   isLoading.value = true
@@ -253,7 +254,10 @@ function handleTabChange(tabName: string | number): void {
   void loadLogs()
 }
 
-function handleSearch(): void {
+async function handleSearch(): Promise<void> {
+  if (!(await canWriteToDevice())) {
+    return
+  }
   page.value = 1
   void loadLogs()
 }
@@ -277,7 +281,7 @@ function handlePageSizeChange(nextPageSize: number): void {
 }
 
 async function handleExport(): Promise<void> {
-  if (isExporting.value || !canOperate()) {
+  if (isExporting.value || !(await canWriteToDevice())) {
     return
   }
   isExporting.value = true
@@ -329,7 +333,7 @@ async function revokeFileAccess(filePath: string): Promise<void> {
 }
 
 async function handleClear(): Promise<void> {
-  if (!canOperate()) {
+  if (!(await canWriteToDevice())) {
     return
   }
   clearRange.value = [new Date(dateRange.value[0]), new Date(dateRange.value[1])]
@@ -337,7 +341,7 @@ async function handleClear(): Promise<void> {
 }
 
 async function confirmClear(): Promise<void> {
-  if (!canOperate()) {
+  if (!(await canWriteToDevice())) {
     return
   }
   const startSeconds = dateToUnixSeconds(clearRange.value[0])
@@ -467,13 +471,28 @@ function disabledClearDate(date: Date): boolean {
               />
             </el-select>
             <div class="filter-actions app-filter-actions">
-              <el-button type="primary" data-testid="log-search" @click="handleSearch">
+              <el-button
+                type="primary"
+                data-testid="log-search"
+                :disabled="isBusinessActionDisabled || isLoading"
+                @click="handleSearch"
+              >
                 搜索
               </el-button>
-              <el-button data-testid="log-export" :loading="isExporting" @click="handleExport">
+              <el-button
+                data-testid="log-export"
+                :loading="isExporting"
+                :disabled="isBusinessActionDisabled || isExporting"
+                @click="handleExport"
+              >
                 导出 .zip
               </el-button>
-              <el-button class="logs-clear-button" data-testid="log-clear" @click="handleClear">
+              <el-button
+                class="logs-clear-button"
+                data-testid="log-clear"
+                :disabled="isBusinessActionDisabled"
+                @click="handleClear"
+              >
                 清理
               </el-button>
             </div>
@@ -541,7 +560,12 @@ function disabledClearDate(date: Date): boolean {
       </div>
       <template #footer>
         <el-button @click="clearDialogVisible = false">取消</el-button>
-        <el-button type="danger" data-testid="log-clear-confirm" @click="confirmClear">
+        <el-button
+          type="danger"
+          data-testid="log-clear-confirm"
+          :disabled="isBusinessActionDisabled"
+          @click="confirmClear"
+        >
           确认清理
         </el-button>
       </template>

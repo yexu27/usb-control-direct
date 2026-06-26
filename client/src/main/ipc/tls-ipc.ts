@@ -84,7 +84,7 @@ export function registerTlsIpc(
 
   ipcMain.handle(IpcChannels.tlsApplyStateEvent, (event, stateEvent: unknown) => {
     assertTrustedSender(event, getMainWindow())
-    tlsClient.transitionState(parseRendererConnectionEvent(stateEvent))
+    return tlsClient.transitionState(parseRendererConnectionEvent(stateEvent))
   })
 
   tlsClient.on('state-change', (_from, to, _event) => {

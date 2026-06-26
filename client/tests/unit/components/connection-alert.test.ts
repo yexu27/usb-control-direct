@@ -7,6 +7,7 @@ import { useConnectionStore } from '../../../src/renderer/stores/connection'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 
 const push = vi.hoisted(() => vi.fn())
+const emitPageRefresh = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
@@ -14,6 +15,10 @@ vi.mock('vue-router', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn() },
+}))
+
+vi.mock('../../../src/renderer/services/page-refresh-events', () => ({
+  emitPageRefresh,
 }))
 
 function mountAlert() {
@@ -61,13 +66,17 @@ describe('ConnectionAlert', () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(true)
+    const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockImplementation(async () => {
+      connection.updateStatus('CONNECTED')
+      return 'resumable'
+    })
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
     await flushPromises()
 
     expect(reconnect).toHaveBeenCalledTimes(1)
+    expect(emitPageRefresh).toHaveBeenCalledWith('reconnect')
     expect(ElMessage.success).toHaveBeenCalledWith('USB 管控装置重新连接成功')
     expect(push).not.toHaveBeenCalled()
   })
@@ -76,35 +85,72 @@ describe('ConnectionAlert', () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue(false)
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue('login-required')
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
     await flushPromises()
 
     expect(push).toHaveBeenCalledWith('/login')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
   })
 
-  it('建链失败时留在当前页并展示错误', async () => {
+  it('重连校验后不能恢复 CONNECTED 时返回登录页且不刷新业务页面', async () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    vi.spyOn(useSessionStore(), 'reconnectAndValidate')
-      .mockRejectedValue(new Error('USB 管控装置重新连接失败，请检查网络或设备连接。'))
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockImplementation(async () => {
+      connection.updateStatus('AUTH_REQUIRED')
+      return 'login-required'
+    })
     const wrapper = mountAlert()
 
     await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
     await flushPromises()
 
-    expect(push).not.toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('USB 管控装置重新连接失败，请检查网络或设备连接。')
+    expect(push).toHaveBeenCalledWith('/login')
+    expect(push).not.toHaveBeenCalledWith('/license')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('返回 resumable 但状态不是 CONNECTED 时返回登录页且不刷新业务页面', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate').mockResolvedValue('resumable')
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith('/login')
+    expect(push).not.toHaveBeenCalledWith('/license')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('建链失败被会话重连吸收后返回登录页且不弹错误', async () => {
+    const connection = useConnectionStore()
+    connection.wasConnected = true
+    connection.updateStatus('DISCONNECTED')
+    vi.spyOn(useSessionStore(), 'reconnectAndValidate')
+      .mockResolvedValue('login-required')
+    const wrapper = mountAlert()
+
+    await wrapper.get('[data-testid="connection-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith('/login')
+    expect(emitPageRefresh).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
   it('重连进行中时防止重复点击', async () => {
     const connection = useConnectionStore()
     connection.wasConnected = true
     connection.updateStatus('DISCONNECTED')
-    let resolveReconnect!: (value: boolean) => void
+    let resolveReconnect!: (value: 'resumable') => void
     const reconnect = vi.spyOn(useSessionStore(), 'reconnectAndValidate')
       .mockReturnValue(new Promise((resolve) => { resolveReconnect = resolve }))
     const wrapper = mountAlert()
@@ -114,7 +160,8 @@ describe('ConnectionAlert', () => {
     await button.trigger('click')
 
     expect(reconnect).toHaveBeenCalledTimes(1)
-    resolveReconnect(true)
+    connection.updateStatus('CONNECTED')
+    resolveReconnect('resumable')
     await flushPromises()
   })
 })

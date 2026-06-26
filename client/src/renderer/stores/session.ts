@@ -18,6 +18,8 @@ export interface LoginResult {
   errorMessage: string
 }
 
+export type ReconnectValidationResult = 'resumable' | 'login-required'
+
 function parseUserRole(role: string): UserRole {
   if (role === 'admin' || role === 'operator' || role === 'auditor') {
     return role
@@ -35,6 +37,10 @@ function parseAuthStatus(authStatus: string): AuthStatus {
     return authStatus
   }
   return ''
+}
+
+function shouldKeepConnectionAfterLoginError(error: unknown): boolean {
+  return error instanceof ServiceError && error.kind === 'business'
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -78,7 +84,6 @@ export const useSessionStore = defineStore('session', () => {
 
   async function finishAuthentication(): Promise<void> {
     const connection = useConnectionStore()
-    const bootstrapStore = useBootstrapStore()
 
     await connection.applyStateEvent('AUTH_SUCCESS')
 
@@ -98,21 +103,8 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     await connection.applyStateEvent('LICENSE_AUTHORIZED')
-    try {
-      await bootstrapStore.loadForRole(token.value, role.value)
-      await connection.applyStateEvent('CONFIG_LOADED')
-      startInactivityTimer()
-    } catch (error: unknown) {
-      try {
-        await connection.applyStateEvent('CONFIG_FAILED')
-      } catch {
-        // 网络断开可能已将主进程状态推进到 DISCONNECTED。
-      }
-      bootstrapStore.clear()
-      clearSession()
-      await connection.disconnect(true).catch(() => {})
-      throw error
-    }
+    await connection.applyStateEvent('CONFIG_LOADED')
+    startInactivityTimer()
   }
 
   async function login(
@@ -121,9 +113,8 @@ export const useSessionStore = defineStore('session', () => {
     password: string,
   ): Promise<LoginResult> {
     const connection = useConnectionStore()
-    await connection.connect(ip)
-
     try {
+      await connection.connect(ip)
       const response = await requestLogin(loginUsername, password)
       setSession({
         token: response.sessionToken,
@@ -141,6 +132,10 @@ export const useSessionStore = defineStore('session', () => {
       } catch {
         // 连接错误可能已由主进程状态机处理。
       }
+      if (!shouldKeepConnectionAfterLoginError(error)) {
+        await connection.disconnect(true).catch(() => {})
+      }
+      clearSession()
       throw error
     }
   }
@@ -154,8 +149,10 @@ export const useSessionStore = defineStore('session', () => {
       if (currentToken !== '' && !connection.isDisconnected) {
         await requestLogout(currentToken)
       }
-    } catch {
-      // 本地登出必须继续，远端失败交由装置侧会话超时兜底。
+    } catch (error: unknown) {
+      if (!(error instanceof ServiceError && error.kind === 'unauthenticated')) {
+        console.warn('远端登出未确认，执行本地会话清理', error)
+      }
     } finally {
       bootstrapStore.clear()
       clearSession()
@@ -163,38 +160,58 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function validateSession(): Promise<boolean> {
+  async function clearReconnectState(
+    connection = useConnectionStore(),
+    bootstrapStore = useBootstrapStore(),
+  ): Promise<void> {
+    bootstrapStore.clear()
+    clearSession()
+    await connection.disconnect(true).catch(() => {})
+  }
+
+  async function validateReconnectSession(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
-      return false
+      await clearReconnectState()
+      return 'login-required'
     }
+
+    const connection = useConnectionStore()
+    const bootstrapStore = useBootstrapStore()
 
     try {
       const response = await queryAuthStatus(token.value)
-      authStatus.value = parseAuthStatus(response.authStatus)
+      authStatus.value = parseAuthStatus(response.authStatus) || (response.authorized ? 'authorized' : '')
       authExpireTime.value = Number(response.expireTime)
       deviceDescription.value = response.deviceDescription
       await finishAuthentication()
-      return true
+
+      if (authStatus.value !== 'authorized' || role.value === '' || !connection.isConnected) {
+        await clearReconnectState(connection, bootstrapStore)
+        return 'login-required'
+      }
+
+      return 'resumable'
     } catch (error: unknown) {
       if (error instanceof ServiceError && error.kind === 'unauthenticated') {
-        useBootstrapStore().clear()
-        clearSession()
-        await useConnectionStore().disconnect(true).catch(() => {})
-        return false
+        await clearReconnectState(connection, bootstrapStore)
+        return 'login-required'
       }
       throw error
     }
   }
 
-  async function reconnectAndValidate(): Promise<boolean> {
+  async function reconnectAndValidate(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
-      return false
+      await clearReconnectState()
+      return 'login-required'
     }
-    const reconnected = await useConnectionStore().reconnect()
+    const connection = useConnectionStore()
+    const reconnected = await connection.reconnect().catch(() => false)
     if (!reconnected) {
-      throw new Error('USB 管控装置重新连接失败，请检查网络或设备连接。')
+      await clearReconnectState(connection)
+      return 'login-required'
     }
-    return validateSession()
+    return validateReconnectSession()
   }
 
   function startInactivityTimer(): void {
@@ -228,7 +245,6 @@ export const useSessionStore = defineStore('session', () => {
     isAuthorized,
     login,
     logout,
-    validateSession,
     reconnectAndValidate,
     clearSession,
     setSession,

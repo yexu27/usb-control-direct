@@ -62,8 +62,9 @@ function mountPage() {
     AddWhitelistDialog: AddDialogStub, EditWhitelistDialog: EditDialogStub,
     ElCard: { template: '<section v-bind="$attrs"><slot name="header"/><slot /></section>' },
     ElButton: {
-      props: ['type'],
-      template: '<button v-bind="$attrs" :data-button-type="type" @click="$emit(\'click\')"><slot/></button>',
+      props: ['type', 'disabled', 'loading'],
+      emits: ['click'],
+      template: '<button v-bind="$attrs" :data-button-type="type" :disabled="disabled" :loading="loading" @click="$emit(\'click\')"><slot/></button>',
     },
     DataTable: {
       name: 'DataTable',
@@ -104,6 +105,83 @@ describe('UsbDevicesPage', () => {
     vi.mocked(getConnectedDevices).mockResolvedValue(usb_control.RspConnectedDevices.fromObject({ devices: [] }))
     vi.mocked(listManagementUsbStorageDevices).mockResolvedValue([])
     vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as never)
+  })
+
+  it('页面挂载时重新从装置读取白名单', async () => {
+    const listWhitelist = vi.spyOn(useWhitelistStore(), 'listWhitelist').mockResolvedValue()
+
+    mountPage()
+    await flushPromises()
+
+    expect(listWhitelist).toHaveBeenCalledWith('token')
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
+  it('页面挂载读取白名单失败时只展示表格错误态，不弹阻塞错误弹窗', async () => {
+    const store = useWhitelistStore()
+    vi.spyOn(store, 'listWhitelist').mockImplementation(async () => {
+      store.errorMessage = 'device read failed'
+      throw new Error('device read failed')
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="table-error"]').text()).toBe('U盘白名单加载失败，请重试')
+    expect(showErrorDialog).not.toHaveBeenCalled()
+  })
+
+  it('断开连接时进入页面不主动读取白名单且保留当前内存列表', async () => {
+    useConnectionStore().updateStatus('DISCONNECTED')
+    const listWhitelist = vi.spyOn(useWhitelistStore(), 'listWhitelist').mockResolvedValue()
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(listWhitelist).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-testid="row"]')).toHaveLength(20)
+  })
+
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] as const)('%s 时禁用白名单写入口且不触发装置请求', async (status) => {
+    useConnectionStore().updateStatus(status)
+    const store = useWhitelistStore()
+    const listWhitelist = vi.spyOn(store, 'listWhitelist').mockResolvedValue()
+    const add = vi.spyOn(store, 'addWhitelist').mockResolvedValue()
+    const update = vi.spyOn(store, 'updateWhitelist').mockResolvedValue()
+    const remove = vi.spyOn(store, 'removeWhitelist').mockResolvedValue()
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const addDevice = wrapper.get('[data-testid="add-device-trigger"]')
+    const addManagement = wrapper.get('[data-testid="add-management-trigger"]')
+    const editButton = wrapper.get('[data-testid="edit-SN-0"]')
+    const removeButton = wrapper.get('[data-testid="remove-SN-0"]')
+    expect(addDevice.attributes('disabled')).toBeDefined()
+    expect(addManagement.attributes('disabled')).toBeDefined()
+    expect(editButton.attributes('disabled')).toBeDefined()
+    expect(removeButton.attributes('disabled')).toBeDefined()
+
+    await addDevice.trigger('click')
+    await addManagement.trigger('click')
+    await editButton.trigger('click')
+    await removeButton.trigger('click')
+    await flushPromises()
+
+    expect(listWhitelist).not.toHaveBeenCalled()
+    expect(getConnectedDevices).not.toHaveBeenCalled()
+    expect(listManagementUsbStorageDevices).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(ElMessage.warning).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(AddDialogStub).props('visible')).toBe(false)
+    expect(wrapper.getComponent(EditDialogStub).props('visible')).toBe(false)
   })
 
   it('仅展示六个白名单列，前端分页默认20并格式化Unix秒', async () => {

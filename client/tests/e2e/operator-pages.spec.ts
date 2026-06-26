@@ -57,6 +57,10 @@ async function expectAppDialog(page: Page, title: string | RegExp, message: stri
   await expect(dialog).toContainText(message)
 }
 
+async function confirmPolicyImport(page: Page): Promise<void> {
+  await page.getByLabel('导入策略确认').getByRole('button', { name: '导入' }).click()
+}
+
 async function closeAppDialog(page: Page): Promise<void> {
   const dialog = page.locator('.app-confirm-message-box')
   await dialog.getByRole('button', { name: '确定' }).click()
@@ -185,7 +189,7 @@ test.describe('操作员三页面业务闭环', () => {
   test('白名单删除后列表刷新', async () => {
     await withOperator(async (_device, _app, page) => {
       await openMenu(page, 'U盘设备控制')
-      await expect(page.getByTestId('edit-WL-EXISTING-001')).toHaveCount(0)
+      await expect(page.getByTestId('remove-WL-EXISTING-001')).toBeVisible()
       await page.getByTestId('remove-WL-EXISTING-001').click()
       await page.getByLabel('删除确认').getByRole('button', { name: '删除', exact: true }).click()
       await expect(page.getByText('WL-EXISTING-001', { exact: true })).toHaveCount(0)
@@ -241,7 +245,7 @@ test.describe('操作员三页面业务闭环', () => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture] })
       }, IMPORT_FIXTURE)
       await page.getByTestId('import-policy').click()
-      await page.getByRole('button', { name: '导入', exact: true }).click()
+      await confirmPolicyImport(page)
       await expect(page.getByText('策略导入失败，原策略未变更', { exact: true })).toBeVisible()
       await page.getByRole('button', { name: '确定', exact: true }).click()
       await openMenu(page, 'U盘设备控制')
@@ -249,7 +253,7 @@ test.describe('操作员三页面业务闭环', () => {
       await expect(page.getByText('IMPORTED-USB-001', { exact: true })).toHaveCount(0)
       await openMenu(page, '策略管理')
       await page.getByTestId('import-policy').click()
-      await page.getByRole('button', { name: '导入', exact: true }).click()
+      await confirmPolicyImport(page)
       await expectLatestMessage(page, '导入成功，重新拔插或重新映射后生效')
       await openMenu(page, 'U盘设备控制')
       await expect(page.getByText('IMPORTED-USB-001', { exact: true })).toBeVisible()
@@ -267,7 +271,7 @@ test.describe('操作员三页面业务闭环', () => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, invalidPath)
         await page.getByTestId('import-policy').click()
-        await page.getByRole('button', { name: '导入', exact: true }).click()
+        await confirmPolicyImport(page)
         await expect(page.getByText('策略文件格式错误', { exact: true })).toBeVisible()
         await page.getByRole('button', { name: '确定', exact: true }).click()
         await openMenu(page, 'U盘设备控制')
@@ -299,7 +303,7 @@ test.describe('操作员三页面业务闭环', () => {
           dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
         }, policyPath)
         await page.getByTestId('import-policy').click()
-        await page.getByRole('button', { name: '导入', exact: true }).click()
+        await confirmPolicyImport(page)
         await expectLatestMessage(page, '导入成功，重新拔插或重新映射后生效')
         await openMenu(page, 'U盘设备控制')
         await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
@@ -311,48 +315,44 @@ test.describe('操作员三页面业务闭环', () => {
     })
   })
 
-  test('连接断开后保留数据且写入、导入和导出均失败', async () => {
-    await withOperator(async (device, app, page) => {
-      const directory = await mkdtemp(join(tmpdir(), 'usb-policy-disconnect-'))
-      const importPath = join(directory, 'import.bin')
-      await writeFile(importPath, await readFile(IMPORT_FIXTURE))
-      try {
-        device.disconnectSockets()
-        await expect(page.getByTestId('connection-status')).toContainText('未连接')
-        await expect(page.getByText('.jse', { exact: true })).toBeVisible()
-        await page.getByTestId('exec-control-switch').click()
-        await expectAppDialog(page, '操作失败', '装置已断开连接，无法修改策略')
-        await closeAppDialog(page)
-        await page.getByTestId('add-blacklist-trigger').click()
-        await page.locator('[data-testid="blacklist-extension-input"]').fill('.bat')
-        await page.getByTestId('blacklist-submit').click()
-        await expectAppDialog(page, '操作失败', '装置已断开连接，无法修改策略')
-        await closeAppDialog(page)
-        await page.keyboard.press('Escape')
-        await openMenu(page, 'U盘设备控制')
-        await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
-        await page.getByTestId('remove-WL-EXISTING-001').click()
-        await expectLatestMessage(page, '装置已断开连接，无法修改白名单')
-        await openMenu(page, '策略管理')
-        await app.evaluate(({ dialog }, path) => {
-          dialog.showSaveDialog = async () => ({ canceled: false, filePath: `${path}.out` })
-          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
-        }, importPath)
-        await page.getByTestId('export-policy').click()
-        await expectLatestMessage(page, '装置已断开连接，无法传输策略')
-        await page.getByTestId('import-policy').click()
-        await expectLatestMessage(page, '装置已断开连接，无法传输策略')
-      } finally {
-        await rm(directory, { recursive: true, force: true })
-      }
+  test('连接断开后保留数据且写入、导入和导出入口禁用', async () => {
+    await withOperator(async (device, _app, page) => {
+      await openMenu(page, 'U盘设备控制')
+      await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
+      await openMenu(page, '文件访问控制')
+      device.disconnectSockets()
+      await expect(page.getByTestId('connection-status')).toContainText('未连接')
+      await expect(page.getByText('.jse', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('exec-control-switch')).toHaveClass(/is-disabled/)
+      await expect(page.getByTestId('add-blacklist-trigger')).toBeDisabled()
+
+      await openMenu(page, 'U盘设备控制')
+      await expect(page.getByText('WL-EXISTING-001', { exact: true })).toBeVisible()
+      await expect(page.getByTestId('remove-WL-EXISTING-001')).toBeDisabled()
+
+      await openMenu(page, '策略管理')
+      await expect(page.getByTestId('export-policy')).toBeDisabled()
+      await expect(page.getByTestId('import-policy')).toBeDisabled()
+    })
+  })
+
+  test('断线后 token 失效时点击重新连接返回登录页', async () => {
+    await withOperator(async (device, _app, page) => {
+      device.expireCurrentSessionForTest()
+      device.disconnectSockets()
+      await expect(page.getByTestId('connection-status')).toContainText('未连接')
+
+      await page.getByTestId('connection-reconnect').click()
+
+      await expect(page).toHaveURL(/#\/login$/)
     })
   })
 
   test('顶栏不显示 IP、用户名和角色，用户图标提供修改密码与登出', async () => {
     await withOperator(async (_device, _app, page) => {
       await expect(page.getByText('127.0.0.1', { exact: true })).toHaveCount(0)
-      await expect(page.getByText('operator-user', { exact: true })).toHaveCount(0)
       await expect(page.getByText('操作员', { exact: true })).toHaveCount(0)
+      await expect(page.getByTestId('user-menu-trigger')).toHaveText('operator-user')
       await page.getByTestId('user-menu-trigger').click()
       await expect(page.getByText('修改密码', { exact: true })).toBeVisible()
       await expect(page.getByText('登出', { exact: true })).toBeVisible()

@@ -2,13 +2,14 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSessionStore } from '../../../src/renderer/stores/session'
 import { useConnectionStore } from '../../../src/renderer/stores/connection'
-import { useFilePolicyStore } from '../../../src/renderer/stores/file-policy'
-import { useWhitelistStore } from '../../../src/renderer/stores/whitelist'
 import { login, logout, queryAuthStatus } from '../../../src/renderer/services/auth-service'
 import { listWhitelist } from '../../../src/renderer/services/whitelist-service'
 import { getFilePolicy } from '../../../src/renderer/services/file-policy-service'
 import { ServiceError } from '../../../src/renderer/services/send-command'
 import { usb_control } from '../../../src/shared/proto/usb_control'
+import type { ConnectionEvent, ConnectionStatus } from '../../../src/shared/connection-state'
+import { ConnectionStateMachine } from '../../../src/main/tls/connection-state'
+import { useBootstrapStore } from '../../../src/renderer/stores/bootstrap'
 
 vi.mock('../../../src/renderer/services/auth-service', () => ({
   login: vi.fn(),
@@ -43,29 +44,13 @@ const logoutMock = vi.mocked(logout)
 const queryAuthStatusMock = vi.mocked(queryAuthStatus)
 const listWhitelistMock = vi.mocked(listWhitelist)
 const getFilePolicyMock = vi.mocked(getFilePolicy)
-const connect = vi.fn().mockResolvedValue(undefined)
+const connect = vi.fn()
 const disconnect = vi.fn().mockResolvedValue(undefined)
-const applyStateEvent = vi.fn().mockResolvedValue(undefined)
+const applyStateEvent = vi.fn()
+let stateMachine: ConnectionStateMachine
 
-interface Deferred<T> {
-  promise: Promise<T>
-  resolve: (value: T) => void
-}
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = () => {
-    throw new Error('deferred 尚未初始化')
-  }
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve
-  })
-  return { promise, resolve }
-}
-
-async function flushMicrotasks(): Promise<void> {
-  for (let index = 0; index < 20; index += 1) {
-    await Promise.resolve()
-  }
+function mockApplyStateEvent(event: ConnectionEvent): Promise<ConnectionStatus> {
+  return Promise.resolve(stateMachine.transition(event))
 }
 
 describe('useSessionStore', () => {
@@ -73,6 +58,12 @@ describe('useSessionStore', () => {
     setActivePinia(createPinia())
     vi.useFakeTimers()
     vi.clearAllMocks()
+    stateMachine = new ConnectionStateMachine()
+    connect.mockImplementation(async () => {
+      stateMachine.transition('CONNECT_START')
+      stateMachine.transition('CONNECT_SUCCESS')
+    })
+    applyStateEvent.mockImplementation(mockApplyStateEvent)
     window.desktopApi = {
       tls: {
         connect,
@@ -179,7 +170,7 @@ describe('useSessionStore', () => {
     expect(store.isLoggedIn).toBe(true)
   })
 
-  it('登录成功后按操作员角色加载配置并进入 CONNECTED', async () => {
+  it('登录成功后只建立会话状态，不预拉页面业务数据', async () => {
     loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
       success: true,
       sessionToken: 'token',
@@ -192,20 +183,17 @@ describe('useSessionStore', () => {
       errorMessage: '',
       authStatus: 'authorized',
     }))
-    listWhitelistMock.mockResolvedValue(usb_control.RspListWhitelist.fromObject({ devices: [] }))
-    getFilePolicyMock.mockResolvedValue(usb_control.RspFilePolicy.fromObject({
-      execControlEnabled: false,
-      autoReadControlEnabled: false,
-      fileTypeBlacklistEnabled: false,
-      blacklist: [],
-    }))
+    listWhitelistMock.mockRejectedValue(new Error('白名单不应在登录阶段加载'))
+    getFilePolicyMock.mockRejectedValue(new Error('文件策略不应在登录阶段加载'))
     const store = useSessionStore()
 
     await store.login('19.19.19.16', 'operator', 'operator@123')
 
     expect(store.token).toBe('token')
-    expect(listWhitelistMock).toHaveBeenCalledWith('token')
-    expect(getFilePolicyMock).toHaveBeenCalledWith('token')
+    expect(store.username).toBe('operator')
+    expect(store.role).toBe('operator')
+    expect(listWhitelistMock).not.toHaveBeenCalled()
+    expect(getFilePolicyMock).not.toHaveBeenCalled()
     expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
       'AUTH_SUCCESS',
       'LICENSE_AUTHORIZED',
@@ -213,131 +201,28 @@ describe('useSessionStore', () => {
     ])
   })
 
-  it('操作员配置加载失败时清空会话并断开连接', async () => {
+  it('业务页面数据接口失败不会阻断登录流程', async () => {
     loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
       success: true,
       sessionToken: 'token',
-      username: 'operator',
-      role: 'operator',
+      username: 'admin',
+      role: 'admin',
       authorized: true,
       authStatus: 'authorized',
     }))
-    listWhitelistMock.mockResolvedValue(usb_control.RspListWhitelist.fromObject({ devices: [] }))
-    getFilePolicyMock.mockRejectedValue(new Error('配置加载失败'))
+    listWhitelistMock.mockRejectedValue(new Error('business data failed'))
+    getFilePolicyMock.mockRejectedValue(new Error('business data failed'))
     const store = useSessionStore()
-    const connection = useConnectionStore()
-    connection.deviceIp = '19.19.19.16'
 
-    await expect(store.login('19.19.19.16', 'operator', 'operator@123')).rejects.toThrow(
-      '配置加载失败',
-    )
-
-    expect(store.token).toBe('')
-    expect(connection.deviceIp).toBe('')
-    expect(disconnect).toHaveBeenCalledTimes(1)
-    expect(disconnect).toHaveBeenCalledWith()
-    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
-      'AUTH_SUCCESS',
-      'LICENSE_AUTHORIZED',
-      'CONFIG_FAILED',
-      'AUTH_FAIL',
-    ])
-  })
-
-  it.each([
-    ['文件策略快速失败', 'file-policy'],
-    ['白名单快速失败', 'whitelist'],
-  ] as const)('%s 时等待另一路加载结束再清理', async (_name, failedDomain) => {
-    const loadError = new Error(`${failedDomain} 加载失败`)
-    const filePolicyDeferred = createDeferred<usb_control.RspFilePolicy>()
-    const whitelistDeferred = createDeferred<usb_control.RspListWhitelist>()
-    loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
+    await expect(store.login('19.19.19.16', 'admin', 'admin@123')).resolves.toEqual({
       success: true,
-      sessionToken: 'token',
-      username: 'operator',
-      role: 'operator',
-      authorized: true,
-      authStatus: 'authorized',
-    }))
-    getFilePolicyMock.mockImplementation(() =>
-      failedDomain === 'file-policy'
-        ? Promise.reject(loadError)
-        : filePolicyDeferred.promise,
-    )
-    listWhitelistMock.mockImplementation(() =>
-      failedDomain === 'whitelist'
-        ? Promise.reject(loadError)
-        : whitelistDeferred.promise,
-    )
-    const store = useSessionStore()
-    const connection = useConnectionStore()
-    connection.deviceIp = '19.19.19.16'
-
-    const loginPromise = store.login('19.19.19.16', 'operator', 'operator@123')
-    let isLoginSettled = false
-    void loginPromise.then(
-      () => {
-        isLoginSettled = true
-      },
-      () => {
-        isLoginSettled = true
-      },
-    )
-    await flushMicrotasks()
-
-    expect(getFilePolicyMock).toHaveBeenCalledWith('token')
-    expect(listWhitelistMock).toHaveBeenCalledWith('token')
-    expect(isLoginSettled).toBe(false)
+      resultCode: 0,
+      errorMessage: '',
+    })
+    expect(store.token).toBe('token')
+    expect(listWhitelistMock).not.toHaveBeenCalled()
+    expect(getFilePolicyMock).not.toHaveBeenCalled()
     expect(disconnect).not.toHaveBeenCalled()
-
-    if (failedDomain === 'file-policy') {
-      whitelistDeferred.resolve(
-        usb_control.RspListWhitelist.fromObject({
-          devices: [usb_control.WhitelistDevice.fromObject({ serialNumber: 'SN-late' })],
-        }),
-      )
-    } else {
-      filePolicyDeferred.resolve(
-        usb_control.RspFilePolicy.fromObject({
-          execControlEnabled: true,
-        }),
-      )
-    }
-
-    await expect(loginPromise).rejects.toBe(loadError)
-
-    expect(useFilePolicyStore().policy).toBeNull()
-    expect(useWhitelistStore().devices).toEqual([])
-    expect(store.token).toBe('')
-    expect(connection.deviceIp).toBe('')
-    expect(disconnect).toHaveBeenCalledTimes(1)
-    expect(disconnect).toHaveBeenCalledWith()
-    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
-      'AUTH_SUCCESS',
-      'LICENSE_AUTHORIZED',
-      'CONFIG_FAILED',
-      'AUTH_FAIL',
-    ])
-  })
-
-  it('操作员两路加载均失败时按文件策略优先级抛出原始错误', async () => {
-    const filePolicyError = new Error('文件策略加载失败')
-    const whitelistError = new Error('白名单加载失败')
-    loginMock.mockResolvedValue(usb_control.RspLogin.fromObject({
-      success: true,
-      sessionToken: 'token',
-      username: 'operator',
-      role: 'operator',
-      authorized: true,
-      authStatus: 'authorized',
-    }))
-    getFilePolicyMock.mockRejectedValue(filePolicyError)
-    listWhitelistMock.mockRejectedValue(whitelistError)
-    const store = useSessionStore()
-
-    await expect(
-      store.login('19.19.19.16', 'operator', 'operator@123'),
-    ).rejects.toBe(filePolicyError)
   })
 
   it('主动登出远端失败时仍清空本地状态并断开连接', async () => {
@@ -363,10 +248,65 @@ describe('useSessionStore', () => {
     expect(disconnect).toHaveBeenCalledWith()
   })
 
+  it('主动登出成功后清空本地状态并断开连接以允许同 IP 重新登录', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'operator',
+      role: 'operator',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    logoutMock.mockResolvedValue(undefined)
+
+    await store.logout()
+
+    expect(logoutMock).toHaveBeenCalledWith('token')
+    expect(store.token).toBe('')
+    expect(store.username).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledWith()
+  })
+
+  it('主动登出时远端会话已失效也执行本地清理', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'expired-token',
+      username: 'operator',
+      role: 'operator',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    useConnectionStore().updateStatus('CONNECTED')
+    logoutMock.mockRejectedValue(new ServiceError('会话已失效', 0x0001, 'unauthenticated'))
+
+    await store.logout()
+
+    expect(store.isLoggedIn).toBe(false)
+    expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('登录连接级失败后断开连接并恢复可重新提交状态', async () => {
+    const store = useSessionStore()
+    connect.mockRejectedValueOnce(new Error('connect failed'))
+
+    await expect(store.login('19.19.19.16', 'operator', 'operator@123')).rejects.toThrow(
+      'connect failed',
+    )
+
+    expect(store.token).toBe('')
+    expect(disconnect).toHaveBeenCalled()
+  })
+
   it('认证失败后重试密码时复用当前 TLS 连接', async () => {
     loginMock
-      .mockRejectedValueOnce(new Error('用户名或密码错误'))
-      .mockRejectedValueOnce(new Error('用户名或密码错误'))
+      .mockRejectedValueOnce(new ServiceError('用户名或密码错误', 0x0101, 'business'))
+      .mockRejectedValueOnce(new ServiceError('用户名或密码错误', 0x0101, 'business'))
     const store = useSessionStore()
 
     await expect(store.login('19.19.19.16', 'admin', 'wrong-1')).rejects.toThrow()
@@ -374,6 +314,32 @@ describe('useSessionStore', () => {
 
     expect(connect).toHaveBeenCalledTimes(1)
     expect(loginMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('本地无 token 时重连校验要求重新登录且不访问装置', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'stale-token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    store.token = ''
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    const clearBootstrap = vi.spyOn(useBootstrapStore(), 'clear')
+
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+    expect(queryAuthStatusMock).not.toHaveBeenCalled()
+    expect(connect).not.toHaveBeenCalled()
+    expect(clearBootstrap).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('重连校验授权状态后恢复会话', async () => {
@@ -386,6 +352,9 @@ describe('useSessionStore', () => {
       authExpireTime: 0,
       deviceDescription: '',
     })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 0,
@@ -393,8 +362,40 @@ describe('useSessionStore', () => {
       authStatus: 'authorized',
     }))
 
-    await expect(store.validateSession()).resolves.toBe(true)
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(applyStateEvent).toHaveBeenCalledWith('AUTH_SUCCESS')
+  })
+
+  it('已连接状态下重连校验会先重新建链再重放认证状态', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: '',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+      authorized: true,
+      expireTime: 123,
+      deviceDescription: 'USB_DEVICE',
+      authStatus: 'authorized',
+    }))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
+
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
+      'AUTH_SUCCESS',
+      'LICENSE_AUTHORIZED',
+      'CONFIG_LOADED',
+    ])
   })
 
   it('断线后重新建链并校验当前会话', async () => {
@@ -417,7 +418,7 @@ describe('useSessionStore', () => {
       authStatus: 'authorized',
     }))
 
-    await expect(store.reconnectAndValidate()).resolves.toBe(true)
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
 
     expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(queryAuthStatusMock).toHaveBeenCalledWith('token')
@@ -444,7 +445,7 @@ describe('useSessionStore', () => {
     connection.updateStatus('DISCONNECTED')
     queryAuthStatusMock.mockRejectedValue(new ServiceError('会话已失效', 0x1001, 'unauthenticated'))
 
-    await expect(store.reconnectAndValidate()).resolves.toBe(false)
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(store.token).toBe('')
@@ -453,7 +454,74 @@ describe('useSessionStore', () => {
     expect(disconnect).toHaveBeenCalledWith()
   })
 
-  it('重新建链失败时保留当前会话状态', async () => {
+  it('重连后授权有效但最终未连接时清空状态并断开连接', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
+    applyStateEvent.mockImplementation(async (event: ConnectionEvent) => {
+      if (event === 'CONFIG_LOADED') {
+        return 'LOADING_CONFIG'
+      }
+      return mockApplyStateEvent(event)
+    })
+    queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+      authorized: true,
+      expireTime: 123,
+      deviceDescription: 'USB_DEVICE',
+      authStatus: 'authorized',
+    }))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(store.token).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
+  })
+
+  it.each(['unauthorized', 'expired', 'failed'] as const)(
+    '重连后授权状态为 %s 时清空状态并断开连接',
+    async (authStatus) => {
+      const store = useSessionStore()
+      store.setSession({
+        token: 'token',
+        username: 'auditor',
+        role: 'auditor',
+        authStatus: 'authorized',
+        authExpireTime: 0,
+        deviceDescription: 'USB_DEVICE',
+      })
+      const connection = useConnectionStore()
+      connection.deviceIp = '19.19.19.16'
+      connection.updateStatus('DISCONNECTED')
+      queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+        authorized: false,
+        expireTime: 0,
+        deviceDescription: 'USB_DEVICE',
+        authStatus,
+      }))
+
+      await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+      expect(connect).toHaveBeenCalledWith('19.19.19.16')
+      expect(store.token).toBe('')
+      expect(connection.deviceIp).toBe('')
+      expect(disconnect).toHaveBeenCalledTimes(1)
+      expect(disconnect).toHaveBeenCalledWith()
+    },
+  )
+
+  it('重新建链失败时清空状态并要求重新登录', async () => {
     const store = useSessionStore()
     store.setSession({
       token: 'token',
@@ -467,14 +535,15 @@ describe('useSessionStore', () => {
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
     connect.mockRejectedValueOnce(new Error('connect failed'))
+    const clearBootstrap = vi.spyOn(useBootstrapStore(), 'clear')
 
-    await expect(store.reconnectAndValidate()).rejects.toThrow(
-      'USB 管控装置重新连接失败，请检查网络或设备连接。',
-    )
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(queryAuthStatusMock).not.toHaveBeenCalled()
-    expect(store.token).toBe('token')
-    expect(store.deviceDescription).toBe('USB_DEVICE')
-    expect(connection.deviceIp).toBe('19.19.19.16')
+    expect(clearBootstrap).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('')
+    expect(store.deviceDescription).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 })

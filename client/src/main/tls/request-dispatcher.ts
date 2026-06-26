@@ -25,12 +25,25 @@ export class RequestDispatcher {
   private nextSeqId = 1
   private pending = new Map<number, PendingRequest>()
   private writeFn: (frame: Buffer) => void
+  private frozenError: Error | null = null
 
   constructor(writeFn: (frame: Buffer) => void) {
     this.writeFn = writeFn
   }
 
+  freeze(reason: Error): void {
+    this.frozenError = reason
+  }
+
+  unfreeze(): void {
+    this.frozenError = null
+  }
+
   dispatch(msgType: number, payload: Uint8Array, timeout?: number): Promise<TlsResponse> {
+    if (this.frozenError != null) {
+      return Promise.reject(this.frozenError)
+    }
+
     const resolvedTimeout =
       timeout ?? (FILE_TRANSFER_COMMANDS.has(msgType) ? FILE_TRANSFER_TIMEOUT : DEFAULT_TIMEOUT)
 
