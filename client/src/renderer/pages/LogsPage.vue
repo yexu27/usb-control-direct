@@ -9,10 +9,10 @@ import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page
 import {
   LOG_TABS,
   USB_EVENT_TYPE_OPTIONS,
-  formatOperationLogCategory,
   type LogType,
   getLogColumns,
 } from '@/utils/log-display'
+import { buildOperationLogContent } from '@/utils/operation-log-display'
 import {
   dateToUnixSeconds,
   formatUnixSeconds,
@@ -35,7 +35,6 @@ interface LogRow {
   deviceName?: string
   serialNumber?: string
   eventType?: string
-  logCategory?: string
   content: string
   virus?: string
   username?: string
@@ -361,8 +360,7 @@ function mapOperationRow(entry: usb_control.IOperationLogEntry): LogRow {
     id: String(entry.id ?? ''),
     time: formatUnixSeconds(entry.opTime ?? 0),
     username: entry.username ?? '',
-    logCategory: formatOperationLogCategory(entry.logCategory ?? ''),
-    content: buildContent(entry.detail, entry.result, entry.failReason),
+    content: buildOperationLogContent(entry),
   }
 }
 

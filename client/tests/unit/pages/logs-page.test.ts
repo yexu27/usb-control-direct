@@ -430,7 +430,6 @@ describe('LogsPage', () => {
     expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户登录，用户名：admin，成功')
     expect(wrapper.text()).toContain('修改文件访问控制策略 exec_control，关闭→开启，成功')
     expect(wrapper.text()).toContain('病毒库升级，版本升级至V3.0.0.3，成功')
-    expect(wrapper.text()).not.toContain('操作日志类型')
     expect(wrapper.text()).not.toContain('用户管理')
     expect(wrapper.text()).not.toContain('结果：0')
     expect(wrapper.text()).not.toContain('旧 detail 不应展示')
@@ -461,7 +460,7 @@ describe('LogsPage', () => {
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="log-operation-category"]').exists()).toBe(false)
+    expect(wrapper.find('select').exists()).toBe(false)
     expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
       logType: 'operation',
       eventType: '',
