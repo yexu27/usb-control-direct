@@ -2648,12 +2648,6 @@ export namespace usb_control {
 
         /** CmdQueryLogs pageSize */
         pageSize?: (number|null);
-
-        /** CmdQueryLogs logCategory */
-        logCategory?: (string|null);
-
-        /** CmdQueryLogs actionType */
-        actionType?: (string|null);
     }
 
     /** Represents a CmdQueryLogs. */
@@ -2688,12 +2682,6 @@ export namespace usb_control {
 
         /** CmdQueryLogs pageSize. */
         public pageSize: number;
-
-        /** CmdQueryLogs logCategory. */
-        public logCategory: string;
-
-        /** CmdQueryLogs actionType. */
-        public actionType: string;
 
         /**
          * Encodes the specified CmdQueryLogs message. Does not implicitly {@link usb_control.CmdQueryLogs.verify|verify} messages.
@@ -3399,12 +3387,6 @@ export namespace usb_control {
 
         /** CmdExportLogs eventType */
         eventType?: (string|null);
-
-        /** CmdExportLogs logCategory */
-        logCategory?: (string|null);
-
-        /** CmdExportLogs actionType */
-        actionType?: (string|null);
     }
 
     /** Represents a CmdExportLogs. */
@@ -3433,12 +3415,6 @@ export namespace usb_control {
 
         /** CmdExportLogs eventType. */
         public eventType: string;
-
-        /** CmdExportLogs logCategory. */
-        public logCategory: string;
-
-        /** CmdExportLogs actionType. */
-        public actionType: string;
 
         /**
          * Encodes the specified CmdExportLogs message. Does not implicitly {@link usb_control.CmdExportLogs.verify|verify} messages.

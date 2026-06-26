@@ -14,17 +14,9 @@ export interface DisplayOption<TValue extends string = string> {
 
 export type UsbEventType =
   | ''
-  | 'device_insert'
+  | 'insert_success'
+  | 'insert_failed'
   | 'device_remove'
-  | 'whitelist_denied'
-  | 'mapped'
-  | 'map_failed'
-  | 'file_access_denied'
-  | 'keyboard_verify_pass'
-  | 'keyboard_verify_fail'
-  | 'scan_interrupted'
-  | 'mouse_mapped'
-  | 'mouse_map_failed'
 
 export type OperationLogCategory =
   | ''
@@ -44,17 +36,9 @@ export const LOG_TABS: LogTab[] = [
 
 export const USB_EVENT_TYPE_OPTIONS: DisplayOption<UsbEventType>[] = [
   { value: '', label: '全部事件' },
-  { value: 'device_insert', label: '设备插入' },
-  { value: 'device_remove', label: '设备移除' },
-  { value: 'whitelist_denied', label: '禁止' },
-  { value: 'mapped', label: '映射成功' },
-  { value: 'map_failed', label: '映射失败' },
-  { value: 'file_access_denied', label: '阻断' },
-  { value: 'keyboard_verify_pass', label: '验证成功' },
-  { value: 'keyboard_verify_fail', label: '验证失败' },
-  { value: 'scan_interrupted', label: '扫描中断' },
-  { value: 'mouse_mapped', label: '鼠标映射成功' },
-  { value: 'mouse_map_failed', label: '鼠标映射失败' },
+  { value: 'insert_success', label: 'USB插入成功' },
+  { value: 'insert_failed', label: 'USB插入失败' },
+  { value: 'device_remove', label: 'USB拔出' },
 ]
 
 export const OPERATION_LOG_CATEGORY_OPTIONS: DisplayOption<OperationLogCategory>[] = [

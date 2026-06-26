@@ -82,8 +82,6 @@ const CREATED_AT = 1_767_225_600
 interface MockLogFilter {
   keyword: string
   eventType: string
-  logCategory: string
-  actionType: string
 }
 
 function stringifyLogValue(value: unknown): string {
@@ -116,12 +114,6 @@ export function filterMockLogsForQuery<TEntry extends object>(
       return false
     }
     if (filter.eventType !== '' && logEntry.eventType !== filter.eventType) {
-      return false
-    }
-    if (filter.logCategory !== '' && logEntry.logCategory !== filter.logCategory) {
-      return false
-    }
-    if (filter.actionType !== '' && logEntry.actionType !== filter.actionType) {
       return false
     }
     return true
@@ -180,7 +172,7 @@ export class MockDevice {
     eventTime: 1_767_225_610,
     deviceSn: 'USB-AUDIT-001',
     deviceName: 'Kingston DataTraveler',
-    eventType: 'mapped',
+    eventType: 'insert_success',
     result: 'allowed',
     detail: '白名单设备映射成功',
   }, {
@@ -188,7 +180,7 @@ export class MockDevice {
     eventTime: 1_767_225_611,
     deviceSn: 'USB-AUDIT-002',
     deviceName: 'Blocked USB',
-    eventType: 'whitelist_denied',
+    eventType: 'insert_failed',
     result: 'denied',
     detail: '未授权设备禁止接入',
   }]
@@ -690,8 +682,6 @@ export class MockDevice {
     const filter = {
       keyword: command.keyword,
       eventType: command.eventType,
-      logCategory: command.logCategory,
-      actionType: command.actionType,
     }
     const usbAuditEntries = command.logType === 'usb_audit'
       ? filterMockLogsForQuery(this.usbAuditLogs, filter)

@@ -227,6 +227,8 @@ message CmdImportPolicy {
 
 // CMD_QUERY_LOGS（0x0400）—— 查询日志
 message CmdQueryLogs {
+    reserved 9, 10;
+
     string session_token = 1;
     string log_type = 2;            // usb_audit / malware / operation
     int64 start_time = 3;           // Unix 秒，包含；0 表示不限
@@ -235,8 +237,6 @@ message CmdQueryLogs {
     string event_type = 6;          // USB 审计事件类型筛选，可为空
     int32 page = 7;                 // 页码（从 1 开始）
     int32 page_size = 8;            // 每页条数（默认 50）
-    string log_category = 9;        // 操作日志 PRD 页面分类筛选，可为空
-    string action_type = 10;        // 操作日志具体动作筛选，可为空
 }
 
 // USB 审计日志条目
@@ -309,14 +309,14 @@ message RspQueryLogs {
 
 // CMD_EXPORT_LOGS（0x0402）—— 导出日志
 message CmdExportLogs {
+    reserved 7, 8;
+
     string session_token = 1;
     string log_type = 2;
     int64 start_time = 3;           // Unix 秒，包含；0 表示不限
     int64 end_time = 4;             // Unix 秒，包含；0 表示不限
     string keyword = 5;
     string event_type = 6;
-    string log_category = 7;
-    string action_type = 8;
 }
 
 // RSP_EXPORT_LOGS（0x0403）

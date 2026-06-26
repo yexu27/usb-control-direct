@@ -157,7 +157,7 @@ describe('LogsPage', () => {
         eventTime: 1_767_225_610,
         deviceName: 'Kingston',
         deviceSn: 'SN001',
-        eventType: 'mapped',
+        eventType: 'insert_success',
         detail: '映射成功',
       }],
       malwareEntries: [],
@@ -175,8 +175,6 @@ describe('LogsPage', () => {
     expect(queryLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       eventType: '',
-      logCategory: '',
-      actionType: '',
     }))
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('设备名称')
     expect(wrapper.get('[data-testid="columns"]').text()).toContain('序列号')
@@ -215,12 +213,101 @@ describe('LogsPage', () => {
     expect(wrapper.find('[data-testid="log-event-chip"]').exists()).toBe(true)
   })
 
+  it('USB审计日志内容列按 PRD 9.2 组合展示结构化字段', async () => {
+    vi.mocked(queryLogs).mockResolvedValue({
+      success: true,
+      total: 5,
+      usbAuditEntries: [{
+        id: 1,
+        eventTime: 1_767_225_610,
+        deviceName: 'Kingston',
+        deviceSn: 'SN001',
+        deviceType: 'storage',
+        interfaceType: 'mass_storage',
+        eventType: 'insert_success',
+        permission: 'readwrite',
+        capacityBytes: 32_000_000_000,
+        result: 'success',
+        failReason: '',
+        detail: '',
+      }, {
+        id: 2,
+        eventTime: 1_767_225_611,
+        deviceName: 'Unknown USB',
+        deviceSn: '',
+        deviceType: 'unsupported',
+        interfaceType: 'unsupported',
+        eventType: 'insert_failed',
+        permission: '',
+        capacityBytes: 0,
+        result: 'failed',
+        failReason: '不支持的设备类型',
+        detail: '',
+      }, {
+        id: 3,
+        eventTime: 1_767_225_612,
+        deviceName: 'Keyboard',
+        deviceSn: '',
+        deviceType: 'keyboard',
+        interfaceType: 'hid_keyboard',
+        eventType: 'insert_success',
+        permission: '',
+        capacityBytes: 0,
+        result: 'success',
+        failReason: '',
+        detail: '验证通过',
+      }, {
+        id: 4,
+        eventTime: 1_767_225_613,
+        deviceName: 'Mouse',
+        deviceSn: '',
+        deviceType: 'mouse',
+        interfaceType: 'hid_mouse',
+        eventType: 'insert_failed',
+        permission: '',
+        capacityBytes: 0,
+        result: 'failed',
+        failReason: '映射失败',
+        detail: '',
+      }, {
+        id: 5,
+        eventTime: 1_767_225_614,
+        deviceName: 'Kingston',
+        deviceSn: 'SN001',
+        deviceType: 'storage',
+        interfaceType: 'mass_storage',
+        eventType: 'device_remove',
+        permission: 'readonly',
+        capacityBytes: 32_000_000_000,
+        result: 'removed',
+        failReason: '',
+        detail: '',
+      }],
+      malwareEntries: [],
+      operationEntries: [],
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('授权设备, 读写, 32GB, 映射完成')
+    expect(text).toContain('不支持的 USB 设备类型, 禁止使用')
+    expect(text).toContain('键盘, 验证通过, 映射完成')
+    expect(text).toContain('鼠标, 映射失败')
+    expect(text).toContain('授权设备, 只读')
+    expect(text).not.toContain('结果：success')
+    expect(text).not.toContain('结果：failed')
+  })
+
   it('切换日志类型时清空搜索条件并恢复默认分页', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     wrapper.getComponent(DataTableStub).vm.$emit('page-size-change', 50)
     await flushPromises()
 
@@ -231,7 +318,6 @@ describe('LogsPage', () => {
       logType: 'operation',
       keyword: '',
       eventType: '',
-      logCategory: '',
       page: 1,
       pageSize: 20,
     }))
@@ -242,15 +328,14 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
 
     expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       keyword: 'Kingston',
-      eventType: 'mapped',
-      logCategory: '',
+      eventType: 'insert_success',
       page: 1,
     }))
   })
@@ -260,7 +345,7 @@ describe('LogsPage', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="log-keyword"]').setValue('Kingston')
-    await wrapper.get('[data-testid="log-event-type"]').setValue('mapped')
+    await wrapper.get('[data-testid="log-event-type"]').setValue('insert_success')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
     vi.mocked(queryLogs).mockClear()
@@ -271,8 +356,7 @@ describe('LogsPage', () => {
     expect(queryLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'usb_audit',
       keyword: 'Kingston',
-      eventType: 'mapped',
-      logCategory: '',
+      eventType: 'insert_success',
       page: 1,
       pageSize: 20,
     }))
@@ -292,7 +376,6 @@ describe('LogsPage', () => {
       logType: 'malware',
       keyword: 'EICAR',
       eventType: '',
-      logCategory: '',
       page: 1,
     }))
   })
@@ -323,7 +406,7 @@ describe('LogsPage', () => {
     expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户管理')
   })
 
-  it('操作日志按类型筛选并在导出时携带相同类型', async () => {
+  it('操作日志不展示分类筛选且查询和导出不携带分类字段', async () => {
     vi.mocked(exportLogs).mockResolvedValue({
       success: true,
       zipData: new Uint8Array([1, 2, 3]),
@@ -345,14 +428,17 @@ describe('LogsPage', () => {
 
     await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
     await flushPromises()
-    await wrapper.get('[data-testid="log-operation-category"]').setValue('user_management')
     await wrapper.get('[data-testid="log-search"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.find('[data-testid="log-operation-category"]').exists()).toBe(false)
     expect(queryLogs).toHaveBeenLastCalledWith('token', expect.objectContaining({
       logType: 'operation',
       eventType: '',
-      logCategory: 'user_management',
+    }))
+    expect(queryLogs).toHaveBeenLastCalledWith('token', expect.not.objectContaining({
+      logCategory: expect.anything(),
+      actionType: expect.anything(),
     }))
 
     await wrapper.get('[data-testid="log-export"]').trigger('click')
@@ -361,7 +447,10 @@ describe('LogsPage', () => {
     expect(exportLogs).toHaveBeenCalledWith('token', expect.objectContaining({
       logType: 'operation',
       eventType: '',
-      logCategory: 'user_management',
+    }))
+    expect(exportLogs).toHaveBeenCalledWith('token', expect.not.objectContaining({
+      logCategory: expect.anything(),
+      actionType: expect.anything(),
     }))
   })
 

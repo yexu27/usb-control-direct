@@ -21,8 +21,6 @@ export interface LogQueryInput {
   eventType: string
   page: number
   pageSize: number
-  logCategory: string
-  actionType: string
 }
 
 export type LogExportInput = Omit<LogQueryInput, 'page' | 'pageSize'>
