@@ -246,6 +246,7 @@ export class MockDevice {
   public systemUpgradeUploadCount = 0
   public virusdbUpgradeUploadCount = 0
   public licenseUploadCount = 0
+  public listUsersCount = 0
 
   constructor(private readonly scenario: MockScenario) {
     const { role } = scenario
@@ -453,6 +454,7 @@ export class MockDevice {
       case 0x0504:
         return this.updateDeviceDescriptionResponse(payload)
       case 0x0600:
+        this.listUsersCount += 1
         return {
           msgType: 0x0601,
           messageClass: usb_control.RspListUsers,

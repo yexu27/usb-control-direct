@@ -394,21 +394,41 @@ test.describe('管理员与审计员页面业务闭环', () => {
     })
   })
 
-  test('用户管理断线后授权态失效时重连进入授权页', async () => {
+  test('用户管理断线后授权状态不可恢复时重连返回登录页', async () => {
     await withDevice(async (device, _app, page) => {
       await login(page, 'admin', 'admin@123')
       await expect(page).toHaveURL(/#\/users$/)
       await expectUsersLayout(page)
 
+      const beforeReconnectListCount = device.listUsersCount
       device.setAuthStatusForTest('unauthorized')
       device.disconnectSockets()
       await expect(page.getByTestId('connection-status')).toContainText('未连接')
 
       await page.getByTestId('connection-reconnect').click()
 
-      await expect(page).toHaveURL(/#\/license$/)
+      await expect(page).toHaveURL(/#\/login$/)
+      await expect(page).not.toHaveURL(/#\/license$/)
       await expect(page.getByText('USB 管控装置已断开连接，操作失败。')).toHaveCount(0)
-      await expect(page.getByRole('heading', { name: '设备授权' })).toBeVisible()
+      expect(device.listUsersCount).toBe(beforeReconnectListCount)
+    })
+  })
+
+  test('用户管理断线后授权状态可恢复时重连停留当前页并刷新列表', async () => {
+    await withDevice(async (device, _app, page) => {
+      await login(page, 'admin', 'admin@123')
+      await expect(page).toHaveURL(/#\/users$/)
+      await expectUsersLayout(page)
+
+      const beforeReconnectListCount = device.listUsersCount
+      device.disconnectSockets()
+      await expect(page.getByTestId('connection-status')).toContainText('未连接')
+
+      await page.getByTestId('connection-reconnect').click()
+
+      await expect(page).toHaveURL(/#\/users$/)
+      await expectLatestMessage(page, 'USB 管控装置重新连接成功')
+      await expect.poll(() => device.listUsersCount).toBeGreaterThan(beforeReconnectListCount)
     })
   })
 })
