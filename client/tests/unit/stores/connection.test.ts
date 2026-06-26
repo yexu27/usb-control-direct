@@ -62,7 +62,7 @@ describe('useConnectionStore', () => {
     } as unknown as Window['desktopApi']
     const store = useConnectionStore()
 
-    await store.applyStateEvent('CONFIG_LOADED')
+    await expect(store.applyStateEvent('CONFIG_LOADED')).resolves.toBe('CONNECTED')
 
     expect(applyStateEvent).toHaveBeenCalledWith('CONFIG_LOADED')
     expect(store.status).toBe('CONNECTED')

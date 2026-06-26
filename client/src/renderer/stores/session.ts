@@ -160,7 +160,7 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function validateSession(): Promise<ReconnectValidationResult> {
+  async function validateReconnectSession(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
       return 'login-required'
     }
@@ -202,7 +202,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!reconnected) {
       throw new Error('USB 管控装置重新连接失败，请检查网络或设备连接。')
     }
-    return validateSession()
+    return validateReconnectSession()
   }
 
   function startInactivityTimer(): void {
@@ -236,7 +236,6 @@ export const useSessionStore = defineStore('session', () => {
     isAuthorized,
     login,
     logout,
-    validateSession,
     reconnectAndValidate,
     clearSession,
     setSession,

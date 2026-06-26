@@ -66,9 +66,10 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function applyStateEvent(event: ConnectionEvent): Promise<void> {
+  async function applyStateEvent(event: ConnectionEvent): Promise<ConnectionStatus> {
     const nextStatus = await window.desktopApi.tls.applyStateEvent(event)
     setStatus(nextStatus)
+    return nextStatus
   }
 
   function updateStatus(newStatus: ConnectionStatus): void {

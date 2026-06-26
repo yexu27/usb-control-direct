@@ -8,6 +8,7 @@ import { getFilePolicy } from '../../../src/renderer/services/file-policy-servic
 import { ServiceError } from '../../../src/renderer/services/send-command'
 import { usb_control } from '../../../src/shared/proto/usb_control'
 import type { ConnectionEvent, ConnectionStatus } from '../../../src/shared/connection-state'
+import { ConnectionStateMachine } from '../../../src/main/tls/connection-state'
 
 vi.mock('../../../src/renderer/services/auth-service', () => ({
   login: vi.fn(),
@@ -42,22 +43,13 @@ const logoutMock = vi.mocked(logout)
 const queryAuthStatusMock = vi.mocked(queryAuthStatus)
 const listWhitelistMock = vi.mocked(listWhitelist)
 const getFilePolicyMock = vi.mocked(getFilePolicy)
-const connect = vi.fn().mockResolvedValue(undefined)
+const connect = vi.fn()
 const disconnect = vi.fn().mockResolvedValue(undefined)
 const applyStateEvent = vi.fn()
+let stateMachine: ConnectionStateMachine
 
 function mockApplyStateEvent(event: ConnectionEvent): Promise<ConnectionStatus> {
-  const statusByEvent: Partial<Record<ConnectionEvent, ConnectionStatus>> = {
-    AUTH_SUCCESS: 'CHECK_LICENSE',
-    AUTH_FAIL: 'AUTHENTICATING',
-    LICENSE_AUTHORIZED: 'LOADING_CONFIG',
-    LICENSE_UNAUTHORIZED: 'AUTH_REQUIRED',
-    LICENSE_EXPIRED: 'LICENSE_EXPIRED',
-    CONFIG_LOADED: 'CONNECTED',
-    CONFIG_FAILED: 'DISCONNECTED',
-    LICENSE_UPLOAD_SUCCESS: 'DISCONNECTED',
-  }
-  return Promise.resolve(statusByEvent[event] ?? 'DISCONNECTED')
+  return Promise.resolve(stateMachine.transition(event))
 }
 
 describe('useSessionStore', () => {
@@ -65,6 +57,11 @@ describe('useSessionStore', () => {
     setActivePinia(createPinia())
     vi.useFakeTimers()
     vi.clearAllMocks()
+    stateMachine = new ConnectionStateMachine()
+    connect.mockImplementation(async () => {
+      stateMachine.transition('CONNECT_START')
+      stateMachine.transition('CONNECT_SUCCESS')
+    })
     applyStateEvent.mockImplementation(mockApplyStateEvent)
     window.desktopApi = {
       tls: {
@@ -321,7 +318,6 @@ describe('useSessionStore', () => {
   it('本地无 token 时重连校验要求重新登录且不访问装置', async () => {
     const store = useSessionStore()
 
-    await expect(store.validateSession()).resolves.toBe('login-required')
     await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(queryAuthStatusMock).not.toHaveBeenCalled()
@@ -338,6 +334,9 @@ describe('useSessionStore', () => {
       authExpireTime: 0,
       deviceDescription: '',
     })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 0,
@@ -345,8 +344,40 @@ describe('useSessionStore', () => {
       authStatus: 'authorized',
     }))
 
-    await expect(store.validateSession()).resolves.toBe('resumable')
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(applyStateEvent).toHaveBeenCalledWith('AUTH_SUCCESS')
+  })
+
+  it('已连接状态下重连校验会先重新建链再重放认证状态', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: '',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('CONNECTED')
+    queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+      authorized: true,
+      expireTime: 123,
+      deviceDescription: 'USB_DEVICE',
+      authStatus: 'authorized',
+    }))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
+
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(applyStateEvent.mock.calls.map(([event]) => event)).toEqual([
+      'AUTH_SUCCESS',
+      'LICENSE_AUTHORIZED',
+      'CONFIG_LOADED',
+    ])
   })
 
   it('断线后重新建链并校验当前会话', async () => {
