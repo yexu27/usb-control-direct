@@ -9,7 +9,7 @@ use common::proto::{
     CmdAddBlacklistExtension, CmdGetFilePolicy, CmdRemoveBlacklistExtension,
     CmdUpdateFilePolicySwitch, FileTypeBlacklistItem, RspCommon, RspFilePolicy,
 };
-use storage::model::OperationLogInsert;
+use super::audit_helper::{log_operation_from_ctx, OperationDetail};
 use storage::StorageError;
 
 use crate::codec;
@@ -103,15 +103,28 @@ pub fn handle_update_file_policy_switch(ctx: &RequestContext, payload: &[u8]) ->
         None => return error_response(ctx.seq_id, ResultCode::InternalError, "存储服务未初始化"),
     };
 
+    // 查询变更前的开关状态，用于审计日志。
+    let old_enabled = storage
+        .policy_query(&cmd.policy_key)
+        .ok()
+        .flatten()
+        .map(|p| p.enabled == 1);
+
     match storage.policy_update(&cmd.policy_key, cmd.enabled) {
         Ok(()) => {
             info!(key = %cmd.policy_key, enabled = cmd.enabled, "文件策略开关更新成功");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 0, None);
+            let ext = OperationDetail {
+                before_value: old_enabled
+                    .map(|e| format!(r#"{{"enabled":{}}}"#, e)),
+                after_value: Some(format!(r#"{{"enabled":{}}}"#, cmd.enabled)),
+                ..Default::default()
+            };
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 0, None, &ext);
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(key = %cmd.policy_key, reason = %e, "文件策略开关更新失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::FILE_POLICY_UPDATE, Some(&cmd.policy_key), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }
@@ -157,12 +170,12 @@ pub fn handle_add_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -> V
     match storage.blacklist_insert(&extension, description) {
         Ok(_id) => {
             info!(ext = %extension, "黑名单后缀添加成功");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 0, None);
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 0, None, &OperationDetail::default());
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀添加失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_ADD, Some(&extension), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(
                 ctx.seq_id,
                 map_blacklist_insert_error(&e),
@@ -206,12 +219,12 @@ pub fn handle_remove_blacklist_extension(ctx: &RequestContext, payload: &[u8]) -
     match storage.blacklist_delete(&extension) {
         Ok(()) => {
             info!(ext = %extension, "黑名单后缀删除成功");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 0, None);
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 0, None, &OperationDetail::default());
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(ext = %extension, reason = %e, "黑名单后缀删除失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::BLACKLIST_REMOVE, Some(&extension), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(ctx.seq_id, ResultCode::InternalError, &e.to_string())
         }
     }
@@ -227,41 +240,6 @@ fn map_blacklist_insert_error(error: &StorageError) -> ResultCode {
         StorageError::Validation(_) => ResultCode::ExtensionFormatError,
         _ => ResultCode::InternalError,
     }
-}
-
-/// 写审计日志。
-fn write_audit_log(
-    ctx: &RequestContext,
-    log_type: &str,
-    action_type: &str,
-    target: Option<&str>,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: ctx
-            .session
-            .as_ref()
-            .map(|s| s.username.clone())
-            .unwrap_or_default(),
-        role: ctx.session.as_ref().map(|s| s.role).unwrap_or(-1),
-        log_type: log_type.into(),
-        action_type: Some(action_type.into()),
-        target: target.map(|t| t.to_string()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|r| r.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 fn success_response(seq_id: u32) -> Vec<u8> {
