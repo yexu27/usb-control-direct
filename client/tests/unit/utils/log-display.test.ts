@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LOG_TABS,
+  USB_EVENT_TYPE_OPTIONS,
   getLogColumns,
 } from '../../../src/renderer/utils/log-display'
 
@@ -29,6 +30,14 @@ describe('log display utils', () => {
       '用户',
       '操作日志类型',
       '内容',
+    ])
+  })
+
+  it('defines USB audit event filter options from server protocol', () => {
+    expect(USB_EVENT_TYPE_OPTIONS).toEqual([
+      { value: '', label: '全部事件' },
+      { value: 'insert_success', label: 'USB插入成功' },
+      { value: 'device_remove', label: 'USB移除成功' },
     ])
   })
 })

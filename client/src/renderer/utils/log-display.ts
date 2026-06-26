@@ -15,7 +15,6 @@ export interface DisplayOption<TValue extends string = string> {
 export type UsbEventType =
   | ''
   | 'insert_success'
-  | 'insert_failed'
   | 'device_remove'
 
 export const LOG_TABS: LogTab[] = [
@@ -27,8 +26,7 @@ export const LOG_TABS: LogTab[] = [
 export const USB_EVENT_TYPE_OPTIONS: DisplayOption<UsbEventType>[] = [
   { value: '', label: '全部事件' },
   { value: 'insert_success', label: 'USB插入成功' },
-  { value: 'insert_failed', label: 'USB插入失败' },
-  { value: 'device_remove', label: 'USB拔出' },
+  { value: 'device_remove', label: 'USB移除成功' },
 ]
 
 export function getLogColumns(logType: LogType): DataTableColumn[] {

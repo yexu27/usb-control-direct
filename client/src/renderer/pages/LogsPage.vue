@@ -14,6 +14,7 @@ import {
 } from '@/utils/log-display'
 import { buildMalwareLogContent } from '@/utils/malware-log-display'
 import { buildOperationLogContent, formatOperationLogType } from '@/utils/operation-log-display'
+import { buildUsbAuditContent, formatUsbEventType } from '@/utils/usb-audit-log-display'
 import {
   dateToUnixSeconds,
   formatUnixSeconds,
@@ -169,182 +170,6 @@ function mapUsbAuditRow(entry: usb_control.IUsbAuditLogEntry): LogRow {
   }
 }
 
-type UsbAuditDeviceKind = 'storage' | 'keyboard' | 'mouse' | 'unsupported'
-
-interface LongLike {
-  toNumber?: () => number
-}
-
-function buildUsbAuditContent(entry: usb_control.IUsbAuditLogEntry): string {
-  const deviceKind = getUsbAuditDeviceKind(entry)
-  const action = getUsbAuditActionText(entry, deviceKind)
-
-  if (deviceKind === 'storage') {
-    const parts = [getStorageDeviceCategory(entry)]
-    const permission = formatUsbAuditPermission(entry.permission)
-    const capacity = formatUsbAuditCapacity(entry.capacityBytes)
-
-    if (entry.eventType === 'insert_success') {
-      if (permission !== '') {
-        parts.push(permission)
-      }
-      if (capacity !== '') {
-        parts.push(capacity)
-      }
-      parts.push(action)
-      return parts.join(', ')
-    }
-
-    if (entry.eventType === 'device_remove') {
-      if (permission !== '') {
-        parts.push(permission)
-      }
-      return parts.join(', ')
-    }
-
-    parts.push(action)
-    return parts.join(', ')
-  }
-
-  if (deviceKind === 'keyboard') {
-    return ['键盘', action].filter((item) => item !== '').join(', ')
-  }
-
-  if (deviceKind === 'mouse') {
-    return ['鼠标', action].filter((item) => item !== '').join(', ')
-  }
-
-  return ['不支持的 USB 设备类型', action].filter((item) => item !== '').join(', ')
-}
-
-function getUsbAuditDeviceKind(entry: usb_control.IUsbAuditLogEntry): UsbAuditDeviceKind {
-  const deviceType = String(entry.deviceType ?? '').toLowerCase()
-  const interfaceType = String(entry.interfaceType ?? '').toLowerCase()
-
-  if (deviceType === 'storage' || interfaceType === 'mass_storage') {
-    return 'storage'
-  }
-  if (deviceType === 'keyboard' || interfaceType === 'hid_keyboard') {
-    return 'keyboard'
-  }
-  if (deviceType === 'mouse' || interfaceType === 'hid_mouse') {
-    return 'mouse'
-  }
-  return 'unsupported'
-}
-
-function getStorageDeviceCategory(entry: usb_control.IUsbAuditLogEntry): string {
-  const result = String(entry.result ?? '').toLowerCase()
-  const failReason = `${entry.failReason ?? ''}${entry.detail ?? ''}`
-
-  if (
-    result === 'denied' ||
-    result === 'blocked' ||
-    failReason.includes('未授权') ||
-    failReason.includes('不在白名单')
-  ) {
-    return '未授权设备'
-  }
-
-  return '授权设备'
-}
-
-function formatUsbAuditPermission(permission: string | null | undefined): string {
-  const value = String(permission ?? '').toLowerCase()
-  if (value === 'readwrite' || value === 'rw' || value === '1') {
-    return '读写'
-  }
-  if (value === 'readonly' || value === 'read_only' || value === 'ro' || value === '0') {
-    return '只读'
-  }
-  return ''
-}
-
-function formatUsbAuditCapacity(value: number | LongLike | null | undefined): string {
-  const bytes = toSafeNumber(value)
-  if (bytes <= 0) {
-    return ''
-  }
-  const gb = bytes / 1_000_000_000
-  if (gb >= 1) {
-    return `${Number.isInteger(gb) ? gb : Number(gb.toFixed(1))}GB`
-  }
-  const mb = bytes / 1_000_000
-  if (mb >= 1) {
-    return `${Number.isInteger(mb) ? mb : Number(mb.toFixed(1))}MB`
-  }
-  return `${bytes}B`
-}
-
-function toSafeNumber(value: number | LongLike | null | undefined): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0
-  }
-  if (value != null && typeof value.toNumber === 'function') {
-    const numeric = value.toNumber()
-    return Number.isFinite(numeric) ? numeric : 0
-  }
-  return 0
-}
-
-function getUsbAuditActionText(
-  entry: usb_control.IUsbAuditLogEntry,
-  deviceKind: UsbAuditDeviceKind,
-): string {
-  const eventType = String(entry.eventType ?? '')
-  const result = String(entry.result ?? '').toLowerCase()
-  const failReason = String(entry.failReason ?? '')
-  const detail = String(entry.detail ?? '')
-  const source = `${failReason} ${detail}`.trim()
-
-  if (eventType === 'device_remove') {
-    return ''
-  }
-
-  if (deviceKind === 'unsupported') {
-    return '禁止使用'
-  }
-
-  if (eventType === 'insert_success') {
-    if (deviceKind === 'keyboard') {
-      return source.includes('验证') ? `${normalizeUsbAuditReason(source)}, 映射完成` : '验证通过, 映射完成'
-    }
-    if (deviceKind === 'mouse') {
-      return '映射完成'
-    }
-    return '映射完成'
-  }
-
-  if (source.includes('扫描中断')) {
-    return source.includes('拔出') ? '扫描中断, U 盘拔出' : '扫描中断'
-  }
-  if (source.includes('挂载失败')) {
-    return '挂载失败'
-  }
-  if (source.includes('验证未通过') || source.includes('验证失败')) {
-    return '验证未通过'
-  }
-  if (source.includes('映射失败') || result === 'failed') {
-    return '映射失败'
-  }
-  if (source.includes('未授权') || source.includes('不在白名单') || result === 'denied' || result === 'blocked') {
-    return '禁止使用'
-  }
-
-  return normalizeUsbAuditReason(source) || '禁止使用'
-}
-
-function normalizeUsbAuditReason(value: string): string {
-  const text = value.trim()
-  if (text === '') {
-    return ''
-  }
-  if (text.includes('不支持的设备类型')) {
-    return '禁止使用'
-  }
-  return text
-}
-
 function mapMalwareRow(entry: usb_control.IMalwareLogEntry): LogRow {
   return {
     id: String(entry.id ?? ''),
@@ -365,19 +190,12 @@ function mapOperationRow(entry: usb_control.IOperationLogEntry): LogRow {
   }
 }
 
-function formatUsbEventType(value: string): string {
-  return USB_EVENT_TYPE_OPTIONS.find((item) => item.value === value)?.label ?? value
-}
-
 function eventChipClass(eventType: string | undefined): string {
   if (eventType === 'USB插入成功') {
     return 'success'
   }
-  if (eventType === 'USB拔出') {
+  if (eventType === 'USB移除成功') {
     return 'info'
-  }
-  if (eventType === 'USB插入失败') {
-    return 'danger'
   }
   return 'info'
 }

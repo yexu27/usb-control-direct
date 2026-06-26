@@ -158,7 +158,9 @@ describe('LogsPage', () => {
         deviceName: 'Kingston',
         deviceSn: 'SN001',
         eventType: 'insert_success',
-        detail: '映射成功',
+        detail: '授权设备',
+        permission: 'readwrite',
+        capacityBytes: 32_000_000_000,
       }],
       malwareEntries: [],
       operationEntries: [],
@@ -227,22 +229,18 @@ describe('LogsPage', () => {
         eventType: 'insert_success',
         permission: 'readwrite',
         capacityBytes: 32_000_000_000,
-        result: 'success',
-        failReason: '',
-        detail: '',
+        detail: '授权设备',
       }, {
         id: 2,
         eventTime: 1_767_225_611,
-        deviceName: 'Unknown USB',
+        deviceName: 'Unknown Storage',
         deviceSn: '',
-        deviceType: 'unsupported',
-        interfaceType: 'unsupported',
-        eventType: 'insert_failed',
+        deviceType: 'storage',
+        interfaceType: 'mass_storage',
+        eventType: 'insert_success',
         permission: '',
         capacityBytes: 0,
-        result: 'failed',
-        failReason: '不支持的设备类型',
-        detail: '',
+        detail: '未授权设备',
       }, {
         id: 3,
         eventTime: 1_767_225_612,
@@ -253,9 +251,7 @@ describe('LogsPage', () => {
         eventType: 'insert_success',
         permission: '',
         capacityBytes: 0,
-        result: 'success',
-        failReason: '',
-        detail: '验证通过',
+        detail: '键盘',
       }, {
         id: 4,
         eventTime: 1_767_225_613,
@@ -263,12 +259,10 @@ describe('LogsPage', () => {
         deviceSn: '',
         deviceType: 'mouse',
         interfaceType: 'hid_mouse',
-        eventType: 'insert_failed',
+        eventType: 'insert_success',
         permission: '',
         capacityBytes: 0,
-        result: 'failed',
-        failReason: '映射失败',
-        detail: '',
+        detail: '鼠标',
       }, {
         id: 5,
         eventTime: 1_767_225_614,
@@ -279,9 +273,7 @@ describe('LogsPage', () => {
         eventType: 'device_remove',
         permission: 'readonly',
         capacityBytes: 32_000_000_000,
-        result: 'removed',
-        failReason: '',
-        detail: '',
+        detail: '授权设备',
       }],
       malwareEntries: [],
       operationEntries: [],
@@ -293,13 +285,15 @@ describe('LogsPage', () => {
     await flushPromises()
 
     const text = wrapper.text()
-    expect(text).toContain('授权设备, 读写, 32GB, 映射完成')
-    expect(text).toContain('不支持的 USB 设备类型, 禁止使用')
-    expect(text).toContain('键盘, 验证通过, 映射完成')
-    expect(text).toContain('鼠标, 映射失败')
+    expect(text).toContain('授权设备, 读写, 32GB')
+    expect(text).toContain('未授权设备')
+    expect(text).toContain('键盘')
+    expect(text).toContain('鼠标')
     expect(text).toContain('授权设备, 只读')
-    expect(text).not.toContain('结果：success')
-    expect(text).not.toContain('结果：failed')
+    expect(text).not.toContain('映射完成')
+    expect(text).not.toContain('禁止使用')
+    expect(text).not.toContain('验证通过')
+    expect(text).not.toContain('映射失败')
   })
 
   it('切换日志类型时清空搜索条件并恢复默认分页', async () => {
