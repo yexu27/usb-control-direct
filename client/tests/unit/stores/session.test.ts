@@ -312,6 +312,7 @@ describe('useSessionStore', () => {
       authExpireTime: 0,
       deviceDescription: '',
     })
+    useConnectionStore().updateStatus('CONNECTED')
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 0,
@@ -319,7 +320,7 @@ describe('useSessionStore', () => {
       authStatus: 'authorized',
     }))
 
-    await expect(store.validateSession()).resolves.toBe(true)
+    await expect(store.validateSession()).resolves.toBe('resumable')
     expect(applyStateEvent).toHaveBeenCalledWith('AUTH_SUCCESS')
   })
 
@@ -336,6 +337,11 @@ describe('useSessionStore', () => {
     const connection = useConnectionStore()
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
+    applyStateEvent.mockImplementation(async (event) => {
+      if (event === 'CONFIG_LOADED') {
+        connection.updateStatus('CONNECTED')
+      }
+    })
     queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
       authorized: true,
       expireTime: 123,
@@ -343,7 +349,7 @@ describe('useSessionStore', () => {
       authStatus: 'authorized',
     }))
 
-    await expect(store.reconnectAndValidate()).resolves.toBe(true)
+    await expect(store.reconnectAndValidate()).resolves.toBe('resumable')
 
     expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(queryAuthStatusMock).toHaveBeenCalledWith('token')
@@ -370,7 +376,7 @@ describe('useSessionStore', () => {
     connection.updateStatus('DISCONNECTED')
     queryAuthStatusMock.mockRejectedValue(new ServiceError('会话已失效', 0x1001, 'unauthenticated'))
 
-    await expect(store.reconnectAndValidate()).resolves.toBe(false)
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
     expect(connect).toHaveBeenCalledWith('19.19.19.16')
     expect(store.token).toBe('')
@@ -378,6 +384,38 @@ describe('useSessionStore', () => {
     expect(disconnect).toHaveBeenCalledTimes(1)
     expect(disconnect).toHaveBeenCalledWith()
   })
+
+  it.each(['unauthorized', 'expired', 'failed'] as const)(
+    '重连后授权状态为 %s 时清空状态并断开连接',
+    async (authStatus) => {
+      const store = useSessionStore()
+      store.setSession({
+        token: 'token',
+        username: 'auditor',
+        role: 'auditor',
+        authStatus: 'authorized',
+        authExpireTime: 0,
+        deviceDescription: 'USB_DEVICE',
+      })
+      const connection = useConnectionStore()
+      connection.deviceIp = '19.19.19.16'
+      connection.updateStatus('DISCONNECTED')
+      queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+        authorized: false,
+        expireTime: 0,
+        deviceDescription: 'USB_DEVICE',
+        authStatus,
+      }))
+
+      await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+      expect(connect).toHaveBeenCalledWith('19.19.19.16')
+      expect(store.token).toBe('')
+      expect(connection.deviceIp).toBe('')
+      expect(disconnect).toHaveBeenCalledTimes(1)
+      expect(disconnect).toHaveBeenCalledWith()
+    },
+  )
 
   it('重新建链失败时保留当前会话状态', async () => {
     const store = useSessionStore()

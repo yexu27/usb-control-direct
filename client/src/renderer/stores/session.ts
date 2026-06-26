@@ -18,6 +18,8 @@ export interface LoginResult {
   errorMessage: string
 }
 
+export type ReconnectValidationResult = 'resumable' | 'login-required'
+
 function parseUserRole(role: string): UserRole {
   if (role === 'admin' || role === 'operator' || role === 'auditor') {
     return role
@@ -158,32 +160,43 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function validateSession(): Promise<boolean> {
+  async function validateSession(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
-      return false
+      return 'login-required'
     }
+
+    const connection = useConnectionStore()
+    const bootstrapStore = useBootstrapStore()
 
     try {
       const response = await queryAuthStatus(token.value)
-      authStatus.value = parseAuthStatus(response.authStatus)
+      authStatus.value = parseAuthStatus(response.authStatus) || (response.authorized ? 'authorized' : '')
       authExpireTime.value = Number(response.expireTime)
       deviceDescription.value = response.deviceDescription
       await finishAuthentication()
-      return true
+
+      if (authStatus.value !== 'authorized' || role.value === '' || !connection.isConnected) {
+        bootstrapStore.clear()
+        clearSession()
+        await connection.disconnect(true).catch(() => {})
+        return 'login-required'
+      }
+
+      return 'resumable'
     } catch (error: unknown) {
       if (error instanceof ServiceError && error.kind === 'unauthenticated') {
-        useBootstrapStore().clear()
+        bootstrapStore.clear()
         clearSession()
-        await useConnectionStore().disconnect(true).catch(() => {})
-        return false
+        await connection.disconnect(true).catch(() => {})
+        return 'login-required'
       }
       throw error
     }
   }
 
-  async function reconnectAndValidate(): Promise<boolean> {
+  async function reconnectAndValidate(): Promise<ReconnectValidationResult> {
     if (token.value === '') {
-      return false
+      return 'login-required'
     }
     const reconnected = await useConnectionStore().reconnect()
     if (!reconnected) {
