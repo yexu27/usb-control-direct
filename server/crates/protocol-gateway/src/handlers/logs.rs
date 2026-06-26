@@ -253,7 +253,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match log_audit::export::generate_zip(&csv_filename, &csv_content) {
         Ok(zip_data) => {
             info!(user = %session.username, log_type = %cmd.log_type, size = zip_data.len(), "日志导出成功");
-            log_operation(ctx, session, log_type::LOG_MANAGEMENT, "export", &cmd.log_type, 0, None);
+            log_operation(ctx, session, log_type::LOG_MANAGEMENT, action_type::LOG_EXPORT, &cmd.log_type, 0, None);
             let rsp = RspExportLogs {
                 success: true,
                 zip_data,
@@ -270,7 +270,7 @@ pub fn handle_export_logs(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
                 ctx,
                 session,
                 log_type::LOG_MANAGEMENT,
-                "export",
+                action_type::LOG_EXPORT,
                 &cmd.log_type,
                 1,
                 Some(&e.to_string()),
