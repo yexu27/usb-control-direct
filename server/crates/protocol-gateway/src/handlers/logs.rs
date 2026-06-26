@@ -446,8 +446,9 @@ fn map_malware(item: &storage::model::MalwareLog) -> MalwareLogEntry {
         virus_db_version: item.virus_db_version.clone().unwrap_or_default(),
         process_result: item
             .process_result
-            .map(|r| r.to_string())
-            .unwrap_or_default(),
+            .and_then(|r| common::mapping::process_result_int_to_str(r).ok())
+            .unwrap_or("")
+            .to_string(),
         fail_reason: item.fail_reason.clone().unwrap_or_default(),
         detail: item.detail.clone().unwrap_or_default(),
     }
@@ -506,6 +507,28 @@ fn generate_usb_audit_csv(items: &[storage::model::UsbAuditLog]) -> String {
     csv
 }
 
+/// 扫描结果数字转中文（CSV 导出用）。
+fn scan_result_to_chinese(value: i32) -> &'static str {
+    match value {
+        0 => "未发现病毒",
+        1 => "发现病毒",
+        2 => "扫描失败",
+        3 => "扫描中断",
+        _ => "未知",
+    }
+}
+
+/// 处理结果数字转中文（CSV 导出用）。
+fn process_result_to_chinese(value: i32) -> &'static str {
+    match value {
+        0 => "已标记阻断",
+        1 => "已阻断",
+        2 => "处理失败",
+        3 => "无需处理",
+        _ => "未知",
+    }
+}
+
 /// 生成恶意代码检测日志 CSV。
 fn generate_malware_csv(items: &[storage::model::MalwareLog]) -> String {
     let mut csv = String::from(
@@ -519,10 +542,10 @@ fn generate_malware_csv(items: &[storage::model::MalwareLog]) -> String {
             item.device_sn.as_deref().unwrap_or(""),
             escape_csv(item.device_name.as_deref().unwrap_or("")),
             escape_csv(item.file_path.as_deref().unwrap_or("")),
-            item.scan_result,
+            scan_result_to_chinese(item.scan_result),
             escape_csv(item.virus_name.as_deref().unwrap_or("")),
             item.virus_db_version.as_deref().unwrap_or(""),
-            item.process_result.unwrap_or(0),
+            item.process_result.map(process_result_to_chinese).unwrap_or(""),
             escape_csv(item.fail_reason.as_deref().unwrap_or("")),
             escape_csv(item.detail.as_deref().unwrap_or("")),
         ));
