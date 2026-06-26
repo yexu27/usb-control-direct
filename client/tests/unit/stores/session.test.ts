@@ -302,6 +302,16 @@ describe('useSessionStore', () => {
     expect(loginMock).toHaveBeenCalledTimes(2)
   })
 
+  it('本地无 token 时重连校验要求重新登录且不访问装置', async () => {
+    const store = useSessionStore()
+
+    await expect(store.validateSession()).resolves.toBe('login-required')
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+    expect(queryAuthStatusMock).not.toHaveBeenCalled()
+    expect(connect).not.toHaveBeenCalled()
+  })
+
   it('重连校验授权状态后恢复会话', async () => {
     const store = useSessionStore()
     store.setSession({
@@ -375,6 +385,35 @@ describe('useSessionStore', () => {
     connection.deviceIp = '19.19.19.16'
     connection.updateStatus('DISCONNECTED')
     queryAuthStatusMock.mockRejectedValue(new ServiceError('会话已失效', 0x1001, 'unauthenticated'))
+
+    await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
+
+    expect(connect).toHaveBeenCalledWith('19.19.19.16')
+    expect(store.token).toBe('')
+    expect(connection.deviceIp).toBe('')
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(disconnect).toHaveBeenCalledWith()
+  })
+
+  it('重连后授权有效但最终未连接时清空状态并断开连接', async () => {
+    const store = useSessionStore()
+    store.setSession({
+      token: 'token',
+      username: 'auditor',
+      role: 'auditor',
+      authStatus: 'authorized',
+      authExpireTime: 0,
+      deviceDescription: 'USB_DEVICE',
+    })
+    const connection = useConnectionStore()
+    connection.deviceIp = '19.19.19.16'
+    connection.updateStatus('DISCONNECTED')
+    queryAuthStatusMock.mockResolvedValue(usb_control.RspAuthStatus.fromObject({
+      authorized: true,
+      expireTime: 123,
+      deviceDescription: 'USB_DEVICE',
+      authStatus: 'authorized',
+    }))
 
     await expect(store.reconnectAndValidate()).resolves.toBe('login-required')
 
