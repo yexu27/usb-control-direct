@@ -124,7 +124,11 @@ test.describe('管理员与审计员页面业务闭环', () => {
 
         await page.getByTestId('logs-tab-malware').click()
         await expect(page.getByTestId('logs-tab-malware')).toHaveClass(/active/)
-        await expect(page.getByRole('columnheader', { name: '病毒' })).toBeVisible()
+        await expect(page.getByRole('columnheader')).toHaveText(['时间', '设备名称', '序列号', '内容'])
+        await expect(page.getByRole('columnheader', { name: '病毒' })).toHaveCount(0)
+        await expect(page.getByText('文件: /mnt/usb/eicar.com, 病毒: EICAR-Test-File')).toBeVisible()
+        await expect(page.getByText('未发现病毒文件')).toBeVisible()
+        await expect(page.getByText('发现病毒并阻断')).toHaveCount(0)
         await expect(page.getByTestId('log-event-type')).toHaveCount(0)
 
         await page.getByTestId('logs-tab-operation').click()
