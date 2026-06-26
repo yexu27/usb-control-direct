@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   LOG_TABS,
-  formatLogResult,
-  formatOperationLogCategory,
   getLogColumns,
 } from '../../../src/renderer/utils/log-display'
 
@@ -30,15 +28,7 @@ describe('log display utils', () => {
     expect(getLogColumns('operation').map((column) => column.label)).toEqual([
       '时间',
       '用户',
-      '操作日志类型',
       '内容',
     ])
-  })
-
-  it('formats protocol result strings and operation log category', () => {
-    expect(formatLogResult('0')).toBe('成功')
-    expect(formatLogResult('1')).toBe('失败')
-    expect(formatLogResult(0)).toBe('成功')
-    expect(formatOperationLogCategory('user_management')).toBe('用户管理')
   })
 })

@@ -130,8 +130,9 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await page.getByTestId('logs-tab-operation').click()
         await expect(page.getByTestId('logs-tab-operation')).toHaveClass(/active/)
         await expect(page.getByRole('columnheader', { name: '用户' })).toBeVisible()
-        await expect(page.getByRole('columnheader', { name: '操作日志类型' })).toBeVisible()
-        await expect(page.getByTestId('log-operation-category')).toBeVisible()
+        await expect(page.getByRole('columnheader', { name: '内容' })).toBeVisible()
+        await expect(page.getByRole('columnheader', { name: '操作日志类型' })).toHaveCount(0)
+        await expect(page.getByTestId('log-operation-category')).toHaveCount(0)
         await expect(page.getByTestId('log-event-type')).toHaveCount(0)
 
         await page.getByTestId('logs-tab-usb_audit').click()

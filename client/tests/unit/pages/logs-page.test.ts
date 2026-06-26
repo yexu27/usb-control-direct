@@ -52,12 +52,10 @@ const DataTableStub = defineComponent({
         content: string
         serialNumber?: string
         eventType?: string
-        logCategory?: string
       }) =>
         h('div', { key: row.id, 'data-testid': 'log-row' }, [
           row.serialNumber != null ? slots.serialNumber?.({ row }) : null,
           row.eventType != null ? slots.eventType?.({ row }) : null,
-          row.logCategory != null ? h('span', row.logCategory) : null,
           h('span', row.content),
         ]),
       ),
@@ -380,18 +378,44 @@ describe('LogsPage', () => {
     }))
   })
 
-  it('操作日志展示类型列并格式化类型', async () => {
+  it('操作日志按 PRD 三列展示并使用结构化字段组装内容', async () => {
     vi.mocked(queryLogs).mockResolvedValue({
       success: true,
-      total: 1,
+      total: 3,
       usbAuditEntries: [],
       malwareEntries: [],
       operationEntries: [{
         id: 1,
         opTime: 1_767_225_610,
         username: 'admin',
-        logCategory: 'user_management',
-        detail: '用户登录，用户名：admin，成功',
+        logCategory: 'login_auth',
+        actionType: 'login',
+        target: 'admin',
+        result: '0',
+        failReason: '',
+        detail: '旧 detail 不应展示',
+      }, {
+        id: 2,
+        opTime: 1_767_225_611,
+        username: 'operator',
+        logCategory: 'security_config',
+        actionType: 'file_policy_update',
+        target: 'exec_control',
+        beforeValue: '{"enabled":false}',
+        afterValue: '{"enabled":true}',
+        result: '0',
+        failReason: '',
+        detail: '',
+      }, {
+        id: 3,
+        opTime: 1_767_225_612,
+        username: 'audit',
+        logCategory: 'program_upgrade',
+        actionType: 'virusdb_upgrade',
+        target: 'V3.0.0.3',
+        result: '0',
+        failReason: '',
+        detail: '',
       }],
       resultCode: 0,
       errorMessage: '',
@@ -402,8 +426,14 @@ describe('LogsPage', () => {
     await wrapper.get('[data-testid="logs-tab-operation"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|用户|操作日志类型|内容')
-    expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户管理')
+    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|用户|内容')
+    expect(wrapper.get('[data-testid="log-row"]').text()).toContain('用户登录，用户名：admin，成功')
+    expect(wrapper.text()).toContain('修改文件访问控制策略 exec_control，关闭→开启，成功')
+    expect(wrapper.text()).toContain('病毒库升级，版本升级至V3.0.0.3，成功')
+    expect(wrapper.text()).not.toContain('操作日志类型')
+    expect(wrapper.text()).not.toContain('用户管理')
+    expect(wrapper.text()).not.toContain('结果：0')
+    expect(wrapper.text()).not.toContain('旧 detail 不应展示')
   })
 
   it('操作日志不展示分类筛选且查询和导出不携带分类字段', async () => {
