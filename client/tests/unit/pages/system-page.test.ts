@@ -75,7 +75,7 @@ function mountPage() {
         ConnectionAlert: { template: '<aside />' },
         ProgressDialog: { props: ['visible'], template: '<div data-testid="progress" :data-visible="visible" />' },
         ElCard: { template: '<section><header><slot name="header" /></header><slot /></section>' },
-        ElButton: { template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
+        ElButton: { template: '<button v-bind="$attrs" type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElInput: ElInputStub,
         ElDialog: { template: '<section><slot /><slot name="footer" /></section>' },
       },
@@ -456,5 +456,50 @@ describe('SystemPage', () => {
 
     const input = wrapper.get('[data-testid="device-desc-input"]')
     expect((input.element as HTMLInputElement).value).toBe('')
+  })
+
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] as const)('%s 状态下普通业务动作不请求装置', async (status) => {
+    useConnectionStore().updateStatus(status)
+    const wrapper = mountPage()
+    await flushPromises()
+    vi.mocked(getSystemInfo).mockClear()
+    vi.mocked(getMachineCode).mockClear()
+    vi.mocked(uploadLicense).mockClear()
+    vi.mocked(uploadSystemUpgrade).mockClear()
+    vi.mocked(uploadVirusdbUpgrade).mockClear()
+    vi.mocked(updateDeviceDescription).mockClear()
+    openFile.mockClear()
+    readFile.mockClear()
+
+    const systemUpgradeButton = wrapper.get('[data-testid="system-upgrade-upload"]')
+    const virusdbUpgradeButton = wrapper.get('[data-testid="virusdb-upgrade-upload"]')
+    const machineCodeButton = wrapper.get('[data-testid="machine-code-open"]')
+    const licenseUploadButton = wrapper.get('[data-testid="license-upload"]')
+    const deviceDescEditButton = wrapper.get('[data-testid="device-desc-edit"]')
+    expect(systemUpgradeButton.attributes('disabled')).toBeDefined()
+    expect(virusdbUpgradeButton.attributes('disabled')).toBeDefined()
+    expect(machineCodeButton.attributes('disabled')).toBeDefined()
+    expect(licenseUploadButton.attributes('disabled')).toBeDefined()
+    expect(deviceDescEditButton.attributes('disabled')).toBeDefined()
+
+    await systemUpgradeButton.trigger('click')
+    await virusdbUpgradeButton.trigger('click')
+    await machineCodeButton.trigger('click')
+    await licenseUploadButton.trigger('click')
+    await deviceDescEditButton.trigger('click')
+    await flushPromises()
+
+    expect(getSystemInfo).not.toHaveBeenCalled()
+    expect(getMachineCode).not.toHaveBeenCalled()
+    expect(uploadLicense).not.toHaveBeenCalled()
+    expect(uploadSystemUpgrade).not.toHaveBeenCalled()
+    expect(uploadVirusdbUpgrade).not.toHaveBeenCalled()
+    expect(updateDeviceDescription).not.toHaveBeenCalled()
+    expect(openFile).not.toHaveBeenCalled()
+    expect(readFile).not.toHaveBeenCalled()
   })
 })

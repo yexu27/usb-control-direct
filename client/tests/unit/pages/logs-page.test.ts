@@ -111,7 +111,7 @@ function mountPage() {
         ElDatePicker: ElDatePickerStub,
         ElSelect: ElSelectStub,
         ElOption: { template: '<option :value="value">{{ label }}</option>', props: ['label', 'value'] },
-        ElButton: { template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
+        ElButton: { template: '<button v-bind="$attrs" type="button" @click="$emit(\'click\')"><slot /></button>' },
         ElTag: { template: '<span><slot /></span>' },
         ElDialog: { template: '<section><slot /><slot name="footer" /></section>' },
       },
@@ -403,5 +403,35 @@ describe('LogsPage', () => {
 
     expect(ElMessageBox.confirm).toHaveBeenCalled()
     expect(deleteLogs).toHaveBeenCalledWith('token', 'usb_audit', expect.any(Number), expect.any(Number))
+  })
+
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] as const)('%s 状态下查询、导出、清理不请求装置', async (status) => {
+    useConnectionStore().updateStatus(status)
+    const wrapper = mountPage()
+    await flushPromises()
+    vi.mocked(queryLogs).mockClear()
+    vi.mocked(exportLogs).mockClear()
+    vi.mocked(deleteLogs).mockClear()
+
+    const searchButton = wrapper.get('[data-testid="log-search"]')
+    const exportButton = wrapper.get('[data-testid="log-export"]')
+    const clearButton = wrapper.get('[data-testid="log-clear"]')
+    expect(searchButton.attributes('disabled')).toBeDefined()
+    expect(exportButton.attributes('disabled')).toBeDefined()
+    expect(clearButton.attributes('disabled')).toBeDefined()
+
+    await searchButton.trigger('click')
+    await exportButton.trigger('click')
+    await clearButton.trigger('click')
+    await flushPromises()
+
+    expect(queryLogs).not.toHaveBeenCalled()
+    expect(exportLogs).not.toHaveBeenCalled()
+    expect(deleteLogs).not.toHaveBeenCalled()
+    expect(saveFile).not.toHaveBeenCalled()
   })
 })
