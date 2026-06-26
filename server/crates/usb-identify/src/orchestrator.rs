@@ -34,6 +34,7 @@ struct ActiveSession {
     nbd_index: Option<u32>,
     mount_path: Option<PathBuf>,
     cancel_tx: watch::Sender<bool>,
+    audit_detail: String,
 }
 
 /// NBD 设备号池容量。
@@ -208,6 +209,17 @@ impl DeviceOrchestrator {
                 if let Err(e) = self.audit.log_usb_audit(&mut log) {
                     error!(error = %e, "审计日志写入失败");
                 }
+                let (cancel_tx, _) = watch::channel(false);
+                self.active_sessions.insert(
+                    parent_path,
+                    ActiveSession {
+                        device_type: common::types::DeviceType::Storage,
+                        nbd_index: None,
+                        mount_path: None,
+                        cancel_tx,
+                        audit_detail: "未授权设备".into(),
+                    },
+                );
                 return;
             }
         };
@@ -240,6 +252,7 @@ impl DeviceOrchestrator {
                 nbd_index: Some(nbd_index),
                 mount_path: None,
                 cancel_tx,
+                audit_detail: "授权设备".into(),
             },
         );
 
@@ -343,6 +356,7 @@ impl DeviceOrchestrator {
                 nbd_index: None,
                 mount_path: None,
                 cancel_tx,
+                audit_detail: "键盘".into(),
             },
         );
 
@@ -399,6 +413,7 @@ impl DeviceOrchestrator {
                 nbd_index: None,
                 mount_path: None,
                 cancel_tx,
+                audit_detail: "鼠标".into(),
             },
         );
 
@@ -441,7 +456,9 @@ impl DeviceOrchestrator {
 
         info!(dev = %device_record.info.device_name, type = ?device_record.info.device_type, "设备完全拔出");
 
-        if let Some(session) = self.active_sessions.remove(&parent_path) {
+        let session = self.active_sessions.remove(&parent_path);
+
+        if let Some(ref session) = session {
             let _ = session.cancel_tx.send(true);
 
             if session.device_type == common::types::DeviceType::Storage {
@@ -463,6 +480,9 @@ impl DeviceOrchestrator {
 
         if should_audit {
             let mut log = build_audit_log(&device_record.info, event_type::DEVICE_REMOVE);
+            if let Some(ref session) = session {
+                log.detail = Some(session.audit_detail.clone());
+            }
             if let Err(e) = self.audit.log_usb_audit(&mut log) {
                 error!(error = %e, "审计日志写入失败");
             }
