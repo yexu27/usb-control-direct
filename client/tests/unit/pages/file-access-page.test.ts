@@ -49,11 +49,13 @@ const ElCheckboxStub = defineComponent({
   inheritAttrs: false,
   props: {
     modelValue: { type: Boolean, required: true },
+    disabled: { type: Boolean, default: false },
   },
   emits: ['change'],
   setup(props, { attrs, emit }) {
     return () => h('button', {
       ...attrs,
+      disabled: props.disabled,
       'data-checked': String(props.modelValue),
       onClick: () => emit('change', !props.modelValue),
     })
@@ -110,7 +112,11 @@ function mountPage() {
         AddBlacklistDialog: AddBlacklistDialogStub,
         ElCard: { template: '<section><slot /></section>' },
         ElCheckbox: ElCheckboxStub,
-        ElButton: { template: '<button><slot /></button>' },
+        ElButton: {
+          props: ['disabled', 'loading'],
+          emits: ['click'],
+          template: '<button v-bind="$attrs" :disabled="disabled" :loading="loading" @click="$emit(\'click\')"><slot /></button>',
+        },
         DataTable: {
           name: 'DataTable',
           props: ['data', 'page', 'pageSize', 'columns', 'total', 'showDefaultPagination'],
@@ -287,58 +293,43 @@ describe('FileAccessPage', () => {
     expect(showErrorDialog).toHaveBeenCalledWith('开关修改失败', '更新失败')
   })
 
-  it('断线时保留 store 数据且禁止写操作', async () => {
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] as const)('%s 时保留 store 数据且禁用文件访问控制写入口', async (status) => {
     const connection = useConnectionStore()
-    connection.updateStatus('DISCONNECTED')
+    connection.updateStatus(status)
     const store = useFilePolicyStore()
+    const load = vi.spyOn(store, 'load').mockResolvedValue()
     const setSwitch = vi.spyOn(store, 'setSwitch')
+    const add = vi.spyOn(store, 'addExtension')
+    const remove = vi.spyOn(store, 'removeExtension')
     const wrapper = mountPage()
+    await flushPromises()
 
     expect(wrapper.text()).toContain('.doc')
     const execSwitch = wrapper.get('[data-testid="exec-control-switch"]')
-    expect(execSwitch.attributes('disabled')).toBeUndefined()
-    await execSwitch.trigger('click')
-    await flushPromises()
-    expect(setSwitch).not.toHaveBeenCalled()
-    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
-    expect(execSwitch.attributes('data-checked')).toBe('false')
-    expect(store.policy?.blacklist).toHaveLength(38)
-  })
-
-  it('断线时仍可打开添加弹窗，提交时警告并保留弹窗', async () => {
-    useConnectionStore().updateStatus('DISCONNECTED')
-    const store = useFilePolicyStore()
-    const add = vi.spyOn(store, 'addExtension')
-    const wrapper = mountPage()
-
-    const trigger = wrapper.get('[data-testid="add-blacklist-trigger"]')
-    expect(trigger.attributes('disabled')).toBeUndefined()
-    await trigger.trigger('click')
-    const dialog = wrapper.getComponent(AddBlacklistDialogStub)
-    expect(dialog.props('visible')).toBe(true)
-    dialog.vm.$emit('submit', { extension: '.zip', description: '压缩包' })
-    await flushPromises()
-
-    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
-    expect(add).not.toHaveBeenCalled()
-    expect(dialog.props('visible')).toBe(true)
-    expect(dialog.props('submitting')).toBe(false)
-  })
-
-  it('断线时删除仍可点击，但仅警告且不弹确认不调用 store', async () => {
-    useConnectionStore().updateStatus('DISCONNECTED')
-    const store = useFilePolicyStore()
-    const remove = vi.spyOn(store, 'removeExtension')
-    const wrapper = mountPage()
+    const addTrigger = wrapper.get('[data-testid="add-blacklist-trigger"]')
     const deleteButton = wrapper.get('[data-extension=".doc"]')
+    expect(execSwitch.attributes('disabled')).toBeDefined()
+    expect(addTrigger.attributes('disabled')).toBeDefined()
+    expect(deleteButton.attributes('disabled')).toBeDefined()
 
-    expect(deleteButton.attributes('disabled')).toBeUndefined()
+    await execSwitch.trigger('click')
+    await addTrigger.trigger('click')
     await deleteButton.trigger('click')
     await flushPromises()
 
-    expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
-    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(load).not.toHaveBeenCalled()
+    expect(setSwitch).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
     expect(remove).not.toHaveBeenCalled()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(AddBlacklistDialogStub).props('visible')).toBe(false)
+    expect(execSwitch.attributes('data-checked')).toBe('false')
+    expect(store.policy?.blacklist).toHaveLength(38)
   })
 
   it('同一后缀确认与删除期间始终只允许一个操作', async () => {
@@ -392,9 +383,11 @@ describe('FileAccessPage', () => {
     expect(showErrorDialog).toHaveBeenCalledWith('操作失败', '装置已断开连接，无法修改策略')
     expect(remove).not.toHaveBeenCalled()
     expect(showSuccessToast).not.toHaveBeenCalled()
-    expect(deleteButton.attributes('disabled')).toBeUndefined()
+    expect(deleteButton.attributes('disabled')).toBeDefined()
 
     useConnectionStore().updateStatus('CONNECTED')
+    await nextTick()
+    expect(deleteButton.attributes('disabled')).toBeUndefined()
     await deleteButton.trigger('click')
     await flushPromises()
     expect(ElMessageBox.confirm).toHaveBeenCalledTimes(2)

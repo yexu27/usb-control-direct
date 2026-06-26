@@ -62,8 +62,9 @@ function mountPage() {
     AddWhitelistDialog: AddDialogStub, EditWhitelistDialog: EditDialogStub,
     ElCard: { template: '<section v-bind="$attrs"><slot name="header"/><slot /></section>' },
     ElButton: {
-      props: ['type'],
-      template: '<button v-bind="$attrs" :data-button-type="type" @click="$emit(\'click\')"><slot/></button>',
+      props: ['type', 'disabled', 'loading'],
+      emits: ['click'],
+      template: '<button v-bind="$attrs" :data-button-type="type" :disabled="disabled" :loading="loading" @click="$emit(\'click\')"><slot/></button>',
     },
     DataTable: {
       name: 'DataTable',
@@ -139,6 +140,48 @@ describe('UsbDevicesPage', () => {
 
     expect(listWhitelist).not.toHaveBeenCalled()
     expect(wrapper.findAll('[data-testid="row"]')).toHaveLength(20)
+  })
+
+  it.each([
+    'DISCONNECTED',
+    'AUTH_REQUIRED',
+    'LICENSE_EXPIRED',
+  ] as const)('%s 时禁用白名单写入口且不触发装置请求', async (status) => {
+    useConnectionStore().updateStatus(status)
+    const store = useWhitelistStore()
+    const listWhitelist = vi.spyOn(store, 'listWhitelist').mockResolvedValue()
+    const add = vi.spyOn(store, 'addWhitelist').mockResolvedValue()
+    const update = vi.spyOn(store, 'updateWhitelist').mockResolvedValue()
+    const remove = vi.spyOn(store, 'removeWhitelist').mockResolvedValue()
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const addDevice = wrapper.get('[data-testid="add-device-trigger"]')
+    const addManagement = wrapper.get('[data-testid="add-management-trigger"]')
+    const editButton = wrapper.get('[data-testid="edit-SN-0"]')
+    const removeButton = wrapper.get('[data-testid="remove-SN-0"]')
+    expect(addDevice.attributes('disabled')).toBeDefined()
+    expect(addManagement.attributes('disabled')).toBeDefined()
+    expect(editButton.attributes('disabled')).toBeDefined()
+    expect(removeButton.attributes('disabled')).toBeDefined()
+
+    await addDevice.trigger('click')
+    await addManagement.trigger('click')
+    await editButton.trigger('click')
+    await removeButton.trigger('click')
+    await flushPromises()
+
+    expect(listWhitelist).not.toHaveBeenCalled()
+    expect(getConnectedDevices).not.toHaveBeenCalled()
+    expect(listManagementUsbStorageDevices).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    expect(ElMessage.warning).not.toHaveBeenCalled()
+    expect(showErrorDialog).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(AddDialogStub).props('visible')).toBe(false)
+    expect(wrapper.getComponent(EditDialogStub).props('visible')).toBe(false)
   })
 
   it('仅展示六个白名单列，前端分页默认20并格式化Unix秒', async () => {

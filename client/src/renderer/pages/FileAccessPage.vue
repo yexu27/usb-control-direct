@@ -4,6 +4,7 @@ import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import AddBlacklistDialog from '@/components/file-policy/AddBlacklistDialog.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
 import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { useConnectionStore } from '@/stores/connection'
 import { useFilePolicyStore, type FilePolicyKey } from '@/stores/file-policy'
@@ -22,6 +23,8 @@ interface BlacklistFormValue {
 const session = useSessionStore()
 const connection = useConnectionStore()
 const filePolicy = useFilePolicyStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 const addDialogVisible = ref(false)
 const isAdding = ref(false)
 const addErrorMessage = ref('')
@@ -64,7 +67,7 @@ async function showError(error: unknown, fallback: string): Promise<void> {
 }
 
 async function refreshPolicy(): Promise<void> {
-  if (!connection.isConnected) {
+  if (!canReadFromDevice()) {
     return
   }
   try {
@@ -74,7 +77,7 @@ async function refreshPolicy(): Promise<void> {
   }
 }
 
-async function canWrite(): Promise<boolean> {
+async function canWriteToDevice(): Promise<boolean> {
   if (connection.isConnected) {
     return true
   }
@@ -83,7 +86,7 @@ async function canWrite(): Promise<boolean> {
 }
 
 async function changeSwitch(key: FilePolicyKey, enabled: boolean): Promise<boolean> {
-  if (!(await canWrite())) {
+  if (!(await canWriteToDevice())) {
     return false
   }
   try {
@@ -100,7 +103,7 @@ async function handleAdd(value: BlacklistFormValue): Promise<void> {
     return
   }
   isAdding.value = true
-  if (!(await canWrite())) {
+  if (!(await canWriteToDevice())) {
     isAdding.value = false
     return
   }
@@ -123,7 +126,7 @@ async function handleRemove(extension: string): Promise<void> {
   }
   removingExtensions.value.add(normalizedExtension)
   try {
-    if (!(await canWrite())) {
+    if (!(await canWriteToDevice())) {
       return
     }
     try {
@@ -136,7 +139,7 @@ async function handleRemove(extension: string): Promise<void> {
     } catch {
       return
     }
-    if (!(await canWrite())) {
+    if (!(await canWriteToDevice())) {
       return
     }
     try {
@@ -154,7 +157,10 @@ function handlePolicyCheckboxChange(key: FilePolicyKey, enabled: boolean): void 
   void changeSwitch(key, enabled)
 }
 
-function openAddDialog(): void {
+async function openAddDialog(): Promise<void> {
+  if (!(await canWriteToDevice())) {
+    return
+  }
   addErrorMessage.value = ''
   addDialogVisible.value = true
 }
@@ -191,7 +197,7 @@ function changePageSize(nextPageSize: number): void {
               data-testid="exec-control-switch"
               aria-label="可执行程序访问控制"
               :model-value="filePolicy.policy?.execControlEnabled ?? false"
-              :disabled="isPending('exec_control')"
+              :disabled="isBusinessActionDisabled || isPending('exec_control')"
               @change="(enabled) => handlePolicyCheckboxChange('exec_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
@@ -219,7 +225,7 @@ function changePageSize(nextPageSize: number): void {
               data-testid="auto-read-control-switch"
               aria-label="介质自动读取控制"
               :model-value="filePolicy.policy?.autoReadControlEnabled ?? false"
-              :disabled="isPending('auto_read_control')"
+              :disabled="isBusinessActionDisabled || isPending('auto_read_control')"
               @change="(enabled) => handlePolicyCheckboxChange('auto_read_control', enabled === true)"
             />
             <span class="app-checkbox-copy">
@@ -244,7 +250,7 @@ function changePageSize(nextPageSize: number): void {
               data-testid="blacklist-control-switch"
               aria-label="文件类型黑名单控制"
               :model-value="filePolicy.policy?.fileTypeBlacklistEnabled ?? false"
-              :disabled="isPending('file_type_blacklist_control')"
+              :disabled="isBusinessActionDisabled || isPending('file_type_blacklist_control')"
               @change="(enabled) => handlePolicyCheckboxChange('file_type_blacklist_control', enabled === true)"
             />
             <span class="app-checkbox-copy file-policy-copy">
@@ -264,7 +270,7 @@ function changePageSize(nextPageSize: number): void {
               <el-button
                 type="primary"
                 data-testid="add-blacklist-trigger"
-                :disabled="isAdding"
+                :disabled="isBusinessActionDisabled || isAdding"
                 @click="openAddDialog"
               >
                 + 添加
@@ -287,7 +293,7 @@ function changePageSize(nextPageSize: number): void {
                 <el-button
                   class="prototype-outline-action prototype-outline-danger"
                   :data-extension="row.extension"
-                  :disabled="isRemoving(row.extension)"
+                  :disabled="isBusinessActionDisabled || isRemoving(row.extension)"
                   :loading="isRemoving(row.extension)"
                   @click="handleRemove(row.extension)"
                 >

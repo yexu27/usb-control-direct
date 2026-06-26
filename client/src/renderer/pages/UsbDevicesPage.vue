@@ -6,6 +6,7 @@ import EditWhitelistDialog from '@/components/whitelist/EditWhitelistDialog.vue'
 import ConnectionAlert from '@/components/ConnectionAlert.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { DataTableColumn } from '@/components/data-table'
+import { useConnectedOperationGuard } from '@/composables/use-connected-operation-guard'
 import { useDeviceBackedPageRefresh } from '@/composables/use-device-backed-page-refresh'
 import { getConnectedDevices } from '@/services/device-service'
 import { listManagementUsbStorageDevices } from '@/services/management-usb-service'
@@ -58,6 +59,8 @@ interface WhitelistRow {
 const session = useSessionStore()
 const connection = useConnectionStore()
 const whitelist = useWhitelistStore()
+const connectedOperationGuard = useConnectedOperationGuard()
+const { isBusinessActionDisabled, canReadFromDevice } = connectedOperationGuard
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE)
 const addVisible = ref(false)
@@ -135,7 +138,7 @@ watch([() => rows.value.length, pageSize], ([total, size]) => {
 useDeviceBackedPageRefresh(refreshWhitelist)
 
 async function refreshWhitelist(): Promise<void> {
-  if (!connection.isConnected) {
+  if (!canReadFromDevice()) {
     return
   }
   try {
@@ -148,7 +151,7 @@ async function refreshWhitelist(): Promise<void> {
 async function showError(error: unknown, fallback: string): Promise<void> {
   await showErrorDialog(fallback, errorMessage(error, fallback))
 }
-function canWrite(): boolean {
+async function canWriteToDevice(): Promise<boolean> {
   if (connection.isConnected) {
     return true
   }
@@ -188,7 +191,7 @@ async function openAddDialog(source: AddSource): Promise<void> {
   if (
     addSubmitting.value ||
     (addVisible.value && addSource.value === source) ||
-    !canWrite()
+    !(await canWriteToDevice())
   ) {
     return
   }
@@ -264,7 +267,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
     (candidate) => candidate.serialNumber.trim() === serialNumber && candidate.addable,
   )
   const ownershipKey = `${source}:${serialNumber}`
-  if (addOwnership.has(ownershipKey) || addSubmitting.value || !canWrite()) {
+  if (addOwnership.has(ownershipKey) || addSubmitting.value) {
     return
   }
   if (serialNumber === '' || dialogCandidate == null || !validPermission(value.permission)) {
@@ -277,6 +280,9 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
   addSubmitting.value = true
   addErrorMessage.value = ''
   try {
+    if (!(await canWriteToDevice())) {
+      return
+    }
     let candidate = dialogCandidate
     if (source === 'management') {
       let currentDevices: CandidateDevice[]
@@ -301,7 +307,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
       }
       candidate = current
     }
-    if (!canWrite()) {
+    if (!(await canWriteToDevice())) {
       return
     }
     if (whitelist.pendingSerialNumbers.has(serialNumber)) {
@@ -320,7 +326,7 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
     })
     if (
       addEpoch.value !== dialogEpoch || !addVisible.value || addSource.value !== source ||
-      !canWrite()
+      !(await canWriteToDevice())
     ) {
       return
     }
@@ -336,8 +342,8 @@ async function handleAdd(value: AddWhitelistFormValue): Promise<void> {
   }
 }
 
-function openEditDialog(row: WhitelistRow): void {
-  if (editSubmitting.value || !validPermission(row.permission)) {
+async function openEditDialog(row: WhitelistRow): Promise<void> {
+  if (editSubmitting.value || !validPermission(row.permission) || !(await canWriteToDevice())) {
     return
   }
   editEpoch.value += 1
@@ -345,11 +351,11 @@ function openEditDialog(row: WhitelistRow): void {
   editTarget.value = row
   editVisible.value = true
 }
-function openEditDialogFromTableRow(row: unknown): void {
+async function openEditDialogFromTableRow(row: unknown): Promise<void> {
   if (!isWhitelistRow(row)) {
     return
   }
-  openEditDialog(row)
+  await openEditDialog(row)
 }
 function changeEditVisible(visible: boolean): void {
   if (!visible) {
@@ -371,7 +377,7 @@ async function handleEdit(value: EditWhitelistFormValue): Promise<void> {
   }
   const serialNumber = target.serialNumber
   const dialogEpoch = editEpoch.value
-  if (editOwnership.has(serialNumber) || editSubmitting.value || !canWrite()) {
+  if (editOwnership.has(serialNumber) || editSubmitting.value) {
     return
   }
   if (!validPermission(value.permission) || whitelist.pendingSerialNumbers.has(serialNumber)) {
@@ -381,10 +387,13 @@ async function handleEdit(value: EditWhitelistFormValue): Promise<void> {
   editSubmitting.value = true
   editErrorMessage.value = ''
   try {
+    if (!(await canWriteToDevice())) {
+      return
+    }
     await whitelist.updateWhitelist(session.token, serialNumber, value.permission, value.description)
     if (
       editEpoch.value !== dialogEpoch || !editVisible.value ||
-      editTarget.value?.serialNumber !== serialNumber || !canWrite()
+      editTarget.value?.serialNumber !== serialNumber || !(await canWriteToDevice())
     ) {
       return
     }
@@ -404,11 +413,14 @@ async function handleEdit(value: EditWhitelistFormValue): Promise<void> {
 }
 
 async function handleRemove(serialNumber: string): Promise<void> {
-  if (removeOwnership.value.has(serialNumber) || !canWrite()) {
+  if (removeOwnership.value.has(serialNumber)) {
     return
   }
   removeOwnership.value.add(serialNumber)
   try {
+    if (!(await canWriteToDevice())) {
+      return
+    }
     try {
       await confirmAction({
         message: `确定删除白名单设备 ${serialNumber} 吗？`,
@@ -419,11 +431,11 @@ async function handleRemove(serialNumber: string): Promise<void> {
     } catch {
       return
     }
-    if (!canWrite() || whitelist.pendingSerialNumbers.has(serialNumber)) {
+    if (!(await canWriteToDevice()) || whitelist.pendingSerialNumbers.has(serialNumber)) {
       return
     }
     await whitelist.removeWhitelist(session.token, serialNumber)
-    if (!canWrite()) {
+    if (!(await canWriteToDevice())) {
       return
     }
     showSuccessToast('删除成功')
@@ -459,7 +471,7 @@ function changePageSize(nextPageSize: number): void {
           <div class="usb-panel-actions">
             <el-button
               data-testid="add-device-trigger"
-              :disabled="addSubmitting"
+              :disabled="isBusinessActionDisabled || addSubmitting"
               :loading="addSubmitting"
               @click="openAddDialog('device')"
             >
@@ -468,7 +480,7 @@ function changePageSize(nextPageSize: number): void {
             <el-button
               type="primary"
               data-testid="add-management-trigger"
-              :disabled="addSubmitting"
+              :disabled="isBusinessActionDisabled || addSubmitting"
               :loading="addSubmitting"
               @click="openAddDialog('management')"
             >
@@ -500,7 +512,7 @@ function changePageSize(nextPageSize: number): void {
               <el-button
                 class="prototype-outline-action"
                 :data-testid="`edit-${row.serialNumber}`"
-                :disabled="editSubmitting && editTarget?.serialNumber === row.serialNumber"
+                :disabled="isBusinessActionDisabled || (editSubmitting && editTarget?.serialNumber === row.serialNumber)"
                 :loading="editSubmitting && editTarget?.serialNumber === row.serialNumber"
                 @click="openEditDialogFromTableRow(row)"
               >
@@ -509,7 +521,7 @@ function changePageSize(nextPageSize: number): void {
               <el-button
                 class="prototype-outline-action prototype-outline-danger"
                 :data-testid="`remove-${row.serialNumber}`"
-                :disabled="removeOwnership.has(row.serialNumber)"
+                :disabled="isBusinessActionDisabled || removeOwnership.has(row.serialNumber)"
                 :loading="removeOwnership.has(row.serialNumber)"
                 @click="handleRemove(row.serialNumber)"
               >
