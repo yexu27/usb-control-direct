@@ -63,7 +63,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
     match license_upgrade::generate_machine_code() {
         Ok(result) => {
             info!(user = %session.username, "下载机器码");
-            log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::AUTH_UPLOAD, "机器码", 0, None);
+            log_operation(ctx, session, log_type::AUTH_MANAGEMENT, action_type::MACHINE_CODE_DOWNLOAD, "机器码", 0, None);
             let rsp = RspMachineCode {
                 machine_code: result.machine_code,
                 qrcode_png: result.qrcode_png,
@@ -77,7 +77,7 @@ pub fn handle_get_machine_code(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
                 ctx,
                 session,
                 log_type::AUTH_MANAGEMENT,
-                action_type::AUTH_UPLOAD,
+                action_type::MACHINE_CODE_DOWNLOAD,
                 "机器码",
                 1,
                 Some(&e.to_string()),
