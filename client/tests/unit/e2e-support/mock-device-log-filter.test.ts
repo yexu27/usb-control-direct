@@ -38,7 +38,8 @@ const operationLogs = [{
   logCategory: 'user_management',
   actionType: 'user_create',
   target: 'new_operator',
-  detail: '新建用户成功',
+  result: '0',
+  failReason: '',
 }, {
   id: 2,
   username: 'audit',
@@ -46,7 +47,8 @@ const operationLogs = [{
   logCategory: 'login_auth',
   actionType: 'login',
   target: 'audit',
-  detail: '审计员登录成功',
+  result: '0',
+  failReason: '',
 }]
 
 describe('mock-device log filter', () => {
@@ -70,7 +72,7 @@ describe('mock-device log filter', () => {
 
   it('按关键字过滤操作日志', () => {
     const result = filterMockLogsForQuery(operationLogs, {
-      keyword: '审计员',
+      keyword: 'audit',
       eventType: '',
     })
 

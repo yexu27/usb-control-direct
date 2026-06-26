@@ -214,7 +214,8 @@ export class MockDevice {
     actionType: 'user_create',
     target: 'new_operator',
     result: '0',
-    detail: '新建用户成功',
+    failReason: '',
+    detail: '',
   }, {
     id: 2,
     opTime: 1_767_225_631,
@@ -224,7 +225,21 @@ export class MockDevice {
     actionType: 'login',
     target: 'audit',
     result: '0',
-    detail: '审计员登录成功',
+    failReason: '',
+    detail: '',
+  }, {
+    id: 3,
+    opTime: 1_767_225_632,
+    username: 'operator',
+    role: 'operator',
+    logCategory: 'security_config',
+    actionType: 'whitelist_update',
+    target: 'USB-AUDIT-001',
+    beforeValue: '{"permission":"readonly"}',
+    afterValue: '{"permission":"readwrite"}',
+    result: '0',
+    failReason: '',
+    detail: '',
   }]
   private connectedDevices = [{
     serialNumber: 'DEVICE-ADDABLE-001', deviceName: 'Device-side USB', vid: '0781', pid: '5591',
