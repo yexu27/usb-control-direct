@@ -380,6 +380,74 @@ describe('LogsPage', () => {
     }))
   })
 
+  it('恶意代码检测日志按 scan_result 组装内容且不展示独立病毒列', async () => {
+    vi.mocked(queryLogs).mockResolvedValue({
+      success: true,
+      total: 4,
+      usbAuditEntries: [],
+      malwareEntries: [{
+        id: 1,
+        scanTime: 1_767_225_620,
+        deviceSn: 'USB-MALWARE-001',
+        deviceName: 'SanDisk',
+        filePath: '/mnt/usb/eicar.com',
+        scanResult: 'infected',
+        virusName: 'EICAR-Test-File',
+        processResult: 'blocked',
+        detail: '发现病毒并阻断',
+      }, {
+        id: 2,
+        scanTime: 1_767_225_621,
+        deviceSn: 'USB-MALWARE-002',
+        deviceName: 'Clean USB',
+        filePath: '/mnt/usb/readme.txt',
+        scanResult: 'clean',
+        virusName: '',
+        processResult: 'no_action',
+        detail: '扫描通过',
+      }, {
+        id: 3,
+        scanTime: 1_767_225_622,
+        deviceSn: 'USB-MALWARE-003',
+        deviceName: 'Broken USB',
+        filePath: '',
+        scanResult: 'failed',
+        virusName: '',
+        processResult: 'failed',
+        failReason: '病毒库不可用',
+        detail: '旧失败详情',
+      }, {
+        id: 4,
+        scanTime: 1_767_225_623,
+        deviceSn: 'USB-MALWARE-004',
+        deviceName: 'Removed USB',
+        filePath: '',
+        scanResult: 'cancelled',
+        virusName: '',
+        processResult: 'no_action',
+        failReason: '设备拔出',
+        detail: '',
+      }],
+      operationEntries: [],
+      resultCode: 0,
+      errorMessage: '',
+    } as never)
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="logs-tab-malware"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="columns"]').text()).toBe('时间|设备名称|序列号|内容')
+    expect(wrapper.text()).toContain('文件: /mnt/usb/eicar.com, 病毒: EICAR-Test-File')
+    expect(wrapper.text()).toContain('未发现病毒文件')
+    expect(wrapper.text()).toContain('扫描失败: 病毒库不可用')
+    expect(wrapper.text()).toContain('扫描中断: 设备拔出')
+    expect(wrapper.text()).not.toContain('结果：blocked')
+    expect(wrapper.text()).not.toContain('发现病毒并阻断')
+  })
+
   it('操作日志按 PRD 四列展示类型并使用结构化字段组装内容', async () => {
     vi.mocked(queryLogs).mockResolvedValue({
       success: true,
