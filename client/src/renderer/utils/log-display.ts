@@ -47,8 +47,7 @@ export function getLogColumns(logType: LogType): DataTableColumn[] {
       { prop: 'time', label: '时间', width: 190 },
       { prop: 'deviceName', label: '设备名称', minWidth: 150 },
       { prop: 'serialNumber', label: '序列号', minWidth: 210, slot: 'serialNumber' },
-      { prop: 'content', label: '内容', minWidth: 360 },
-      { prop: 'virus', label: '病毒', minWidth: 160 },
+      { prop: 'content', label: '内容', minWidth: 420 },
     ]
   }
 

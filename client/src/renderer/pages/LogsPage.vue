@@ -12,6 +12,7 @@ import {
   type LogType,
   getLogColumns,
 } from '@/utils/log-display'
+import { buildMalwareLogContent } from '@/utils/malware-log-display'
 import { buildOperationLogContent, formatOperationLogType } from '@/utils/operation-log-display'
 import {
   dateToUnixSeconds,
@@ -37,7 +38,6 @@ interface LogRow {
   eventType?: string
   logCategory?: string
   content: string
-  virus?: string
   username?: string
 }
 
@@ -351,8 +351,7 @@ function mapMalwareRow(entry: usb_control.IMalwareLogEntry): LogRow {
     time: formatUnixSeconds(entry.scanTime ?? 0),
     deviceName: entry.deviceName ?? '',
     serialNumber: entry.deviceSn ?? '',
-    content: buildContent(entry.detail, entry.processResult, entry.failReason),
-    virus: entry.virusName ?? '',
+    content: buildMalwareLogContent(entry),
   }
 }
 
@@ -364,21 +363,6 @@ function mapOperationRow(entry: usb_control.IOperationLogEntry): LogRow {
     logCategory: formatOperationLogType(entry.logCategory),
     content: buildOperationLogContent(entry),
   }
-}
-
-function buildContent(
-  detail: string | null | undefined,
-  result: string | number | null | undefined,
-  failReason: string | null | undefined,
-): string {
-  if (detail != null && detail.trim() !== '') {
-    return detail
-  }
-  const parts = [`结果：${String(result ?? '-')}`]
-  if (failReason != null && failReason.trim() !== '') {
-    parts.push(`失败原因：${failReason}`)
-  }
-  return parts.join('，')
 }
 
 function formatUsbEventType(value: string): string {
