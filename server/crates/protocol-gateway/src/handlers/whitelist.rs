@@ -13,7 +13,7 @@ use common::proto::{
     RspListWhitelist, WhitelistDevice,
 };
 use common::types::DeviceType;
-use storage::model::OperationLogInsert;
+use super::audit_helper::{log_operation_from_ctx, OperationDetail};
 use usb_identify::descriptor::{admission_status_str, detect_spoof, interface_type_str};
 use whitelist::service::AddWhitelistRequest;
 use whitelist::WhitelistError;
@@ -214,17 +214,17 @@ pub fn handle_add_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
     match add_result {
         Ok(_id) => {
             info!(sn = %serial_number, method = cmd.add_method, "白名单添加成功");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 0, None);
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 0, None, &OperationDetail::default());
             success_response(ctx.seq_id)
         }
         Err(WhitelistError::AlreadyExists(_)) => {
             info!(sn = %serial_number, "白名单添加失败：设备已存在");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some("该设备已在白名单中"));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some("该设备已在白名单中"), &OperationDetail::default());
             error_response(ctx.seq_id, ResultCode::AlreadyExists, "该设备已在白名单中")
         }
         Err(e) => {
             warn!(sn = %serial_number, reason = %e, "白名单添加失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_ADD, Some(&serial_number), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -247,19 +247,20 @@ pub fn handle_remove_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
     match mgr.remove(&cmd.serial_number) {
         Ok(()) => {
             info!(sn = %cmd.serial_number, "白名单删除成功");
-            write_audit_log(
+            log_operation_from_ctx(
                 ctx,
                 log_type::SECURITY_CONFIG,
                 action_type::WHITELIST_REMOVE,
                 Some(&cmd.serial_number),
                 0,
                 None,
+                &OperationDetail::default(),
             );
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单删除失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_REMOVE, Some(&cmd.serial_number), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_REMOVE, Some(&cmd.serial_number), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
@@ -300,60 +301,48 @@ pub fn handle_update_whitelist(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> 
         Some(cmd.description.as_str())
     };
 
+    // 查询变更前的权限值，用于审计日志。
+    let old_permission = mgr
+        .query_by_sn(&cmd.serial_number)
+        .ok()
+        .flatten()
+        .map(|item| item.permission);
+
     match mgr.update(&cmd.serial_number, permission, description) {
         Ok(()) => {
             info!(sn = %cmd.serial_number, "白名单更新成功");
-            write_audit_log(
+            let ext = OperationDetail {
+                before_value: old_permission.map(|p| {
+                    format!(
+                        r#"{{"permission":"{}"}}"#,
+                        permission_int_to_str(p).unwrap_or("unknown")
+                    )
+                }),
+                after_value: permission.map(|p| {
+                    format!(
+                        r#"{{"permission":"{}"}}"#,
+                        permission_int_to_str(p).unwrap_or("unknown")
+                    )
+                }),
+                ..Default::default()
+            };
+            log_operation_from_ctx(
                 ctx,
                 log_type::SECURITY_CONFIG,
                 action_type::WHITELIST_UPDATE,
                 Some(&cmd.serial_number),
                 0,
                 None,
+                &ext,
             );
             success_response(ctx.seq_id)
         }
         Err(e) => {
             warn!(sn = %cmd.serial_number, reason = %e, "白名单更新失败");
-            write_audit_log(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_UPDATE, Some(&cmd.serial_number), 1, Some(&e.to_string()));
+            log_operation_from_ctx(ctx, log_type::SECURITY_CONFIG, action_type::WHITELIST_UPDATE, Some(&cmd.serial_number), 1, Some(&e.to_string()), &OperationDetail::default());
             error_response(ctx.seq_id, e.to_result_code(), &e.to_string())
         }
     }
-}
-
-/// 写审计日志辅助函数。
-fn write_audit_log(
-    ctx: &RequestContext,
-    log_type: &str,
-    action_type: &str,
-    target: Option<&str>,
-    result: i32,
-    fail_reason: Option<&str>,
-) {
-    let mut log = OperationLogInsert {
-        op_time: 0,
-        username: ctx
-            .session
-            .as_ref()
-            .map(|s| s.username.clone())
-            .unwrap_or_default(),
-        role: ctx.session.as_ref().map(|s| s.role).unwrap_or(-1),
-        log_type: log_type.into(),
-        action_type: Some(action_type.into()),
-        target: target.map(|t| t.to_string()),
-        before_value: None,
-        after_value: None,
-        related_file: None,
-        related_version: None,
-        result,
-        fail_reason: fail_reason.map(|r| r.to_string()),
-        source_ip: Some(ctx.source_ip.clone()),
-        app_version: None,
-        session_id: None,
-        request_id: None,
-        detail: None,
-    };
-    let _ = ctx.audit_service.log_operation(&mut log);
 }
 
 fn success_response(seq_id: u32) -> Vec<u8> {

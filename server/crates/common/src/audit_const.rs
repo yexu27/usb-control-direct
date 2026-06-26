@@ -40,4 +40,6 @@ pub mod action_type {
     pub const AUTH_UPLOAD: &str = "auth_upload";
     pub const DEVICE_DESC_UPDATE: &str = "device_desc_update";
     pub const LOG_CLEAN: &str = "log_clean";
+    pub const LOG_EXPORT: &str = "log_export";
+    pub const MACHINE_CODE_DOWNLOAD: &str = "machine_code_download";
 }

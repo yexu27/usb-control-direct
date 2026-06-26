@@ -12,7 +12,7 @@ use common::proto::{
     RspCommon, RspSystemInfo,
 };
 
-use super::audit_helper::log_operation;
+use super::audit_helper::{log_operation, log_operation_full, OperationDetail};
 use super::license_state::read_license_snapshot;
 use crate::codec;
 use crate::context::RequestContext;
@@ -125,7 +125,11 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
 
             info!(user = %session.username, target_version = %cmd.target_version, "系统升级成功");
 
-            log_operation(
+            let ext = OperationDetail {
+                related_version: Some(cmd.target_version.clone()),
+                ..Default::default()
+            };
+            log_operation_full(
                 ctx,
                 session,
                 log_type::PROGRAM_UPGRADE,
@@ -133,6 +137,7 @@ pub fn handle_upload_system_upgrade(ctx: &RequestContext, payload: &[u8]) -> Vec
                 &cmd.target_version,
                 0,
                 None,
+                &ext,
             );
 
             // 重启服务（异步，不阻塞响应）
@@ -237,7 +242,11 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
 
     info!(user = %session.username, target_version = %cmd.target_version, "病毒库升级成功");
 
-    log_operation(
+    let ext = OperationDetail {
+        related_version: Some(cmd.target_version.clone()),
+        ..Default::default()
+    };
+    log_operation_full(
         ctx,
         session,
         log_type::PROGRAM_UPGRADE,
@@ -245,6 +254,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         &cmd.target_version,
         0,
         None,
+        &ext,
     );
     success_response(ctx.seq_id)
 }
