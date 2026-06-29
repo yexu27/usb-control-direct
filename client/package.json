@@ -1,6 +1,6 @@
 {
   "name": "usb-control-client",
-  "version": "0.1.0",
+  "version": "3.0.1",
   "private": true,
   "description": "USB安全管理系统管理端",
   "main": "./out/main/index.js",

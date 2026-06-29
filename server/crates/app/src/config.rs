@@ -86,7 +86,7 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn package_version() -> &'static str {
-        env!("CARGO_PKG_VERSION")
+        concat!("V", env!("CARGO_PKG_VERSION"))
     }
 
     pub fn load_from_args<I, S>(args: I) -> Result<Self, ConfigError>

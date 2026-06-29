@@ -11,8 +11,12 @@ SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$SERVER_DIR/.." && pwd)"
 SHARED_ASSETS="$REPO_DIR/deploy/assets"
 
-VERSION="${1:-}"
-test -n "$VERSION" || fail "usage: server/deploy/build-deb.sh <version>"
+REQUESTED_VERSION="${1:-}"
+REQUESTED_VERSION="$(printf '%s' "$REQUESTED_VERSION" | tr -d '\r')"
+test -n "$REQUESTED_VERSION" || fail "usage: server/deploy/build-deb.sh <version>"
+VERSION="${REQUESTED_VERSION#V}"
+VERSION="${VERSION#v}"
+DISPLAY_VERSION="V${VERSION}"
 
 WORKSPACE_VERSION="$(
   sed -n '/^\[workspace.package\]/,/^\[/p' "$SERVER_DIR/Cargo.toml" |
@@ -20,7 +24,7 @@ WORKSPACE_VERSION="$(
     head -n 1
 )"
 
-test "$WORKSPACE_VERSION" = "$VERSION" || fail "version mismatch: arg=$VERSION workspace=$WORKSPACE_VERSION"
+test "$WORKSPACE_VERSION" = "$VERSION" || fail "version mismatch: arg=$REQUESTED_VERSION normalized=$VERSION workspace=$WORKSPACE_VERSION"
 
 command -v cargo >/dev/null 2>&1 || fail "cargo not found"
 command -v dpkg-deb >/dev/null 2>&1 || fail "dpkg-deb not found"
@@ -61,7 +65,7 @@ tr -d '[:space:]' < "$SM2_POLICY_PUB" | grep -Eq '^[0-9A-Fa-f]{128}$' || fail "S
 BUILD_DIR="$SCRIPT_DIR/build"
 ROOT_DIR="$BUILD_DIR/deb-root"
 OUT_DIR="$BUILD_DIR/out"
-PACKAGE_NAME="usb-control_${VERSION}_arm64"
+PACKAGE_NAME="usb-control_${DISPLAY_VERSION}_arm64"
 DEB_PATH="$OUT_DIR/${PACKAGE_NAME}.deb"
 
 rm -rf "$ROOT_DIR"
@@ -95,12 +99,13 @@ install -m 0755 "$SCRIPT_DIR/scripts/usb-control-otg-init.sh" "$ROOT_DIR/usr/loc
 install -m 0755 "$SCRIPT_DIR/scripts/smoke.sh" "$ROOT_DIR/opt/usb-control/smoke.sh"
 install -m 0644 "$CLAMAV_CONTRACT" "$ROOT_DIR/opt/usb-control/install-meta/clamav-contract.toml"
 
-printf '%s\n' "$VERSION" > "$ROOT_DIR/opt/usb-control/install-meta/VERSION"
+printf '%s\n' "$DISPLAY_VERSION" > "$ROOT_DIR/opt/usb-control/install-meta/VERSION"
 
 CERT_FP="$(openssl x509 -in "$TLS_CERT" -outform der | sha256sum | awk '{print toupper($1)}' | sed 's/../&:/g; s/:$//')"
 {
   echo "package=usb-control"
-  echo "version=$VERSION"
+  echo "version=$DISPLAY_VERSION"
+  echo "debian_version=$VERSION"
   echo "architecture=arm64"
   echo "rust_binary_sha256=$(sha256sum "$BINARY" | awk '{print $1}')"
   echo "tls_cert_sha256_fingerprint=$CERT_FP"

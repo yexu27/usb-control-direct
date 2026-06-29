@@ -69,5 +69,5 @@ fn load_from_args_uses_default_config_path_when_missing() {
 
 #[test]
 fn package_version_matches_cargo_package_version() {
-    assert_eq!(AppConfig::package_version(), env!("CARGO_PKG_VERSION"));
+    assert_eq!(AppConfig::package_version(), concat!("V", env!("CARGO_PKG_VERSION")));
 }
