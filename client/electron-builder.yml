@@ -1,15 +1,32 @@
 appId: com.andi.usb-control
 productName: USB安全管理系统
+asar: true
+
+files:
+  - out/**
+  - package.json
+  - '!node_modules/**'
+
 win:
   target:
     - target: nsis
-      arch: [x64]
-  icon: resources/icon.ico
+      arch:
+        - x64
+  signAndEditExecutable: false
+  artifactName: USB-Control-Setup-${version}.${ext}
+
 nsis:
   oneClick: false
+  perMachine: true
+  allowElevation: true
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: USB安全管理系统
+  include: build/installer.nsh
   installerLanguages:
     - zh_CN
+
 directories:
   output: dist
   buildResources: resources

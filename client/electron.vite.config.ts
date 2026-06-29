@@ -21,12 +21,7 @@ export default defineConfig({
       __USB_CONTROL_CERT_FINGERPRINT__: JSON.stringify(certFingerprint),
       __USB_CONTROL_E2E_USB_DEVICES__: JSON.stringify(e2eUsbDevices),
     },
-    plugins: [externalizeDepsPlugin()],
-    build: {
-      rollupOptions: {
-        external: ['protobufjs'],
-      },
-    },
+    plugins: [externalizeDepsPlugin({ exclude: ['protobufjs'] })],
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

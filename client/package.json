@@ -10,6 +10,8 @@
     "preview": "electron-vite preview",
     "gen-proto": "ts-node scripts/gen-proto.ts",
     "prebuild": "npm run gen-proto",
+    "dist": "electron-builder --win nsis",
+    "package:win": "powershell -ExecutionPolicy Bypass -File ./deploy/build-nsis.ps1",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint . --ext .ts,.tsx,.vue",
     "format": "prettier --write \"src/**/*.{ts,tsx,vue,scss}\"",
