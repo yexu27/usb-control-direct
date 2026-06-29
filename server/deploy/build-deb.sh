@@ -71,6 +71,8 @@ DEB_PATH="$OUT_DIR/${PACKAGE_NAME}.deb"
 rm -rf "$ROOT_DIR"
 mkdir -p "$ROOT_DIR/DEBIAN" "$OUT_DIR"
 mkdir -p "$ROOT_DIR/opt/usb-control/bin"
+mkdir -p "$ROOT_DIR/opt/usb-control/db/migrations"
+mkdir -p "$ROOT_DIR/opt/usb-control/db/seeds"
 mkdir -p "$ROOT_DIR/opt/usb-control/install-meta"
 mkdir -p "$ROOT_DIR/etc/usb-control/tls"
 mkdir -p "$ROOT_DIR/etc/usb-control/keys"
@@ -80,13 +82,19 @@ mkdir -p "$ROOT_DIR/usr/local/bin"
 echo "==> build rust release for aarch64"
 (
   cd "$SERVER_DIR"
-  cargo build --release --target aarch64-unknown-linux-gnu -p usb-control-app
+  cargo build --release --target aarch64-unknown-linux-gnu -p usb-control-app -p usb-control-db-migrate
 )
 
 BINARY="$SERVER_DIR/target/aarch64-unknown-linux-gnu/release/usb-control"
+DB_MIGRATE_BINARY="$SERVER_DIR/target/aarch64-unknown-linux-gnu/release/usb-control-db-migrate"
 test -x "$BINARY" || fail "binary not found: $BINARY"
+test -x "$DB_MIGRATE_BINARY" || fail "db migrate binary not found: $DB_MIGRATE_BINARY"
 
 install -m 0755 "$BINARY" "$ROOT_DIR/opt/usb-control/bin/usb-control"
+install -m 0755 "$DB_MIGRATE_BINARY" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate"
+install -m 0755 "$SCRIPT_DIR/scripts/usb-control-db-migrate.sh" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate.sh"
+install -m 0644 "$SCRIPT_DIR/db/migrations/0001_init.sql" "$ROOT_DIR/opt/usb-control/db/migrations/0001_init.sql"
+install -m 0644 "$SCRIPT_DIR/db/seeds/0001_default_data.sql" "$ROOT_DIR/opt/usb-control/db/seeds/0001_default_data.sql"
 install -m 0644 "$SCRIPT_DIR/config/usb-control.toml" "$ROOT_DIR/etc/usb-control/usb-control.toml"
 install -m 0644 "$TLS_CERT" "$ROOT_DIR/etc/usb-control/tls/server.crt"
 install -m 0600 "$TLS_KEY" "$ROOT_DIR/etc/usb-control/tls/server.key"
@@ -108,6 +116,9 @@ CERT_FP="$(openssl x509 -in "$TLS_CERT" -outform der | sha256sum | awk '{print t
   echo "debian_version=$VERSION"
   echo "architecture=arm64"
   echo "rust_binary_sha256=$(sha256sum "$BINARY" | awk '{print $1}')"
+  echo "db_migrate_binary_sha256=$(sha256sum "$DB_MIGRATE_BINARY" | awk '{print $1}')"
+  echo "db_migration_0001_sha256=$(sha256sum "$SCRIPT_DIR/db/migrations/0001_init.sql" | awk '{print $1}')"
+  echo "db_seed_0001_sha256=$(sha256sum "$SCRIPT_DIR/db/seeds/0001_default_data.sql" | awk '{print $1}')"
   echo "tls_cert_sha256_fingerprint=$CERT_FP"
   echo "tls_client_fingerprint=$CLIENT_CERT_FP"
   echo "license_pubkey_sha256=$(sha256sum "$LICENSE_PUBKEY" | awk '{print $1}')"
@@ -127,6 +138,7 @@ install -m 0755 "$SCRIPT_DIR/debian/postrm" "$ROOT_DIR/DEBIAN/postrm"
 
 find "$ROOT_DIR" -type d -exec chmod 0755 {} \;
 chmod 0755 "$ROOT_DIR/DEBIAN/preinst" "$ROOT_DIR/DEBIAN/postinst" "$ROOT_DIR/DEBIAN/prerm" "$ROOT_DIR/DEBIAN/postrm"
+chmod 0755 "$ROOT_DIR/opt/usb-control/bin/usb-control" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate.sh"
 chmod 0600 "$ROOT_DIR/etc/usb-control/tls/server.key"
 chmod 0600 "$ROOT_DIR/etc/usb-control/keys/sm4_policy.key" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.key"
 chmod 0644 "$ROOT_DIR/etc/usb-control/keys/license_verify.pub" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.pub"

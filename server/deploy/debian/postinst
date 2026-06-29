@@ -51,6 +51,8 @@ install -d -m 0755 -o root -g root /var/log/usb-control/scan
 
 chown root:root /opt/usb-control/bin/usb-control
 chmod 0755 /opt/usb-control/bin/usb-control
+chown root:root /opt/usb-control/bin/usb-control-db-migrate /opt/usb-control/bin/usb-control-db-migrate.sh
+chmod 0755 /opt/usb-control/bin/usb-control-db-migrate /opt/usb-control/bin/usb-control-db-migrate.sh
 chown root:root /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
 chmod 0755 /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
 chown root:root /etc/usb-control/tls/server.crt /etc/usb-control/tls/server.key
@@ -63,6 +65,10 @@ chmod 0600 /etc/usb-control/keys/sm4_policy.key /etc/usb-control/keys/sm2_policy
 chmod 0644 /etc/usb-control/keys/sm2_policy.pub
 
 assert_clamav_runtime
+/opt/usb-control/bin/usb-control-db-migrate.sh \
+  /var/lib/usb-control/device.db \
+  /opt/usb-control/db \
+  /opt/usb-control/install-meta/VERSION
 systemctl daemon-reload
 systemctl enable --now usb-control
 

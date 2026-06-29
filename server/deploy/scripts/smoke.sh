@@ -28,12 +28,21 @@ CONFIG_FILE="/etc/usb-control/usb-control.toml"
 PRIVATE_KEY="/etc/usb-control/tls/server.key"
 DATA_DIR="/var/lib/usb-control"
 BINARY="/opt/usb-control/bin/usb-control"
+DB_PATH="/var/lib/usb-control/device.db"
+DB_MIGRATE="/opt/usb-control/bin/usb-control-db-migrate"
+DB_MIGRATE_SQL="/opt/usb-control/db/migrations/0001_init.sql"
+DB_SEED_SQL="/opt/usb-control/db/seeds/0001_default_data.sql"
 
 systemctl is-active --quiet "$SERVICE_NAME" || fail "systemd service is not active: $SERVICE_NAME"
 pass "service active"
 
 test -x "$BINARY" || fail "binary missing or not executable: $BINARY"
 pass "binary executable"
+
+test -x "$DB_MIGRATE" || fail "db migrate binary missing or not executable: $DB_MIGRATE"
+test -r "$DB_MIGRATE_SQL" || fail "db migration SQL missing: $DB_MIGRATE_SQL"
+test -r "$DB_SEED_SQL" || fail "db seed SQL missing: $DB_SEED_SQL"
+pass "database migration resources present"
 
 test -r "$CONFIG_FILE" || fail "config missing: $CONFIG_FILE"
 pass "config readable"
@@ -62,6 +71,22 @@ pass "service keys present and modes are valid"
 data_mode="$(stat -c '%a' "$DATA_DIR")"
 test "$data_mode" = "700" || fail "data dir mode must be 700, got $data_mode"
 pass "data dir mode is 700"
+
+test -s "$DB_PATH" || fail "database missing or empty: $DB_PATH"
+db_mode="$(stat -c '%a' "$DB_PATH")"
+test "$db_mode" = "600" || fail "database mode must be 600, got $db_mode"
+pass "database present and mode is 600"
+
+if command -v sqlite3 >/dev/null 2>&1; then
+  db_user_version="$(sqlite3 "$DB_PATH" "PRAGMA user_version;")"
+  test "$db_user_version" = "1" || fail "database user_version must be 1, got $db_user_version"
+  db_system_version="$(sqlite3 "$DB_PATH" "SELECT config_value FROM system_config WHERE config_key='system_version';")"
+  package_version="$(tr -d '[:space:]' < /opt/usb-control/install-meta/VERSION)"
+  test "$db_system_version" = "$package_version" || fail "database system_version mismatch: db=$db_system_version package=$package_version"
+  pass "database schema and system version verified"
+else
+  echo "[WARN] sqlite3 not found, skip database content check"
+fi
 
 listen_addr="$(awk -F '=' '/^listen_addr/ { gsub(/[ "]/, "", $2); print $2 }' "$CONFIG_FILE")"
 listen_port="${listen_addr##*:}"
