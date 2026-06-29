@@ -6,6 +6,39 @@ fail() {
   exit 1
 }
 
+require_any_readable() {
+  label="$1"
+  shift
+
+  for path in "$@"; do
+    if [ -r "$path" ]; then
+      return 0
+    fi
+  done
+
+  fail "missing readable ClamAV database group: $label ($*)"
+}
+
+assert_clamav_runtime() {
+  test -x /usr/bin/clamdscan || fail "missing executable ClamAV scanner: /usr/bin/clamdscan"
+  test -x /usr/sbin/clamd || fail "missing executable ClamAV daemon: /usr/sbin/clamd"
+
+  systemctl enable --now clamav-daemon.service || fail "failed to enable/start clamav-daemon.service"
+  sleep 2
+  systemctl is-active --quiet clamav-daemon.service || {
+    systemctl status clamav-daemon.service --no-pager || true
+    fail "clamav-daemon.service is not active"
+  }
+
+  test -S /run/clamav/clamd.ctl || fail "missing ClamAV daemon socket: /run/clamav/clamd.ctl"
+
+  require_any_readable "main" /var/lib/clamav/main.cvd /var/lib/clamav/main.cld
+  require_any_readable "daily" /var/lib/clamav/daily.cvd /var/lib/clamav/daily.cld
+  require_any_readable "bytecode" /var/lib/clamav/bytecode.cvd /var/lib/clamav/bytecode.cld
+
+  /usr/bin/clamdscan --version >/dev/null 2>&1 || fail "clamdscan --version failed"
+}
+
 install -d -m 0755 -o root -g root /opt/usb-control
 install -d -m 0755 -o root -g root /opt/usb-control/bin
 install -d -m 0755 -o root -g root /opt/usb-control/install-meta
@@ -25,7 +58,11 @@ chmod 0644 /etc/usb-control/tls/server.crt
 chmod 0600 /etc/usb-control/tls/server.key
 chown root:root /etc/usb-control/keys/license_verify.pub
 chmod 0644 /etc/usb-control/keys/license_verify.pub
+chown root:root /etc/usb-control/keys/sm4_policy.key /etc/usb-control/keys/sm2_policy.key /etc/usb-control/keys/sm2_policy.pub
+chmod 0600 /etc/usb-control/keys/sm4_policy.key /etc/usb-control/keys/sm2_policy.key
+chmod 0644 /etc/usb-control/keys/sm2_policy.pub
 
+assert_clamav_runtime
 systemctl daemon-reload
 systemctl enable --now usb-control
 

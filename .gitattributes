@@ -1,4 +1,14 @@
+/.gitattributes text eol=lf
 *.sh text eol=lf
 server/deploy/debian/* text eol=lf
 server/deploy/*.service text eol=lf
 server/deploy/**/*.toml text eol=lf
+deploy/assets/tls/*.crt text eol=lf
+deploy/assets/tls/*.key text eol=lf
+deploy/assets/tls/*.sha256 text eol=lf
+deploy/assets/**/*.md text eol=lf
+deploy/assets/**/*.toml text eol=lf
+deploy/assets/keys/license_verify.pub -text
+deploy/assets/keys/sm4_policy.key -text
+deploy/assets/keys/sm2_policy.key text eol=lf
+deploy/assets/keys/sm2_policy.pub text eol=lf

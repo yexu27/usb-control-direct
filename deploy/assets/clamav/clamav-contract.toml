@@ -1,0 +1,19 @@
+[clamav]
+version_policy = "read_runtime_version_only"
+clamdscan_path = "/usr/bin/clamdscan"
+clamd_path = "/usr/sbin/clamd"
+service_name = "clamav-daemon.service"
+socket_path = "/run/clamav/clamd.ctl"
+database_dir = "/var/lib/clamav"
+
+[[clamav.database_groups]]
+name = "main"
+accepted_files = ["main.cvd", "main.cld"]
+
+[[clamav.database_groups]]
+name = "daily"
+accepted_files = ["daily.cvd", "daily.cld"]
+
+[[clamav.database_groups]]
+name = "bytecode"
+accepted_files = ["bytecode.cvd", "bytecode.cld"]

@@ -3,8 +3,3 @@ target/
 deploy/build/
 deploy/*.deb
 deploy/*.sha256
-deploy/release-assets/tls/server.crt
-deploy/release-assets/tls/server.key
-deploy/release-assets/keys/license_verify.pub
-deploy/bundle/deps/*.deb
-deploy/bundle/clamav-db/*.cvd
