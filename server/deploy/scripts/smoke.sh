@@ -84,6 +84,18 @@ if command -v sqlite3 >/dev/null 2>&1; then
   package_version="$(tr -d '[:space:]' < /opt/usb-control/install-meta/VERSION)"
   test "$db_system_version" = "$package_version" || fail "database system_version mismatch: db=$db_system_version package=$package_version"
   pass "database schema and system version verified"
+
+  clamav_version_output="$(/usr/bin/clamscan --version)"
+  clamav_db_version="$(printf '%s\n' "$clamav_version_output" | awk -F/ '{print $2}')"
+  clamav_db_time="$(printf '%s\n' "$clamav_version_output" | awk -F/ '{print $3}')"
+  test -n "$clamav_db_version" || fail "failed to parse ClamAV database version from: $clamav_version_output"
+  test -n "$clamav_db_time" || fail "failed to parse ClamAV database time from: $clamav_version_output"
+
+  db_virus_version="$(sqlite3 "$DB_PATH" "SELECT config_value FROM system_config WHERE config_key='virus_db_version';")"
+  db_virus_updated_at="$(sqlite3 "$DB_PATH" "SELECT config_value FROM system_config WHERE config_key='virus_db_updated_at';")"
+  test "$db_virus_version" = "$clamav_db_version" || fail "database virus_db_version mismatch: db=$db_virus_version clamav=$clamav_db_version"
+  test "$db_virus_updated_at" != "0" || fail "database virus_db_updated_at must not be 0"
+  pass "database virus database status verified"
 else
   echo "[WARN] sqlite3 not found, skip database content check"
 fi

@@ -24,6 +24,7 @@ const REQUIRED_CONFIGS: &[&str] = &[
     "auth_expire_time",
     "machine_code",
     "system_version",
+    "virus_db_package_version",
     "virus_db_version",
     "virus_db_updated_at",
 ];

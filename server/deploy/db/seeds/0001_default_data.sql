@@ -59,6 +59,7 @@ VALUES
   ('auth_expire_time', '0', strftime('%s','now')),
   ('machine_code', '', strftime('%s','now')),
   ('system_version', '1.0.0', strftime('%s','now')),
+  ('virus_db_package_version', 'v0.0.0', strftime('%s','now')),
   ('virus_db_version', '', strftime('%s','now')),
   ('virus_db_updated_at', '0', strftime('%s','now'));
 

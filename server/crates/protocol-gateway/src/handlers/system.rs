@@ -195,7 +195,7 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         }
     };
 
-    let current_version = config_value(storage, "virus_db_version");
+    let current_version = config_value(storage, "virus_db_package_version");
 
     if !verify_sha256(&cmd.upgrade_data, &cmd.sha256_checksum) {
         log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("SHA-256 校验失败"));
@@ -257,6 +257,11 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         error!("病毒库已升级但更新时间持久化失败");
         log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");
+    }
+    if let Err(_e) = storage.config_set("virus_db_package_version", &cmd.target_version) {
+        error!("病毒库已升级但升级包版本持久化失败");
+        log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("病毒库升级包版本持久化失败"));
+        return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库升级包版本持久化失败");
     }
 
     info!(user = %session.username, target_version = %cmd.target_version, "病毒库升级成功");

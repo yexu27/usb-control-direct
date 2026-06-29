@@ -21,6 +21,15 @@ fn open_rejects_uninitialized_database() {
     ));
 }
 
+#[test]
+fn initialized_database_contains_virusdb_package_version_config() {
+    let (s, _tmp) = setup();
+    assert!(
+        s.config_get("virus_db_package_version").unwrap().is_some(),
+        "virus_db_package_version must exist for package upgrade validation"
+    );
+}
+
 // ========== T01 ==========
 
 #[test]
