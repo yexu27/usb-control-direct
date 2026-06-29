@@ -2,4 +2,3 @@
 server/deploy/debian/* text eol=lf
 server/deploy/*.service text eol=lf
 server/deploy/**/*.toml text eol=lf
-server/deploy/**/*.rules text eol=lf

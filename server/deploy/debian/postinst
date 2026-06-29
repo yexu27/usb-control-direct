@@ -26,10 +26,6 @@ chmod 0600 /etc/usb-control/tls/server.key
 chown root:root /etc/usb-control/keys/license_verify.pub
 chmod 0644 /etc/usb-control/keys/license_verify.pub
 
-if command -v udevadm >/dev/null 2>&1; then
-  udevadm control --reload-rules || echo "usb-control postinst: udev reload failed, continue"
-fi
-
 systemctl daemon-reload
 systemctl enable --now usb-control
 
