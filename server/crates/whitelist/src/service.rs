@@ -365,11 +365,13 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
+    use storage_test_support::initialize_database;
     use tempfile::NamedTempFile;
 
     /// 创建临时数据库并返回 WhitelistManager。
     fn make_manager() -> (NamedTempFile, WhitelistManager) {
         let tmp = NamedTempFile::new().unwrap();
+        initialize_database(tmp.path());
         let storage = Arc::new(Storage::open(tmp.path()).unwrap());
         let manager = WhitelistManager::new(storage).unwrap();
         (tmp, manager)
@@ -484,6 +486,7 @@ mod tests {
     #[test]
     fn reload_cache_repopulates_from_db() {
         let tmp = NamedTempFile::new().unwrap();
+        initialize_database(tmp.path());
         let storage = Arc::new(Storage::open(tmp.path()).unwrap());
         let manager = WhitelistManager::new(storage).unwrap();
 

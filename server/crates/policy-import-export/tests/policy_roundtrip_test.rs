@@ -8,6 +8,7 @@ use policy_import_export::format::{self, PolicyContent};
 use policy_import_export::key_provider::{PolicyKeyProvider, PolicyKeys, SM4_KEY_LEN};
 use policy_import_export::PolicyService;
 use storage::Storage;
+use storage_test_support::initialize_database;
 use whitelist::WhitelistManager;
 
 /// 测试用密钥提供者。
@@ -39,13 +40,14 @@ impl PolicyKeyProvider for MockKeyProvider {
     }
 }
 
-/// 创建临时数据库并初始化 schema。
+/// 创建临时数据库并执行发布 SQL。
 ///
 /// 返回 `(Arc<Storage>, TempDir)`。调用方必须持有 `TempDir`，
 /// 不得提前 drop，否则临时目录会被删除导致数据库访问失败。
 fn setup_storage() -> (Arc<Storage>, tempfile::TempDir) {
     let tmp_dir = tempfile::tempdir().expect("创建临时目录失败");
     let db_path = tmp_dir.path().join("test.db");
+    initialize_database(&db_path);
     let storage = Arc::new(Storage::open(&db_path).expect("打开数据库失败"));
     (storage, tmp_dir)
 }

@@ -375,6 +375,7 @@ mod tests {
     use common::types::DeviceType;
     use log_audit::AuditService;
     use storage::Storage;
+    use storage_test_support::initialize_database;
     use tempfile::{NamedTempFile, TempPath};
     use usb_identify::descriptor::UsbDeviceInfo;
     use usb_identify::monitor::DeviceManager;
@@ -398,6 +399,7 @@ mod tests {
 
     fn context(device: Option<UsbDeviceInfo>) -> (RequestContext, TempPath) {
         let path = NamedTempFile::new().unwrap().into_temp_path();
+        initialize_database(&path);
         let storage = Arc::new(Storage::open(&path).unwrap());
         let auth = Arc::new(AuthService::new(
             Arc::clone(&storage),

@@ -49,7 +49,7 @@ async fn main() {
     let db_path = config.database_path.clone();
 
     let storage = Arc::new(
-        Storage::open_with_pool_size(&db_path, 8).expect("数据库初始化失败"),
+        Storage::open_with_pool_size(&db_path, 8).expect("数据库未就绪"),
     );
 
     let auth_service = Arc::new(AuthService::new(Arc::clone(&storage), SessionManager::new()));

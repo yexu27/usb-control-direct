@@ -25,5 +25,6 @@ tracing = "0.1"
 sha2 = { workspace = true }
 
 [dev-dependencies]
+storage-test-support = { path = "../storage-test-support" }
 tempfile = { workspace = true }
 rcgen = { workspace = true }

@@ -6,14 +6,16 @@ use auth_session::password;
 use auth_session::service::AuthService;
 use auth_session::session::SessionManager;
 use storage::Storage;
+use storage_test_support::initialize_database;
 use tempfile::NamedTempFile;
 
 fn setup() -> (AuthService, tempfile::TempPath) {
     let tmp = NamedTempFile::new().unwrap();
     let path = tmp.into_temp_path();
+    initialize_database(&path);
     let storage = Arc::new(Storage::open(&path).unwrap());
 
-    // 内置用户由 schema 自动插入
+    // 内置用户由发布 SQL 种子数据提供。
     let session_mgr = SessionManager::new();
     let service = AuthService::new(storage, session_mgr);
     (service, path)
@@ -282,7 +284,7 @@ fn hash_password_produces_valid_hash() {
 fn list_users_returns_builtin_users() {
     let (service, _path) = setup();
     let users = service.list_users().unwrap();
-    // schema 自动插入了 admin、operator、audit 三个内置用户
+    // 发布 SQL 种子数据提供 admin、operator、audit 三个内置用户。
     assert!(users.len() >= 3);
     let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
     assert!(names.contains(&"admin"));

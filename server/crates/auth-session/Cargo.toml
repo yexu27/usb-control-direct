@@ -17,5 +17,6 @@ thiserror = { workspace = true }
 tracing = "0.1"
 
 [dev-dependencies]
+storage-test-support = { path = "../storage-test-support" }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }

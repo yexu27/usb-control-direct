@@ -13,6 +13,7 @@ use common::types::DeviceType;
 use hid_access::hid_gadget::HidgNodes;
 use log_audit::AuditService;
 use storage::Storage;
+use storage_test_support::initialize_database;
 use usb_identify::descriptor::UsbDeviceInfo;
 use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator, NbdPool};
@@ -85,6 +86,7 @@ fn test_storage_info(serial: &str) -> UsbDeviceInfo {
 fn setup_services(
     db_path: &std::path::Path,
 ) -> (Arc<AuditService>, Arc<WhitelistManager>) {
+    initialize_database(db_path);
     let storage = Arc::new(Storage::open(db_path).unwrap());
     let audit = Arc::new(AuditService::new(Arc::clone(&storage), db_path));
     let whitelist = Arc::new(WhitelistManager::new(storage).unwrap());

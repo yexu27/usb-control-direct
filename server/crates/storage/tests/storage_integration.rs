@@ -2,12 +2,23 @@
 
 use storage::model::*;
 use storage::{Storage, StorageError};
-use tempfile::NamedTempFile;
+use storage_test_support::TestDb;
 
-fn setup() -> (Storage, NamedTempFile) {
-    let tmp = NamedTempFile::new().unwrap();
-    let s = Storage::open(tmp.path()).unwrap();
-    (s, tmp)
+fn setup() -> (Storage, TestDb) {
+    let db = TestDb::new();
+    let s = Storage::open(db.path()).unwrap();
+    (s, db)
+}
+
+#[test]
+fn open_rejects_uninitialized_database() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("empty.db");
+    let result = Storage::open(&path);
+    assert!(matches!(
+        result,
+        Err(StorageError::DatabaseNotInitialized(_))
+    ));
 }
 
 // ========== T01 ==========

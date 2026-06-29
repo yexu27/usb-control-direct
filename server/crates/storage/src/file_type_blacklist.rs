@@ -104,10 +104,12 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use storage_test_support::initialize_database;
     use tempfile::NamedTempFile;
 
     fn setup() -> (Storage, NamedTempFile) {
         let file = NamedTempFile::new().unwrap();
+        initialize_database(file.path());
         let storage = Storage::open(file.path()).unwrap();
         (storage, file)
     }

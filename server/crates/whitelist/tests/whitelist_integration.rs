@@ -2,12 +2,14 @@ use std::sync::Arc;
 use std::thread;
 
 use storage::Storage;
+use storage_test_support::initialize_database;
 use tempfile::NamedTempFile;
 use whitelist::service::{AddWhitelistRequest, WhitelistManager};
 use whitelist::WhitelistError;
 
 fn setup() -> (WhitelistManager, NamedTempFile) {
     let tmp = NamedTempFile::new().unwrap();
+    initialize_database(tmp.path());
     let storage = Arc::new(Storage::open(tmp.path()).unwrap());
     let manager = WhitelistManager::new(storage).unwrap();
     (manager, tmp)
@@ -56,6 +58,7 @@ fn add_duplicate_serial_number_rejected() {
 #[test]
 fn concurrent_add_same_sn_only_one_succeeds() {
     let tmp = NamedTempFile::new().unwrap();
+    initialize_database(tmp.path());
     let storage = Arc::new(Storage::open(tmp.path()).unwrap());
     let mgr = Arc::new(WhitelistManager::new(storage).unwrap());
 

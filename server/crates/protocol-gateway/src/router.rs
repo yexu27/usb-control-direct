@@ -120,12 +120,14 @@ mod tests {
     use auth_session::{AuthService, SessionManager};
     use log_audit::AuditService;
     use storage::Storage;
+    use storage_test_support::initialize_database;
     use tempfile::NamedTempFile;
 
     /// 构建测试用 RequestContext。
     fn test_context(seq_id: u32) -> (RequestContext, tempfile::TempPath) {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.into_temp_path();
+        initialize_database(&path);
         let storage_auth = Arc::new(Storage::open(&path).unwrap());
         let storage_audit = Arc::clone(&storage_auth);
         let auth = Arc::new(AuthService::new(Arc::clone(&storage_auth), SessionManager::new()));

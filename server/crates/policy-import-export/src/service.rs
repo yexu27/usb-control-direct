@@ -263,6 +263,7 @@ mod tests {
     use super::*;
     use crate::format::{FileAccessPolicyEntry, FileTypeBlacklistEntry, WhitelistEntry};
     use crate::key_provider::{PolicyKeys, SM4_KEY_LEN};
+    use storage_test_support::initialize_database;
     use tempfile::NamedTempFile;
 
     struct UnusedKeyProvider;
@@ -323,6 +324,7 @@ mod tests {
     #[test]
     fn apply_policy_normalizes_blacklist_and_preserves_default_semantics() {
         let file = NamedTempFile::new().unwrap();
+        initialize_database(file.path());
         let storage = Arc::new(Storage::open(file.path()).unwrap());
         storage
             .whitelist_insert(&UsbWhitelistInsert {
@@ -359,6 +361,7 @@ mod tests {
     #[test]
     fn export_import_preserves_deleted_default_blacklist_entry() {
         let source_file = NamedTempFile::new().unwrap();
+        initialize_database(source_file.path());
         let source_storage = Arc::new(Storage::open(source_file.path()).unwrap());
         source_storage.blacklist_delete(".ps1").unwrap();
         let (private_key, public_key) = smcrypto::sm2::gen_keypair();
@@ -377,6 +380,7 @@ mod tests {
         let policy_data = source_service.export_policy().unwrap();
 
         let target_file = NamedTempFile::new().unwrap();
+        initialize_database(target_file.path());
         let target_storage = Arc::new(Storage::open(target_file.path()).unwrap());
         let target_service = PolicyService::new(
             target_storage.clone(),
@@ -397,6 +401,7 @@ mod tests {
     #[test]
     fn apply_policy_rejects_unsafe_enums_without_changing_existing_policy() {
         let file = NamedTempFile::new().unwrap();
+        initialize_database(file.path());
         let storage = Arc::new(Storage::open(file.path()).unwrap());
         storage
             .whitelist_insert(&UsbWhitelistInsert {
