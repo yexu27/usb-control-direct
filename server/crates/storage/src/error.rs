@@ -25,6 +25,14 @@ pub enum StorageError {
     #[error("记录不存在: {0}")]
     NotFound(String),
 
+    /// 数据库尚未通过安装期初始化。
+    #[error("数据库未初始化: {0}")]
+    DatabaseNotInitialized(String),
+
+    /// 数据库 schema 版本高于当前程序可识别范围。
+    #[error("数据库 schema 版本不兼容: current={current}, supported={supported}")]
+    SchemaVersionUnsupported { current: i32, supported: i32 },
+
     /// JSON 序列化或反序列化失败。
     #[error("JSON 错误: {0}")]
     Json(#[from] serde_json::Error),
@@ -54,6 +62,8 @@ impl StorageError {
             StorageError::Validation(_) => ResultCode::ValidationFailed,
             StorageError::AlreadyExists => ResultCode::AlreadyExists,
             StorageError::NotFound(_) => ResultCode::NotFound,
+            StorageError::DatabaseNotInitialized(_) => ResultCode::InternalError,
+            StorageError::SchemaVersionUnsupported { .. } => ResultCode::InternalError,
             StorageError::Json(_) => ResultCode::InternalError,
         }
     }

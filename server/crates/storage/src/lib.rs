@@ -7,8 +7,8 @@ pub mod error;
 pub mod extension;
 pub mod model;
 
+pub(crate) mod health;
 pub(crate) mod pool;
-pub(crate) mod schema;
 pub(crate) mod usb_whitelist;
 pub(crate) mod file_type_blacklist;
 pub(crate) mod file_access_policy;
@@ -50,7 +50,7 @@ impl Storage {
     pub fn open_with_pool_size(path: &Path, read_pool_size: usize) -> Result<Self, StorageError> {
         let pool = Pool::open(path, read_pool_size)?;
         pool.with_transaction(|conn| {
-            schema::migrate(conn)?;
+            health::verify_database_ready(conn)?;
             Ok(())
         })?;
         Ok(Storage { pool })
