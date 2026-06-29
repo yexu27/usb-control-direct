@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use usb_control_db_migrate::sync_virus_db_status;
+use usb_control_db_migrate::{sync_virus_db_package_version, sync_virus_db_status};
 
 #[test]
 fn sync_virus_db_status_updates_config_values() {
@@ -37,4 +37,54 @@ fn sync_virus_db_status_updates_config_values() {
         .unwrap();
     assert_eq!(version, "28045");
     assert_eq!(updated_at, "1782656776");
+}
+
+#[test]
+fn sync_virus_db_package_version_initializes_missing_config() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE system_config (
+            config_key TEXT PRIMARY KEY,
+            config_value TEXT,
+            updated_at INTEGER NOT NULL
+        );",
+    )
+    .unwrap();
+
+    sync_virus_db_package_version(&conn, "v0.0.0").unwrap();
+
+    let version: String = conn
+        .query_row(
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_package_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(version, "v0.0.0");
+}
+
+#[test]
+fn sync_virus_db_package_version_keeps_existing_config() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE system_config (
+            config_key TEXT PRIMARY KEY,
+            config_value TEXT,
+            updated_at INTEGER NOT NULL
+        );
+        INSERT INTO system_config (config_key, config_value, updated_at)
+        VALUES ('virus_db_package_version', 'v3.0.5', 100);",
+    )
+    .unwrap();
+
+    sync_virus_db_package_version(&conn, "v0.0.0").unwrap();
+
+    let version: String = conn
+        .query_row(
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_package_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(version, "v3.0.5");
 }

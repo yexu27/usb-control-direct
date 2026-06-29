@@ -41,7 +41,7 @@ pub fn run_migration(
     }
 
     sync_system_version(&conn, &version)?;
-    ensure_config_value(&conn, "virus_db_package_version", "v0.0.0")?;
+    sync_virus_db_package_version(&conn, "v0.0.0")?;
     let clamav_status = clamav_status::read_clamav_status("/usr/bin/clamscan")
         .map_err(|e| format!("read ClamAV virus database status failed: {e}"))?;
     sync_virus_db_status(&conn, &clamav_status)?;
@@ -73,14 +73,14 @@ fn sync_system_version(conn: &Connection, version: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn ensure_config_value(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+pub fn sync_virus_db_package_version(conn: &Connection, version: &str) -> Result<(), String> {
     conn.execute(
         "INSERT INTO system_config (config_key, config_value, updated_at)
-         VALUES (?1, ?2, strftime('%s','now'))
+         VALUES ('virus_db_package_version', ?1, strftime('%s','now'))
          ON CONFLICT(config_key) DO NOTHING",
-        params![key, value],
+        params![version],
     )
-    .map_err(|e| format!("ensure config {key} failed: {e}"))?;
+    .map_err(|e| format!("sync virus_db_package_version failed: {e}"))?;
     Ok(())
 }
 
