@@ -16,6 +16,7 @@ members = [
     "crates/app",
     "crates/db-migrate",
     "crates/storage-test-support",
+    "crates/clamav-status",
 ]
 
 [workspace.package]
@@ -81,6 +82,7 @@ hex = "0.4"
 # 内部 crate
 common = { path = "crates/common" }
 storage = { path = "crates/storage" }
+clamav-status = { path = "crates/clamav-status" }
 
 [profile.release]
 opt-level = 3

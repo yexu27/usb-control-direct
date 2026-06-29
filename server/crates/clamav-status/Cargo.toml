@@ -1,0 +1,11 @@
+[package]
+name = "clamav-status"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "ClamAV version status reader and parser"
+
+[dependencies]
+chrono = { workspace = true }
+thiserror = { workspace = true }
