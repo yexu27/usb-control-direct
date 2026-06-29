@@ -499,10 +499,6 @@ fn t05_usb_audit_insert_and_query() {
         event_type: "device_insert".into(),
         permission: None,
         capacity_bytes: Some(16_000_000_000),
-        file_path: None,
-        matched_policy: None,
-        result: "allowed".into(),
-        fail_reason: None,
         detail: None,
     };
     let id = s.usb_audit_insert(&item).unwrap();
@@ -655,10 +651,6 @@ fn make_usb_audit(event_time: i64, event_type: &str, device_name: &str) -> UsbAu
         event_type: event_type.into(),
         permission: None,
         capacity_bytes: None,
-        file_path: None,
-        matched_policy: None,
-        result: "allowed".into(),
-        fail_reason: None,
         detail: None,
     }
 }
@@ -834,9 +826,9 @@ fn t10_operation_log_paged_query() {
     s.operation_log_insert(&make_op_log(base + 1, "policy_manage", "create", "admin")).unwrap();
     s.operation_log_insert(&make_op_log(base + 2, "login_auth", "logout", "operator")).unwrap();
 
-    // log_category 过滤 login_auth
+    // event_type 过滤 T10.log_type
     let params = LogQueryParams {
-        log_category: Some("login_auth".into()),
+        event_type: Some("login_auth".into()),
         page: 1,
         page_size: 10,
         ..Default::default()
@@ -844,17 +836,6 @@ fn t10_operation_log_paged_query() {
     let (rows, total) = s.operation_log_query_paged(&params).unwrap();
     assert_eq!(total, 2);
     assert_eq!(rows.len(), 2);
-
-    // action_type 过滤
-    let params = LogQueryParams {
-        action_type: Some("create".into()),
-        page: 1,
-        page_size: 10,
-        ..Default::default()
-    };
-    let (rows, total) = s.operation_log_query_paged(&params).unwrap();
-    assert_eq!(total, 1);
-    assert_eq!(rows[0].log_type, "policy_manage");
 
     // 关键字过滤用户名
     let params = LogQueryParams {

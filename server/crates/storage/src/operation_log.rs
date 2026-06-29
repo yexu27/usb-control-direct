@@ -115,6 +115,12 @@ impl Storage {
                     bind_values.push(Box::new(escape_like_keyword(keyword)));
                 }
             }
+            if let Some(ref event_type) = params.event_type {
+                if !event_type.is_empty() {
+                    conditions.push(format!("log_type = ?{}", bind_values.len() + 1));
+                    bind_values.push(Box::new(event_type.clone()));
+                }
+            }
 
             let where_clause = if conditions.is_empty() {
                 String::new()
