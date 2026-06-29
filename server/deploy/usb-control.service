@@ -1,16 +1,20 @@
 [Unit]
-Description=USB Security Control Device Service
-After=network.target clamd@scan.service
-Wants=clamd@scan.service
+Description=USB Control Service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/usb-control/usb-control
+User=root
+Group=root
+ExecStart=/opt/usb-control/bin/usb-control --config /etc/usb-control/usb-control.toml
 Restart=on-failure
-RestartSec=5
+RestartSec=3
 WorkingDirectory=/opt/usb-control
 Environment=RUST_LOG=info
 LimitNOFILE=65536
+RuntimeDirectory=usb-control
+RuntimeDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target
