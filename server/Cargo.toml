@@ -14,6 +14,7 @@ members = [
     "crates/policy-import-export",
     "crates/license-upgrade",
     "crates/app",
+    "crates/db-migrate",
 ]
 
 [workspace.package]

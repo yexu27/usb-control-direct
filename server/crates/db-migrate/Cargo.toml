@@ -1,0 +1,13 @@
+[package]
+name = "usb-control-db-migrate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "usb-control-db-migrate"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { workspace = true }
