@@ -24,7 +24,12 @@ policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }
 protocol-gateway = { path = "../protocol-gateway" }
 tokio = { workspace = true }
+serde = { workspace = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 tracing-appender = "0.2"
 rolling-file = "0.2"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = { workspace = true }

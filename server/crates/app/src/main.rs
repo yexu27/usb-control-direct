@@ -1,9 +1,9 @@
 //! USB 安全管理装置端服务入口。
 
+mod config;
 mod logging;
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
+use config::AppConfig;
 use license_upgrade::{LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
 use log_audit::AuditService;
 use policy_import_export::{FileKeyProvider, PolicyService};
@@ -34,32 +35,18 @@ use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
-/// 数据库路径。
-const DB_PATH: &str = "/var/lib/usb-control/device.db";
-/// TLS 证书路径。
-const CERT_PATH: &str = "/etc/usb-control/certs/server.crt";
-/// TLS 私钥路径。
-const KEY_PATH: &str = "/etc/usb-control/certs/server.key";
-/// 监听地址。
-const LISTEN_ADDR: &str = "0.0.0.0:9600";
-/// 安装目录。
-const INSTALL_DIR: &str = "/opt/usb-control";
-/// systemd 服务名。
-const SERVICE_NAME: &str = "usb-control";
-/// 策略密钥目录。
-const POLICY_KEY_DIR: &str = "/etc/usb-control/keys";
-/// Rust 服务运行日志目录。
-const LOG_DIR: &str = "/var/log/usb-control";
-/// SM2 授权验签公钥路径。
-const LICENSE_PUBKEY_PATH: &str = "/etc/usb-control/keys/license_verify.pub";
-
 #[tokio::main]
 async fn main() {
-    let _log_guards = logging::init_logging(std::path::Path::new(LOG_DIR));
+    let config = AppConfig::load_from_args(std::env::args()).expect("启动配置加载失败");
+    let _log_guards = logging::init_logging(&config.log_dir, &config.log_level_conf);
 
-    info!("USB 安全管理装置端服务启动");
+    info!(
+        version = AppConfig::package_version(),
+        config = %config.config_path.display(),
+        "USB 安全管理装置端服务启动"
+    );
 
-    let db_path = PathBuf::from(DB_PATH);
+    let db_path = config.database_path.clone();
 
     let storage = Arc::new(
         Storage::open_with_pool_size(&db_path, 8).expect("数据库初始化失败"),
@@ -72,18 +59,21 @@ async fn main() {
     );
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
 
-    let key_provider = Arc::new(FileKeyProvider::new(POLICY_KEY_DIR));
+    let key_provider = Arc::new(FileKeyProvider::new(&config.policy_key_dir));
     let policy_service = Arc::new(PolicyService::new(
         Arc::clone(&storage),
         key_provider,
         Arc::clone(&whitelist_manager),
     ));
 
-    let system_upgrade_mgr = Arc::new(SystemUpgradeManager::new(INSTALL_DIR, SERVICE_NAME));
+    let system_upgrade_mgr = Arc::new(SystemUpgradeManager::new(
+        config.install_dir.clone(),
+        config.service_name.clone(),
+    ));
     let virusdb_upgrade_mgr = Arc::new(VirusdbUpgradeManager::with_default_path());
 
     let license_validator: Arc<dyn LicenseValidator> = Arc::new(
-        ProductionLicenseValidator::from_key_file(&PathBuf::from(LICENSE_PUBKEY_PATH))
+        ProductionLicenseValidator::from_key_file(&config.license_pubkey_path)
             .expect("授权公钥加载失败"),
     );
 
@@ -94,10 +84,10 @@ async fn main() {
         let _ = mgr.remove_config_links();
 
         // 先创建 functions（必须在写 config 属性之前）
-        mgr.configure_mass_storage(&PathBuf::from("/dev/nbd0"), true)
+        mgr.configure_mass_storage(&config.nbd_device, true)
             .expect("mass_storage function 配置失败");
 
-        let functions_base = PathBuf::from("/sys/kernel/config/usb_gadget/rockchip/functions");
+        let functions_base = config.gadget_functions_base.clone();
         configure_hid_function(&functions_base.join(KEYBOARD_FUNCTION), 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)
             .expect("HID keyboard function 配置失败");
         configure_hid_function(&functions_base.join(MOUSE_FUNCTION), 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)
@@ -119,14 +109,15 @@ async fn main() {
 
     // ===== 实例化下游服务 =====
     let scan_service = Arc::new(ScanService::new(
-        ClamScanner::new("/usr/bin/clamdscan"),
+        ClamScanner::new(&config.clamdscan_path),
         Arc::clone(&audit_service),
-        &PathBuf::from("/var/log/usb-control/scan"),
+        &config.scan_log_dir,
     ));
 
+    let nbd_device = config.nbd_device.to_string_lossy().to_string();
     let file_access_engine = Arc::new(FileAccessEngine::new(
         Arc::clone(&storage),
-        "/dev/nbd0",
+        &nbd_device,
     ));
 
     let state = Arc::new(AppState {
@@ -195,15 +186,15 @@ async fn main() {
     register_log_handlers(&mut router);
     register_user_handlers(&mut router);
 
-    let cert_path = PathBuf::from(CERT_PATH);
-    let key_path = PathBuf::from(KEY_PATH);
+    let cert_path = config.tls_cert_path.clone();
+    let key_path = config.tls_key_path.clone();
     let (tls_acceptor, cert_fingerprint) =
         create_tls_acceptor(&cert_path, &key_path).expect("TLS 配置初始化失败");
     info!(fingerprint = %cert_fingerprint, "TLS 证书 SHA-256 指纹");
 
     let conn_mgr = ConnectionManager::new();
 
-    let addr: SocketAddr = LISTEN_ADDR.parse().expect("监听地址解析失败");
+    let addr: SocketAddr = config.listen_addr.parse().expect("监听地址解析失败");
     let listener = TcpListener::bind(addr).await.expect("端口绑定失败");
     info!("TLS 监听: {}", addr);
 

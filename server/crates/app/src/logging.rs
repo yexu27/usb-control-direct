@@ -24,9 +24,6 @@ const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 /// 每组保留的历史文件数。
 const MAX_FILE_COUNT: usize = 3;
 
-/// 动态日志级别配置文件路径。
-const LOG_LEVEL_CONF: &str = "/etc/usb-control/log.conf";
-
 /// 配置文件轮询间隔（秒）。
 const POLL_INTERVAL_SECS: u64 = 30;
 
@@ -59,8 +56,8 @@ const LOG_GROUPS: &[LogGroup] = &[
 ];
 
 /// 从配置文件读取日志级别，文件不存在则返回默认级别。
-fn load_log_filter() -> String {
-    match std::fs::read_to_string(LOG_LEVEL_CONF) {
+fn load_log_filter(log_level_conf: &Path) -> String {
+    match std::fs::read_to_string(log_level_conf) {
         Ok(content) => {
             let trimmed = content.trim();
             if trimmed.is_empty() {
@@ -74,25 +71,28 @@ fn load_log_filter() -> String {
 }
 
 /// 获取配置文件的修改时间，文件不存在返回 None。
-fn conf_mtime() -> Option<SystemTime> {
-    std::fs::metadata(LOG_LEVEL_CONF).ok().and_then(|m| m.modified().ok())
+fn conf_mtime(log_level_conf: &Path) -> Option<SystemTime> {
+    std::fs::metadata(log_level_conf).ok().and_then(|m| m.modified().ok())
 }
 
 /// 启动配置文件轮询任务，检测到变化时热切换日志级别。
-fn spawn_log_level_watcher(reload_handle: reload::Handle<EnvFilter, impl tracing::Subscriber + Send + Sync + 'static>) {
+fn spawn_log_level_watcher(
+    log_level_conf: std::path::PathBuf,
+    reload_handle: reload::Handle<EnvFilter, impl tracing::Subscriber + Send + Sync + 'static>,
+) {
     tokio::spawn(async move {
-        let mut last_mtime = conf_mtime();
+        let mut last_mtime = conf_mtime(&log_level_conf);
 
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
 
-            let current_mtime = conf_mtime();
+            let current_mtime = conf_mtime(&log_level_conf);
             if current_mtime == last_mtime {
                 continue;
             }
             last_mtime = current_mtime;
 
-            let filter_str = load_log_filter();
+            let filter_str = load_log_filter(&log_level_conf);
             match filter_str.parse::<EnvFilter>() {
                 Ok(new_filter) => {
                     if let Err(e) = reload_handle.reload(new_filter) {
@@ -118,12 +118,12 @@ fn spawn_log_level_watcher(reload_handle: reload::Handle<EnvFilter, impl tracing
 /// - `Vec<WorkerGuard>`，调用方必须持有到进程退出，
 ///   否则 non_blocking writer 会在 guard drop 时停止写入。
 #[must_use = "guard 必须持有到进程退出，否则日志文件写入会停止"]
-pub fn init_logging(log_dir: &Path) -> Vec<WorkerGuard> {
+pub fn init_logging(log_dir: &Path, log_level_conf: &Path) -> Vec<WorkerGuard> {
     std::fs::create_dir_all(log_dir).expect("日志目录创建失败");
 
     let mut guards = Vec::new();
 
-    let initial_filter_str = load_log_filter();
+    let initial_filter_str = load_log_filter(log_level_conf);
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| initial_filter_str.parse().unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_FILTER)));
 
@@ -171,7 +171,7 @@ pub fn init_logging(log_dir: &Path) -> Vec<WorkerGuard> {
 
     // RUST_LOG 环境变量优先级高于配置文件，有 RUST_LOG 时不启动轮询
     if std::env::var("RUST_LOG").is_err() {
-        spawn_log_level_watcher(reload_handle);
+        spawn_log_level_watcher(log_level_conf.to_path_buf(), reload_handle);
     }
 
     guards
