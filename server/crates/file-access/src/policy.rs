@@ -154,4 +154,33 @@ mod tests {
             AccessDecision::Deny(_)
         ));
     }
+
+    #[test]
+    fn virus_denial_has_priority_over_executable_and_blacklist() {
+        let snapshot = PolicySnapshot {
+            exec_control_enabled: true,
+            file_type_blacklist_enabled: true,
+            auto_read_control_enabled: true,
+            blacklist_extensions: HashSet::from([".exe".to_string()]),
+            permission: 1,
+        };
+        let entry = ControlledEntry {
+            real_path: PathBuf::from("/mnt/usb_raw/eicar.exe"),
+            virtual_name: "[virus-blocked]eicar.exe".to_string(),
+            file_size: 0,
+            is_dir: false,
+            is_virus: true,
+            exec_type: Some(crate::types::ExecFileType::Pe),
+            extension: "exe".to_string(),
+            is_autorun_target: true,
+            is_autorun_inf: false,
+            is_root_shell_script: false,
+            children: vec![],
+        };
+
+        match evaluate_access(&entry, &snapshot) {
+            AccessDecision::Deny(reason) => assert!(reason.starts_with("L1:")),
+            AccessDecision::Allow => panic!("virus file must be denied before other policies"),
+        }
+    }
 }

@@ -86,3 +86,25 @@ fn detect_pe(file: &mut File) -> Option<ExecFileType> {
         Some(ExecFileType::Pe)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_pe_by_magic_bytes_not_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("renamed.txt");
+        let mut data = vec![0u8; 128];
+        data[0] = b'M';
+        data[1] = b'Z';
+        data[0x3c] = 0x40;
+        data[0x40] = b'P';
+        data[0x41] = b'E';
+        data[0x42] = 0;
+        data[0x43] = 0;
+        std::fs::write(&path, data).unwrap();
+
+        assert_eq!(detect_exec_type(&path), Some(ExecFileType::Pe));
+    }
+}

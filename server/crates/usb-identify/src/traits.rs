@@ -57,6 +57,9 @@ pub struct MapContext {
     pub scan_result: ScanResult,
     /// 权限：0=只读 / 1=读写。
     pub permission: i32,
+    /// 已分配的 NBD 设备路径，例如 /dev/nbd3。
+    /// Allocated NBD device path, for example /dev/nbd3.
+    pub nbd_device: String,
 }
 
 /// 映射会话句柄。
@@ -66,6 +69,9 @@ pub struct MappedSession {
     pub id: String,
     /// 挂载路径。
     pub mount_path: String,
+    /// 本次映射使用的 NBD 设备路径。
+    /// NBD device path used by this mapping.
+    pub nbd_device: String,
 }
 
 /// 映射错误。

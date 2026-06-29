@@ -26,8 +26,6 @@ log_dir = "/tmp/usb-control/log"
 log_level_conf = "/tmp/usb-control/log.conf"
 clamdscan_path = "/usr/bin/clamdscan"
 scan_log_dir = "/tmp/usb-control/log/scan"
-nbd_device = "/dev/nbd0"
-gadget_functions_base = "/sys/kernel/config/usb_gadget/rockchip/functions"
 "#,
     )
     .unwrap();
@@ -54,11 +52,6 @@ gadget_functions_base = "/sys/kernel/config/usb_gadget/rockchip/functions"
     assert_eq!(cfg.log_level_conf.display().to_string(), "/tmp/usb-control/log.conf");
     assert_eq!(cfg.clamdscan_path, "/usr/bin/clamdscan");
     assert_eq!(cfg.scan_log_dir.display().to_string(), "/tmp/usb-control/log/scan");
-    assert_eq!(cfg.nbd_device.display().to_string(), "/dev/nbd0");
-    assert_eq!(
-        cfg.gadget_functions_base.display().to_string(),
-        "/sys/kernel/config/usb_gadget/rockchip/functions"
-    );
 }
 
 #[test]

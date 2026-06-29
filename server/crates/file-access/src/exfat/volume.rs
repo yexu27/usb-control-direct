@@ -502,3 +502,46 @@ impl<'a> VolumeBuilder<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+    use crate::types::{ControlledEntry, ExecFileType, PolicySnapshot, SectorContent};
+
+    #[test]
+    fn blocked_file_data_sector_is_marked_blocked() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("tool.bin");
+        std::fs::write(&real, vec![1u8; 512]).unwrap();
+        let entry = ControlledEntry {
+            real_path: real,
+            virtual_name: "tool.bin".to_string(),
+            file_size: 512,
+            is_dir: false,
+            is_virus: false,
+            exec_type: Some(ExecFileType::Elf),
+            extension: "bin".to_string(),
+            is_autorun_target: false,
+            is_autorun_inf: false,
+            is_root_shell_script: false,
+            children: vec![],
+        };
+        let snapshot = PolicySnapshot {
+            exec_control_enabled: true,
+            file_type_blacklist_enabled: false,
+            auto_read_control_enabled: false,
+            blacklist_extensions: HashSet::new(),
+            permission: 1,
+        };
+
+        let volume = VirtualVolume::build(&[entry], &snapshot);
+        let sectors = volume.find_file_data_sectors("tool.bin");
+        assert!(!sectors.is_empty());
+        match volume.read_sector(sectors[0]) {
+            SectorContent::FileData { blocked, .. } => assert!(blocked),
+            other => panic!("expected file data sector, got {other:?}"),
+        }
+    }
+}

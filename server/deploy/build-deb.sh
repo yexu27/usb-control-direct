@@ -30,6 +30,19 @@ command -v cargo >/dev/null 2>&1 || fail "cargo not found"
 command -v dpkg-deb >/dev/null 2>&1 || fail "dpkg-deb not found"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not found"
 command -v openssl >/dev/null 2>&1 || fail "openssl not found"
+command -v aarch64-linux-gnu-gcc >/dev/null 2>&1 || fail "aarch64-linux-gnu-gcc not found"
+command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1 || fail "aarch64-linux-gnu-pkg-config not found"
+
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER:-aarch64-linux-gnu-gcc}"
+export PKG_CONFIG="${PKG_CONFIG:-aarch64-linux-gnu-pkg-config}"
+export PKG_CONFIG_ALLOW_CROSS="${PKG_CONFIG_ALLOW_CROSS:-1}"
+
+if [ -n "${USB_CONTROL_AARCH64_SYSROOT:-}" ]; then
+  test -d "$USB_CONTROL_AARCH64_SYSROOT" || fail "sysroot not found: $USB_CONTROL_AARCH64_SYSROOT"
+  export PKG_CONFIG_SYSROOT_DIR="$USB_CONTROL_AARCH64_SYSROOT"
+  export PKG_CONFIG_PATH="$USB_CONTROL_AARCH64_SYSROOT/usr/lib/aarch64-linux-gnu/pkgconfig:$USB_CONTROL_AARCH64_SYSROOT/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=--sysroot=$USB_CONTROL_AARCH64_SYSROOT -C link-arg=-B$USB_CONTROL_AARCH64_SYSROOT/usr/lib/aarch64-linux-gnu/"
+fi
 
 TLS_CERT="$SHARED_ASSETS/tls/server.crt"
 TLS_KEY="$SHARED_ASSETS/tls/server.key"

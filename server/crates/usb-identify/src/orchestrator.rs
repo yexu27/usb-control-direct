@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, watch, Mutex};
 use tracing::{debug, error, info, warn};
 
 use crate::mount::{dev_name_from_path, MountOperations, RealMountOps};
@@ -33,6 +33,7 @@ struct ActiveSession {
     device_type: common::types::DeviceType,
     nbd_index: Option<u32>,
     mount_path: Option<PathBuf>,
+    mapped_session: Option<crate::traits::MappedSession>,
     cancel_tx: watch::Sender<bool>,
     audit_detail: String,
 }
@@ -140,11 +141,11 @@ pub struct DeviceOrchestrator {
 
     // 新增: I/O 资源
     mount_ops: RealMountOps,
-    nbd_pool: NbdPool,
+    nbd_pool: Arc<Mutex<NbdPool>>,
     hidg_nodes: hid_access::hid_gadget::HidgNodes,
 
     // 新增: 运行时追踪
-    active_sessions: HashMap<String, ActiveSession>,
+    active_sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
 }
 
 impl DeviceOrchestrator {
@@ -166,9 +167,9 @@ impl DeviceOrchestrator {
             scan_service,
             file_access_engine,
             mount_ops: RealMountOps,
-            nbd_pool: NbdPool::new(),
+            nbd_pool: Arc::new(Mutex::new(NbdPool::new())),
             hidg_nodes,
-            active_sessions: HashMap::new(),
+            active_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -185,6 +186,37 @@ impl DeviceOrchestrator {
                 }
                 DeviceEvent::DeviceRemoved(sys_path) => self.handle_removed(sys_path).await,
             }
+        }
+    }
+
+    async fn has_active_storage_session(&self) -> bool {
+        self.active_sessions
+            .lock()
+            .await
+            .values()
+            .any(|session| {
+                session.device_type == common::types::DeviceType::Storage
+                    && session.nbd_index.is_some()
+            })
+    }
+
+    async fn cleanup_storage_session(
+        active_sessions: &Arc<Mutex<HashMap<String, ActiveSession>>>,
+        nbd_pool: &Arc<Mutex<NbdPool>>,
+        parent_path: &str,
+        nbd_index: u32,
+    ) {
+        active_sessions.lock().await.remove(parent_path);
+        nbd_pool.lock().await.release(nbd_index);
+    }
+
+    async fn set_storage_mount_path(
+        active_sessions: &Arc<Mutex<HashMap<String, ActiveSession>>>,
+        parent_path: &str,
+        mount_path: PathBuf,
+    ) {
+        if let Some(session) = active_sessions.lock().await.get_mut(parent_path) {
+            session.mount_path = Some(mount_path);
         }
     }
 
@@ -210,12 +242,13 @@ impl DeviceOrchestrator {
                     error!(error = %e, "审计日志写入失败");
                 }
                 let (cancel_tx, _) = watch::channel(false);
-                self.active_sessions.insert(
+                self.active_sessions.lock().await.insert(
                     parent_path,
                     ActiveSession {
                         device_type: common::types::DeviceType::Storage,
                         nbd_index: None,
                         mount_path: None,
+                        mapped_session: None,
                         cancel_tx,
                         audit_detail: "未授权设备".into(),
                     },
@@ -234,7 +267,16 @@ impl DeviceOrchestrator {
             error!(error = %e, "审计日志写入失败");
         }
 
-        let nbd_index = match self.nbd_pool.acquire() {
+        if self.has_active_storage_session().await {
+            warn!(
+                serial = %serial,
+                dev = %info.device_name,
+                "当前 RK mass storage LUN 已有活跃 U 盘映射，拒绝同时映射第二个 U 盘"
+            );
+            return;
+        }
+
+        let nbd_index = match self.nbd_pool.lock().await.acquire() {
             Some(idx) => idx,
             None => {
                 warn!(serial = %serial, dev = %info.device_name, "NBD 设备号池耗尽，拒绝映射");
@@ -245,21 +287,25 @@ impl DeviceOrchestrator {
         debug!(serial = %serial, nbd = nbd_index, "NBD 设备已分配");
 
         let (cancel_tx, mut cancel_rx) = watch::channel(false);
-        self.active_sessions.insert(
+        self.active_sessions.lock().await.insert(
             parent_path.clone(),
             ActiveSession {
-                device_type: common::types::DeviceType::Storage,
-                nbd_index: Some(nbd_index),
-                mount_path: None,
-                cancel_tx,
-                audit_detail: "授权设备".into(),
-            },
+                        device_type: common::types::DeviceType::Storage,
+                        nbd_index: Some(nbd_index),
+                        mount_path: None,
+                        mapped_session: None,
+                        cancel_tx,
+                        audit_detail: "授权设备".into(),
+                    },
         );
 
         info!(serial = %serial, nbd = nbd_index, "Storage 设备开始编排");
 
         let scan_service = Arc::clone(&self.scan_service);
         let file_access_engine = Arc::clone(&self.file_access_engine);
+        let active_sessions = Arc::clone(&self.active_sessions);
+        let nbd_pool = Arc::clone(&self.nbd_pool);
+        let task_parent_path = parent_path.clone();
         let permission = whitelist_entry.permission;
 
         tokio::spawn(async move {
@@ -267,6 +313,13 @@ impl DeviceOrchestrator {
                 Some(p) if !p.is_empty() => p.clone(),
                 _ => {
                     warn!(serial = %serial, dev = %info.device_name, "dev_path 为空，跳过映射");
+                    Self::cleanup_storage_session(
+                        &active_sessions,
+                        &nbd_pool,
+                        &task_parent_path,
+                        nbd_index,
+                    )
+                    .await;
                     return;
                 }
             };
@@ -279,8 +332,21 @@ impl DeviceOrchestrator {
                 crate::mount::mount_partition(&dev_path, &mount_point.to_string_lossy(), read_only)
             {
                 warn!(serial = %serial, dev = %info.device_name, error = %e, "挂载失败");
+                Self::cleanup_storage_session(
+                    &active_sessions,
+                    &nbd_pool,
+                    &task_parent_path,
+                    nbd_index,
+                )
+                .await;
                 return;
             }
+            Self::set_storage_mount_path(
+                &active_sessions,
+                &task_parent_path,
+                mount_point.clone(),
+            )
+            .await;
             let mount_path_str = mount_point.to_string_lossy().to_string();
 
             let scan_result = tokio::select! {
@@ -288,6 +354,13 @@ impl DeviceOrchestrator {
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "扫描被取消（设备拔出）");
                     let _ = mount_ops.umount(&mount_path_str);
+                    Self::cleanup_storage_session(
+                        &active_sessions,
+                        &nbd_pool,
+                        &task_parent_path,
+                        nbd_index,
+                    )
+                    .await;
                     return;
                 }
             };
@@ -296,6 +369,13 @@ impl DeviceOrchestrator {
                 Err(e) => {
                     warn!(serial = %serial, dev = %info.device_name, error = %e, "扫描失败");
                     let _ = mount_ops.umount(&mount_path_str);
+                    Self::cleanup_storage_session(
+                        &active_sessions,
+                        &nbd_pool,
+                        &task_parent_path,
+                        nbd_index,
+                    )
+                    .await;
                     return;
                 }
             };
@@ -304,22 +384,55 @@ impl DeviceOrchestrator {
                 mount_path: mount_path_str.clone(),
                 scan_result: scan_result.clone(),
                 permission,
+                nbd_device: format!("/dev/nbd{}", nbd_index),
             };
             let map_result = tokio::select! {
                 r = file_access_engine.map_device(map_ctx) => r,
                 _ = cancel_rx.changed() => {
                     info!(serial = %serial, "映射被取消（设备拔出）");
                     let _ = mount_ops.umount(&mount_path_str);
+                    Self::cleanup_storage_session(
+                        &active_sessions,
+                        &nbd_pool,
+                        &task_parent_path,
+                        nbd_index,
+                    )
+                    .await;
                     return;
                 }
             };
             match map_result {
                 Ok(_session) => {
+                    let mut sessions = active_sessions.lock().await;
+                    if let Some(active) = sessions.get_mut(&task_parent_path) {
+                        active.mapped_session = Some(_session);
+                    } else {
+                        drop(sessions);
+                        if let Err(e) = file_access_engine.unmap_device(_session).await {
+                            warn!(serial = %serial, dev = %info.device_name, error = %e, "设备已移除，映射回滚失败");
+                        }
+                        let _ = mount_ops.umount(&mount_path_str);
+                        Self::cleanup_storage_session(
+                            &active_sessions,
+                            &nbd_pool,
+                            &task_parent_path,
+                            nbd_index,
+                        )
+                        .await;
+                        return;
+                    }
                     info!(serial = %serial, "U 盘映射成功");
                 }
                 Err(e) => {
                     warn!(serial = %serial, dev = %info.device_name, error = %e, "映射失败");
                     let _ = mount_ops.umount(&mount_path_str);
+                    Self::cleanup_storage_session(
+                        &active_sessions,
+                        &nbd_pool,
+                        &task_parent_path,
+                        nbd_index,
+                    )
+                    .await;
                 }
             }
         });
@@ -349,12 +462,13 @@ impl DeviceOrchestrator {
         };
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
-        self.active_sessions.insert(
+        self.active_sessions.lock().await.insert(
             parent_path.clone(),
             ActiveSession {
                 device_type: common::types::DeviceType::Keyboard,
                 nbd_index: None,
                 mount_path: None,
+                mapped_session: None,
                 cancel_tx,
                 audit_detail: "键盘".into(),
             },
@@ -406,12 +520,13 @@ impl DeviceOrchestrator {
         };
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
-        self.active_sessions.insert(
+        self.active_sessions.lock().await.insert(
             parent_path.clone(),
             ActiveSession {
                 device_type: common::types::DeviceType::Mouse,
                 nbd_index: None,
                 mount_path: None,
+                mapped_session: None,
                 cancel_tx,
                 audit_detail: "鼠标".into(),
             },
@@ -456,17 +571,23 @@ impl DeviceOrchestrator {
 
         info!(dev = %device_record.info.device_name, type = ?device_record.info.device_type, "设备完全拔出");
 
-        let session = self.active_sessions.remove(&parent_path);
+        let session = self.active_sessions.lock().await.remove(&parent_path);
+        let audit_detail = session.as_ref().map(|session| session.audit_detail.clone());
 
-        if let Some(ref session) = session {
+        if let Some(session) = session {
             let _ = session.cancel_tx.send(true);
 
             if session.device_type == common::types::DeviceType::Storage {
+                if let Some(mapped_session) = session.mapped_session {
+                    if let Err(e) = self.file_access_engine.unmap_device(mapped_session).await {
+                        warn!(error = %e, "S04 映射清理失败");
+                    }
+                }
                 if let Some(mount_path) = &session.mount_path {
                     let _ = self.mount_ops.umount(&mount_path.to_string_lossy());
                 }
                 if let Some(idx) = session.nbd_index {
-                    self.nbd_pool.release(idx);
+                    self.nbd_pool.lock().await.release(idx);
                 }
             }
         }
@@ -480,8 +601,8 @@ impl DeviceOrchestrator {
 
         if should_audit {
             let mut log = build_audit_log(&device_record.info, event_type::DEVICE_REMOVE);
-            if let Some(ref session) = session {
-                log.detail = Some(session.audit_detail.clone());
+            if let Some(detail) = audit_detail {
+                log.detail = Some(detail);
             }
             if let Err(e) = self.audit.log_usb_audit(&mut log) {
                 error!(error = %e, "审计日志写入失败");

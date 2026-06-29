@@ -215,3 +215,23 @@ fn is_shell_script(file_name: &str) -> bool {
     let lower = file_name.to_lowercase();
     lower.ends_with(".sh") || lower.ends_with(".bash")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_autorun_marks_referenced_target() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("autorun.inf"), "open=runme.exe\n").unwrap();
+        std::fs::write(dir.path().join("runme.exe"), b"MZ").unwrap();
+
+        let tree = build_file_tree(dir.path(), &[]);
+        let target = tree
+            .iter()
+            .find(|entry| entry.virtual_name == "runme.exe")
+            .unwrap();
+
+        assert!(target.is_autorun_target);
+    }
+}

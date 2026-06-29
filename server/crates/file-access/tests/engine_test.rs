@@ -9,7 +9,7 @@ fn engine_creation() {
 
     let storage = Arc::new(storage::Storage::open(tmp_storage.path()).unwrap());
 
-    let engine = FileAccessEngine::new(storage, "/dev/nbd0");
+    let engine = FileAccessEngine::new(storage);
 
     assert!(!engine.is_mapped());
 }

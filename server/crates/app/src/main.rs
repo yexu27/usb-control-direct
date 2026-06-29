@@ -26,9 +26,8 @@ use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use file_access::engine::FileAccessEngine;
-use file_access::gadget::GadgetManager;
-use hid_access::hid_gadget::{configure_hid_function, discover_hidg_nodes, KEYBOARD_FUNCTION, MOUSE_FUNCTION};
-use hid_access::hid_report::{KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN};
+use file_access::gadget::GadgetRuntime;
+use hid_access::hid_gadget::discover_hidg_nodes;
 use malware_scan::clam_scanner::ClamScanner;
 use malware_scan::scan_service::ScanService;
 use usb_identify::monitor::DeviceManager;
@@ -77,32 +76,17 @@ async fn main() {
             .expect("授权公钥加载失败"),
     );
 
-    // ===== USB Gadget 统一初始化 =====
-    let gadget_mgr = {
-        let mgr = GadgetManager::new();
-        let _ = mgr.unbind_udc();
-        let _ = mgr.remove_config_links();
-
-        // 先创建 functions（必须在写 config 属性之前）
-        mgr.configure_mass_storage(&config.nbd_device, true)
-            .expect("mass_storage function 配置失败");
-
-        let functions_base = config.gadget_functions_base.clone();
-        configure_hid_function(&functions_base.join(KEYBOARD_FUNCTION), 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)
-            .expect("HID keyboard function 配置失败");
-        configure_hid_function(&functions_base.join(MOUSE_FUNCTION), 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)
-            .expect("HID mouse function 配置失败");
-
-        // 再写 gadget 属性（idVendor/strings/MaxPower）
-        mgr.setup_gadget("USB Security Control Device")
-            .expect("gadget 基础结构初始化失败");
-        mgr
-    };
-
-    gadget_mgr.link_function("mass_storage.usb0").expect("链接 mass_storage 失败");
-    gadget_mgr.link_function(KEYBOARD_FUNCTION).expect("链接 keyboard 失败");
-    gadget_mgr.link_function(MOUSE_FUNCTION).expect("链接 mouse 失败");
-    gadget_mgr.bind_udc().expect("UDC 绑定失败");
+    // ===== USB Gadget 运行时检查 =====
+    let gadget_runtime = GadgetRuntime::discover().expect("RK mass_storage LUN 发现失败");
+    gadget_runtime
+        .prepare_empty_lun()
+        .expect("RK mass_storage LUN 初始化失败");
+    info!(
+        gadget = %gadget_runtime.gadget_name(),
+        function = %gadget_runtime.function_name(),
+        lun = %gadget_runtime.lun_dir().display(),
+        "RK mass_storage LUN 已准备为空介质状态"
+    );
 
     let hidg_nodes = discover_hidg_nodes().expect("hidg 节点发现失败");
     info!("HID gadget: keyboard={}, mouse={}", hidg_nodes.keyboard.display(), hidg_nodes.mouse.display());
@@ -114,11 +98,7 @@ async fn main() {
         &config.scan_log_dir,
     ));
 
-    let nbd_device = config.nbd_device.to_string_lossy().to_string();
-    let file_access_engine = Arc::new(FileAccessEngine::new(
-        Arc::clone(&storage),
-        &nbd_device,
-    ));
+    let file_access_engine = Arc::new(FileAccessEngine::new(Arc::clone(&storage)));
 
     let state = Arc::new(AppState {
         auth_service,

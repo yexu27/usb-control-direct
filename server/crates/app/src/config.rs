@@ -56,8 +56,6 @@ pub struct AppConfig {
     pub log_level_conf: PathBuf,
     pub clamdscan_path: String,
     pub scan_log_dir: PathBuf,
-    pub nbd_device: PathBuf,
-    pub gadget_functions_base: PathBuf,
 }
 
 impl Default for AppConfig {
@@ -76,10 +74,6 @@ impl Default for AppConfig {
             log_level_conf: PathBuf::from("/etc/usb-control/log.conf"),
             clamdscan_path: "/usr/bin/clamdscan".to_string(),
             scan_log_dir: PathBuf::from("/var/log/usb-control/scan"),
-            nbd_device: PathBuf::from("/dev/nbd0"),
-            gadget_functions_base: PathBuf::from(
-                "/sys/kernel/config/usb_gadget/rockchip/functions",
-            ),
         }
     }
 }

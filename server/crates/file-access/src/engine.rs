@@ -13,7 +13,7 @@ use usb_identify::traits::{DeviceMapper, MapContext, MapError, MappedSession, Un
 
 use crate::exfat::volume::VirtualVolume;
 use crate::file_tree::build_file_tree;
-use crate::gadget::GadgetManager;
+use crate::gadget::GadgetRuntime;
 use crate::nbd::{run_request_loop, NbdServer};
 use crate::policy::{evaluate_access, load_policy_snapshot};
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
@@ -23,8 +23,6 @@ use crate::write_back::WriteBackManager;
 pub struct FileAccessEngine {
     /// 数据库。
     storage: Arc<Storage>,
-    /// NBD 设备路径。
-    nbd_device: String,
     /// 当前映射状态。
     mapped: Mutex<Option<MappingState>>,
 }
@@ -32,7 +30,7 @@ pub struct FileAccessEngine {
 /// 映射运行状态。
 struct MappingState {
     nbd_server: NbdServer,
-    gadget: GadgetManager,
+    gadget: GadgetRuntime,
 }
 
 impl FileAccessEngine {
@@ -40,11 +38,9 @@ impl FileAccessEngine {
     ///
     /// 参数:
     ///   - storage: 数据库实例。
-    ///   - nbd_device: NBD 设备路径（如 /dev/nbd0）。
-    pub fn new(storage: Arc<Storage>, nbd_device: &str) -> Self {
+    pub fn new(storage: Arc<Storage>) -> Self {
         FileAccessEngine {
             storage,
-            nbd_device: nbd_device.to_string(),
             mapped: Mutex::new(None),
         }
     }
@@ -103,15 +99,16 @@ impl DeviceMapper for FileAccessEngine {
             info!("虚拟卷生成完成: {} 扇区", total_sectors);
 
             // 5. 启动 NBD 服务
-            let nbd_device_path = PathBuf::from(&self.nbd_device);
+            let readonly = ctx.permission == 0;
+            let nbd_device = ctx.nbd_device.clone();
+            let nbd_device_path = PathBuf::from(&nbd_device);
             let mut nbd_server = NbdServer::new(&nbd_device_path);
-            debug!("NBD 设备开始服务: {}", self.nbd_device);
+            debug!("NBD 设备开始服务: {}", nbd_device);
             let user_fd = nbd_server
-                .start(total_sectors)
+                .start(total_sectors, readonly)
                 .map_err(|e| MapError::NbdFailed(e.to_string()))?;
 
             // 6. 启动请求处理循环（spawn_blocking 避免阻塞异步运行时）
-            let readonly = ctx.permission == 0;
             let mount_path_owned = mount_path.to_path_buf();
             let volume = Arc::new(volume);
             let volume_clone = volume.clone();
@@ -121,17 +118,17 @@ impl DeviceMapper for FileAccessEngine {
             });
 
             // 7. 启用 OTG Gadget
-            let device_description = self
-                .storage
-                .config_get("device_description")
-                .ok()
-                .flatten()
-                .and_then(|c| c.config_value)
-                .unwrap_or_else(|| "(AD USB protection dev)USB Device".to_string());
-            let mut gadget = GadgetManager::new();
-            gadget
-                .enable(&nbd_device_path, readonly, &device_description)
-                .map_err(|e| MapError::GadgetFailed(e.to_string()))?;
+            let gadget = match GadgetRuntime::discover() {
+                Ok(gadget) => gadget,
+                Err(e) => {
+                    nbd_server.stop();
+                    return Err(MapError::GadgetFailed(e.to_string()));
+                }
+            };
+            if let Err(e) = gadget.attach_mass_storage(&nbd_device_path, readonly) {
+                nbd_server.stop();
+                return Err(MapError::GadgetFailed(e.to_string()));
+            }
 
             // 8. 保存映射状态
             let session_id = format!("s04_{}", ctx.mount_path.replace('/', "_"));
@@ -144,6 +141,7 @@ impl DeviceMapper for FileAccessEngine {
             Ok(MappedSession {
                 id: session_id,
                 mount_path: ctx.mount_path,
+                nbd_device,
             })
         })
     }
@@ -158,8 +156,8 @@ impl DeviceMapper for FileAccessEngine {
             let mut state = self.mapped.lock().await;
 
             if let Some(mut mapping) = state.take() {
-                if let Err(e) = mapping.gadget.disable() {
-                    error!("禁用 Gadget 失败: {}", e);
+                if let Err(e) = mapping.gadget.detach_mass_storage() {
+                    error!("清理 mass storage LUN 失败: {}", e);
                 }
                 mapping.nbd_server.stop();
                 info!("S04 映射已清理: session={}", session.id);

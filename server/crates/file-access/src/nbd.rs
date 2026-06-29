@@ -85,10 +85,12 @@ const NBD_SET_SIZE_BLOCKS: u64 = 0xAB07;
 const NBD_SET_FLAGS: u64 = 0xAB0A;
 const NBD_DO_IT: u64 = 0xAB03;
 const NBD_CLEAR_SOCK: u64 = 0xAB04;
+const NBD_CLEAR_QUE: u64 = 0xAB05;
 const NBD_DISCONNECT: u64 = 0xAB08;
 
 // NBD flags
 const NBD_FLAG_HAS_FLAGS: u32 = 1;
+const NBD_FLAG_READ_ONLY: u32 = 2;
 const NBD_FLAG_SEND_FLUSH: u32 = 4;
 
 /// I/O error code (EIO = 5)。
@@ -129,7 +131,7 @@ impl NbdServer {
     /// 2. 设置 NBD 参数（block size / size / flags）
     /// 3. spawn_blocking 运行 NBD_DO_IT
     /// 4. 返回用户空间侧 fd 供请求循环使用
-    pub fn start(&mut self, total_sectors: u64) -> Result<RawFd, std::io::Error> {
+    pub fn start(&mut self, total_sectors: u64, readonly: bool) -> Result<RawFd, std::io::Error> {
         use std::os::unix::net::UnixStream;
 
         // 创建 socketpair
@@ -145,13 +147,23 @@ impl NbdServer {
         let nbd_fd = nbd_file.as_raw_fd();
         let kernel_fd = kernel_sock.as_raw_fd();
 
+        unsafe {
+            let _ = nbd_ioctl(nbd_fd, NBD_DISCONNECT, 0);
+            let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_SOCK, 0);
+            let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_QUE, 0);
+        }
+
         // 设置 NBD 参数
         // 安全性: nbd_fd 和 kernel_fd 来自刚打开的有效文件/socket，ioctl 参数均为合法值。
         unsafe {
             nbd_ioctl(nbd_fd, NBD_SET_BLKSIZE, SECTOR_SIZE as u64)?;
             nbd_ioctl(nbd_fd, NBD_SET_SIZE_BLOCKS, total_sectors)?;
             nbd_ioctl(nbd_fd, NBD_SET_SOCK, kernel_fd as u64)?;
-            nbd_ioctl(nbd_fd, NBD_SET_FLAGS, (NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH) as u64)?;
+            let mut flags = NBD_FLAG_HAS_FLAGS | NBD_FLAG_SEND_FLUSH;
+            if readonly {
+                flags |= NBD_FLAG_READ_ONLY;
+            }
+            nbd_ioctl(nbd_fd, NBD_SET_FLAGS, flags as u64)?;
         }
 
         let user_fd = user_sock.as_raw_fd();
@@ -176,6 +188,7 @@ impl NbdServer {
             }
             unsafe {
                 let _ = nbd_ioctl(nbd_fd_copy, NBD_CLEAR_SOCK, 0);
+                let _ = nbd_ioctl(nbd_fd_copy, NBD_CLEAR_QUE, 0);
             }
             let _ = tx.send(());
         });
@@ -190,6 +203,8 @@ impl NbdServer {
             // 安全性: nbd_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
             unsafe {
                 let _ = nbd_ioctl(nbd_fd, NBD_DISCONNECT, 0);
+                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_SOCK, 0);
+                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_QUE, 0);
                 libc::close(nbd_fd);
             }
         }
