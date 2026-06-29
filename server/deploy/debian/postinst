@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "usb-control postinst: $*" >&2
+  exit 1
+}
+
+install -d -m 0755 -o root -g root /opt/usb-control
+install -d -m 0755 -o root -g root /opt/usb-control/bin
+install -d -m 0755 -o root -g root /opt/usb-control/install-meta
+install -d -m 0750 -o root -g root /etc/usb-control
+install -d -m 0700 -o root -g root /etc/usb-control/tls
+install -d -m 0750 -o root -g root /etc/usb-control/keys
+install -d -m 0700 -o root -g root /var/lib/usb-control
+install -d -m 0755 -o root -g root /var/log/usb-control
+install -d -m 0755 -o root -g root /var/log/usb-control/scan
+
+chown root:root /opt/usb-control/bin/usb-control
+chmod 0755 /opt/usb-control/bin/usb-control
+chown root:root /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
+chmod 0755 /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
+chown root:root /etc/usb-control/tls/server.crt /etc/usb-control/tls/server.key
+chmod 0644 /etc/usb-control/tls/server.crt
+chmod 0600 /etc/usb-control/tls/server.key
+chown root:root /etc/usb-control/keys/license_verify.pub
+chmod 0644 /etc/usb-control/keys/license_verify.pub
+
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm control --reload-rules || echo "usb-control postinst: udev reload failed, continue"
+fi
+
+systemctl daemon-reload
+systemctl enable --now usb-control
+
+sleep 2
+systemctl is-active --quiet usb-control || {
+  systemctl status usb-control --no-pager || true
+  fail "usb-control service did not become active"
+}
+
+echo "usb-control postinst: service active"
+echo "usb-control postinst: run smoke check with: sudo /opt/usb-control/smoke.sh"
+exit 0

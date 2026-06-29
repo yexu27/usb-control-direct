@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "usb-control preinst: $*" >&2
+  exit 1
+}
+
+test "$(id -u)" = "0" || fail "must run as root"
+
+arch="$(dpkg --print-architecture)"
+test "$arch" = "arm64" || fail "unsupported architecture: $arch, expected arm64"
+
+if [ -r /etc/os-release ]; then
+  . /etc/os-release
+  test "${ID:-}" = "ubuntu" || fail "unsupported OS: ${ID:-unknown}, expected ubuntu"
+  test "${VERSION_ID:-}" = "22.04" || fail "unsupported Ubuntu version: ${VERSION_ID:-unknown}, expected 22.04"
+else
+  fail "/etc/os-release not found"
+fi
+
+kernel="$(uname -r)"
+case "$kernel" in
+  4.19.*) ;;
+  *) fail "unsupported kernel: $kernel, expected 4.19.x for RK3568 target" ;;
+esac
+
+action="${1:-install}"
+if [ "$action" = "upgrade" ] && [ -f /opt/usb-control/install-meta/VERSION ]; then
+  old_version="$(cat /opt/usb-control/install-meta/VERSION)"
+  backup_dir="/var/lib/usb-control/upgrade-backup/${old_version}"
+  mkdir -p "$backup_dir"
+
+  [ ! -e /opt/usb-control/bin/usb-control ] || cp -a /opt/usb-control/bin/usb-control "$backup_dir/usb-control"
+  [ ! -e /etc/usb-control/usb-control.toml ] || cp -a /etc/usb-control/usb-control.toml "$backup_dir/usb-control.toml"
+  [ ! -e /etc/usb-control/tls ] || cp -a /etc/usb-control/tls "$backup_dir/tls"
+  [ ! -e /etc/systemd/system/usb-control.service ] || cp -a /etc/systemd/system/usb-control.service "$backup_dir/usb-control.service"
+  [ ! -e /opt/usb-control/install-meta ] || cp -a /opt/usb-control/install-meta "$backup_dir/install-meta"
+
+  echo "usb-control preinst: backed up old version $old_version to $backup_dir"
+fi
+
+exit 0

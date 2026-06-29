@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-remove}"
+
+if [ "$action" = "remove" ] || [ "$action" = "deconfigure" ] || [ "$action" = "upgrade" ]; then
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop usb-control || true
+    if [ "$action" = "remove" ]; then
+      systemctl disable usb-control || true
+    fi
+  fi
+fi
+
+exit 0
