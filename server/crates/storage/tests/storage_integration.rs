@@ -826,7 +826,7 @@ fn t10_operation_log_paged_query() {
     s.operation_log_insert(&make_op_log(base + 1, "policy_manage", "create", "admin")).unwrap();
     s.operation_log_insert(&make_op_log(base + 2, "login_auth", "logout", "operator")).unwrap();
 
-    // event_type 过滤 T10.log_type
+    // event_type is defined for USB audit logs only and must not filter operation logs.
     let params = LogQueryParams {
         event_type: Some("login_auth".into()),
         page: 1,
@@ -834,8 +834,8 @@ fn t10_operation_log_paged_query() {
         ..Default::default()
     };
     let (rows, total) = s.operation_log_query_paged(&params).unwrap();
-    assert_eq!(total, 2);
-    assert_eq!(rows.len(), 2);
+    assert_eq!(total, 3);
+    assert_eq!(rows.len(), 3);
 
     // 关键字过滤用户名
     let params = LogQueryParams {
