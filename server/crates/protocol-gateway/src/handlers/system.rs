@@ -228,13 +228,32 @@ pub fn handle_upload_virusdb_upgrade(ctx: &RequestContext, payload: &[u8]) -> Ve
         return error_response(ctx.seq_id, e.to_result_code(), "病毒库升级安装失败");
     }
 
-    if let Err(_e) = storage.config_set("virus_db_version", &cmd.target_version) {
-        error!("病毒库已升级但版本号持久化失败，下次升级将重新校验版本");
+    let clamav_status = match mgr.read_status() {
+        Ok(status) => status,
+        Err(e) => {
+            error!(reason = %e, "病毒库已升级但真实版本读取失败");
+            log_operation(
+                ctx,
+                session,
+                log_type::PROGRAM_UPGRADE,
+                action_type::VIRUSDB_UPGRADE,
+                &cmd.target_version,
+                1,
+                Some("病毒库真实版本读取失败"),
+            );
+            return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库真实版本读取失败");
+        }
+    };
+
+    if let Err(_e) = storage.config_set("virus_db_version", &clamav_status.virus_db_version) {
+        error!("病毒库已升级但真实版本号持久化失败");
         log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("病毒库版本号持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "病毒库版本号持久化失败");
     }
-    let now = common::time::now_unix();
-    if let Err(_e) = storage.config_set("virus_db_updated_at", &now.to_string()) {
+    if let Err(_e) = storage.config_set(
+        "virus_db_updated_at",
+        &clamav_status.virus_db_updated_at.to_string(),
+    ) {
         error!("病毒库已升级但更新时间持久化失败");
         log_operation(ctx, session, log_type::PROGRAM_UPGRADE, action_type::VIRUSDB_UPGRADE, &cmd.target_version, 1, Some("更新时间持久化失败"));
         return error_response(ctx.seq_id, ResultCode::InternalError, "更新时间持久化失败");

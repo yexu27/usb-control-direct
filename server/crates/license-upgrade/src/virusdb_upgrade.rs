@@ -16,6 +16,8 @@ use crate::error::LicenseUpgradeError;
 pub struct VirusdbUpgradeManager {
     /// 病毒库目录。
     db_dir: PathBuf,
+    /// clamscan 可执行文件路径，用于读取真实病毒库状态。
+    clamscan_path: PathBuf,
 }
 
 impl VirusdbUpgradeManager {
@@ -24,14 +26,29 @@ impl VirusdbUpgradeManager {
     /// 参数:
     /// - `db_dir`: 病毒库目录路径，默认 `/var/lib/clamav`。
     pub fn new(db_dir: impl Into<PathBuf>) -> Self {
+        Self::new_with_clamscan(db_dir, "/usr/bin/clamscan")
+    }
+
+    /// 创建病毒库升级管理器并指定 clamscan 路径。
+    pub fn new_with_clamscan(
+        db_dir: impl Into<PathBuf>,
+        clamscan_path: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             db_dir: db_dir.into(),
+            clamscan_path: clamscan_path.into(),
         }
     }
 
     /// 使用默认路径创建病毒库升级管理器。
     pub fn with_default_path() -> Self {
         Self::new("/var/lib/clamav")
+    }
+
+    /// 读取 ClamAV 当前真实病毒库状态。
+    pub fn read_status(&self) -> Result<clamav_status::ClamavStatus, LicenseUpgradeError> {
+        clamav_status::read_clamav_status(&self.clamscan_path.to_string_lossy())
+            .map_err(|e| LicenseUpgradeError::VirusdbApplyFailed(e.to_string()))
     }
 
     /// 校验病毒库版本号。
