@@ -1,6 +1,6 @@
 use file_access::exfat::layout::{
-    DiskLayout, SECTOR_SIZE, CLUSTER_SIZE, SECTORS_PER_CLUSTER,
-    MBR_SECTOR, PARTITION_OFFSET_SECTORS, BOOT_REGION_SECTORS,
+    DiskLayout, BOOT_REGION_SECTORS, CLUSTER_SIZE, MBR_SECTOR, PARTITION_OFFSET_SECTORS,
+    SECTOR_SIZE, SECTORS_PER_CLUSTER, MIN_VIRTUAL_VOLUME_BYTES,
 };
 
 #[test]
@@ -48,4 +48,21 @@ fn sector_to_cluster() {
     assert_eq!(layout.sector_to_cluster(first_data_sector), Some(2));
     assert_eq!(layout.sector_to_cluster(first_data_sector + 8), Some(3));
     assert_eq!(layout.sector_to_cluster(0), None);
+}
+
+#[test]
+fn layout_respects_minimum_virtual_volume_size() {
+    let layout = DiskLayout::new_with_min_total_bytes(8, MIN_VIRTUAL_VOLUME_BYTES);
+
+    assert!(layout.cluster_count >= 8);
+    assert!(layout.total_sectors * SECTOR_SIZE as u64 >= MIN_VIRTUAL_VOLUME_BYTES);
+}
+
+#[test]
+fn layout_respects_source_partition_size_when_larger_than_minimum() {
+    let source_size = 64 * 1024 * 1024;
+    let layout = DiskLayout::new_with_min_total_bytes(8, source_size);
+
+    assert!(layout.cluster_count >= 8);
+    assert!(layout.total_sectors * SECTOR_SIZE as u64 >= source_size);
 }

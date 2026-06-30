@@ -43,7 +43,16 @@ impl VirtualVolume {
     ///   - tree: 受控文件树。
     ///   - snapshot: 策略快照。
     pub fn build(tree: &[ControlledEntry], snapshot: &PolicySnapshot) -> Self {
-        let mut builder = VolumeBuilder::new(snapshot);
+        Self::build_with_capacity(tree, snapshot, 0)
+    }
+
+    /// 使用指定容量目标构建虚拟 exFAT 卷。
+    pub fn build_with_capacity(
+        tree: &[ControlledEntry],
+        snapshot: &PolicySnapshot,
+        source_size_bytes: u64,
+    ) -> Self {
+        let mut builder = VolumeBuilder::new(snapshot, source_size_bytes);
         builder.allocate_metadata();
         builder.allocate_files(tree, &[]);
         builder.generate()
@@ -96,6 +105,8 @@ impl VirtualVolume {
 /// 卷构建器。
 struct VolumeBuilder<'a> {
     snapshot: &'a PolicySnapshot,
+    /// 虚拟块设备对外暴露的最小总容量。
+    min_total_bytes: u64,
     /// 下一个可分配的簇号。
     next_cluster: u32,
     /// 簇分配记录。
@@ -136,9 +147,10 @@ fn file_clusters(file_size: u64) -> u32 {
 }
 
 impl<'a> VolumeBuilder<'a> {
-    fn new(snapshot: &'a PolicySnapshot) -> Self {
+    fn new(snapshot: &'a PolicySnapshot, source_size_bytes: u64) -> Self {
         VolumeBuilder {
             snapshot,
+            min_total_bytes: source_size_bytes.max(MIN_VIRTUAL_VOLUME_BYTES),
             next_cluster: FIRST_CLUSTER,
             cluster_allocations: Vec::new(),
             root_dir_entries: Vec::new(),
@@ -318,8 +330,9 @@ impl<'a> VolumeBuilder<'a> {
             None
         };
 
-        let total_clusters = self.next_cluster - FIRST_CLUSTER;
-        let layout = DiskLayout::new(total_clusters);
+        let allocated_clusters = self.next_cluster - FIRST_CLUSTER;
+        let layout = DiskLayout::new_with_min_total_bytes(allocated_clusters, self.min_total_bytes);
+        let total_clusters = layout.cluster_count;
 
         let mut metadata_sectors = HashMap::new();
         let mut file_data_sectors = HashMap::new();
@@ -397,7 +410,7 @@ impl<'a> VolumeBuilder<'a> {
         }
 
         // Bitmap
-        let bitmap_data = generate_bitmap(total_clusters, self.next_cluster - FIRST_CLUSTER);
+        let bitmap_data = generate_bitmap(total_clusters, allocated_clusters);
 
         // 更新根目录中 Bitmap 条目的 DataLength
         let bitmap_entry_offset = DIR_ENTRY_SIZE as usize;

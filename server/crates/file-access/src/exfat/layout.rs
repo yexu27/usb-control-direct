@@ -8,6 +8,10 @@ pub const SECTOR_SIZE: u32 = 512;
 /// 簇大小（字节）。
 pub const CLUSTER_SIZE: u32 = 4096;
 
+/// f_mass_storage 和受控主机侧都需要一个合理的块设备容量。
+/// 小于 16MiB 的虚拟盘按 16MiB 暴露，避免 RK f_mass_storage 拒绝过小 backing。
+pub const MIN_VIRTUAL_VOLUME_BYTES: u64 = 16 * 1024 * 1024;
+
 /// 每簇扇区数。
 pub const SECTORS_PER_CLUSTER: u32 = 8;
 
@@ -87,6 +91,31 @@ impl DiskLayout {
             cluster_count: data_cluster_count,
             total_sectors,
             volume_length_sectors,
+        }
+    }
+
+    /// 根据已分配数据簇数量和目标最小容量计算磁盘布局。
+    pub fn new_with_min_total_bytes(required_data_clusters: u32, min_total_bytes: u64) -> Self {
+        let min_total_bytes = min_total_bytes.max(MIN_VIRTUAL_VOLUME_BYTES);
+        let min_total_sectors = min_total_bytes.div_ceil(SECTOR_SIZE as u64);
+
+        let mut data_cluster_count = required_data_clusters.max(1);
+        loop {
+            let layout = Self::new(data_cluster_count);
+            if layout.total_sectors >= min_total_sectors {
+                return layout;
+            }
+
+            let missing_sectors = min_total_sectors - layout.total_sectors;
+            let missing_clusters = missing_sectors
+                .div_ceil(SECTORS_PER_CLUSTER as u64)
+                .max(1);
+            let max_additional = u32::MAX as u64 - data_cluster_count as u64;
+            if max_additional == 0 {
+                return layout;
+            }
+            data_cluster_count =
+                data_cluster_count.saturating_add(missing_clusters.min(max_additional) as u32);
         }
     }
 
