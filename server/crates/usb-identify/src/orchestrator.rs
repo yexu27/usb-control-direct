@@ -380,10 +380,20 @@ impl DeviceOrchestrator {
                 }
             };
 
+            let source_size_bytes = block_device_size_bytes(&dev_path);
+            debug!(
+                serial = %serial,
+                dev = %info.device_name,
+                dev_path = %dev_path,
+                source_size_bytes,
+                "读取真实 U 盘分区容量"
+            );
+
             let map_ctx = crate::traits::MapContext {
                 mount_path: mount_path_str.clone(),
                 scan_result: scan_result.clone(),
                 permission,
+                source_size_bytes,
                 nbd_device: format!("/dev/nbd{}", nbd_index),
             };
             let map_result = tokio::select! {
@@ -653,4 +663,32 @@ pub fn mount_path_for(info: &UsbDeviceInfo) -> PathBuf {
         .and_then(|p| p.rsplit('/').next())
         .unwrap_or("unknown");
     PathBuf::from("/mnt/usb_raw").join(dev_name)
+}
+
+fn block_device_size_bytes(dev_path: &str) -> u64 {
+    let Some(dev_name) = std::path::Path::new(dev_path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+    else {
+        return 0;
+    };
+
+    let base_name: String = dev_name
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic())
+        .collect();
+    if base_name.is_empty() {
+        return 0;
+    }
+
+    let size_path = std::path::Path::new("/sys/block")
+        .join(base_name)
+        .join(&dev_name)
+        .join("size");
+
+    std::fs::read_to_string(size_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|sectors| sectors.saturating_mul(512))
+        .unwrap_or(0)
 }

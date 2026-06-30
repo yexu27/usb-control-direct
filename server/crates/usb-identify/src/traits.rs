@@ -57,6 +57,9 @@ pub struct MapContext {
     pub scan_result: ScanResult,
     /// 权限：0=只读 / 1=读写。
     pub permission: i32,
+    /// 真实源分区大小（字节），用于生成受控主机可见的虚拟 U 盘容量。
+    /// Source partition size in bytes, used as the virtual media capacity target.
+    pub source_size_bytes: u64,
     /// 已分配的 NBD 设备路径，例如 /dev/nbd3。
     /// Allocated NBD device path, for example /dev/nbd3.
     pub nbd_device: String,
