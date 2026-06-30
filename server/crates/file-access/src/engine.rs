@@ -12,13 +12,12 @@ use tracing::{debug, error, info, warn};
 use storage::Storage;
 use usb_identify::traits::{DeviceMapper, MapContext, MapError, MappedSession, UnmapError};
 
-use crate::exfat::volume::VirtualVolume;
+use crate::exfat::fs::VirtualExfatFs;
 use crate::file_tree::build_file_tree;
 use crate::gadget::GadgetRuntime;
 use crate::nbd::{run_request_loop, NbdServer};
 use crate::policy::{evaluate_access, load_policy_snapshot};
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
-use crate::write_back::WriteBackManager;
 
 /// S04 文件访问控制引擎。
 pub struct FileAccessEngine {
@@ -34,6 +33,7 @@ pub struct FileAccessEngine {
 struct MappingState {
     nbd_server: NbdServer,
     gadget: GadgetRuntime,
+    fs: Arc<VirtualExfatFs>,
 }
 
 impl FileAccessEngine {
@@ -97,14 +97,16 @@ impl DeviceMapper for FileAccessEngine {
             // 3. 记录被策略阻断的文件（仅 tracing 日志，不入审计库）
             log_blocked_entries(&tree, &snapshot);
 
-            // 4. 生成虚拟 exFAT 卷
-            let volume =
-                VirtualVolume::build_with_capacity(&tree, &snapshot, ctx.source_size_bytes);
-            let total_sectors = volume.total_sectors();
+            // 4. 构建受控虚拟 exFAT 文件系统
+            let fs = Arc::new(
+                VirtualExfatFs::build(mount_path, &tree, snapshot, ctx.source_size_bytes)
+                    .map_err(|e| MapError::NbdFailed(format!("虚拟 exFAT 文件系统构建失败: {}", e)))?,
+            );
+            let total_sectors = fs.total_sectors();
             info!(
                 total_sectors,
                 source_size_bytes = ctx.source_size_bytes,
-                "虚拟卷生成完成"
+                "受控虚拟 exFAT 文件系统生成完成"
             );
 
             // 5. 启动 NBD 服务
@@ -118,12 +120,9 @@ impl DeviceMapper for FileAccessEngine {
                 .map_err(|e| MapError::NbdFailed(e.to_string()))?;
 
             // 6. 启动请求处理循环（spawn_blocking 避免阻塞异步运行时）
-            let mount_path_owned = mount_path.to_path_buf();
-            let volume = Arc::new(volume);
-            let volume_clone = volume.clone();
+            let fs_clone = Arc::clone(&fs);
             tokio::task::spawn_blocking(move || {
-                let mut write_back = WriteBackManager::new(&mount_path_owned, readonly);
-                run_request_loop(user_fd, &volume_clone, &mut write_back);
+                run_request_loop(user_fd, fs_clone);
             });
 
             if let Err(e) = nbd_server.wait_ready(total_sectors, Duration::from_millis(500)) {
@@ -147,7 +146,11 @@ impl DeviceMapper for FileAccessEngine {
             let session_id = format!("s04_{}", ctx.mount_path.replace('/', "_"));
             {
                 let mut state = self.mapped.lock().await;
-                *state = Some(MappingState { nbd_server, gadget });
+                *state = Some(MappingState {
+                    nbd_server,
+                    gadget,
+                    fs,
+                });
             }
 
             info!("S04 映射完成: session={}", session_id);
@@ -170,6 +173,9 @@ impl DeviceMapper for FileAccessEngine {
             if let Some(mut mapping) = state.take() {
                 if let Err(e) = mapping.gadget.detach_mass_storage() {
                     error!("清理 mass storage LUN 失败: {}", e);
+                }
+                if let Err(e) = mapping.fs.shutdown() {
+                    error!("S04 flush/shutdown 失败: {}", e);
                 }
                 mapping.nbd_server.stop();
                 info!("S04 映射已清理: session={}", session.id);

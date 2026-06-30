@@ -4,18 +4,15 @@
 //! 用户空间侧处理 28 字节请求，返回 16 字节响应头 + 数据。
 //! NBD_DO_IT ioctl 通过 tokio::task::spawn_blocking 运行。
 
-use std::io::Read;
 use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
 use crate::exfat::layout::SECTOR_SIZE;
-use crate::exfat::volume::VirtualVolume;
-use crate::types::SectorContent;
-use crate::write_back::WriteBackManager;
 
 /// NBD 请求魔数。
 pub const NBD_REQUEST_MAGIC: u32 = 0x25609513;
@@ -82,6 +79,26 @@ pub fn build_reply(handle: u64, error: u32) -> Vec<u8> {
     reply.extend_from_slice(&error.to_be_bytes());
     reply.extend_from_slice(&handle.to_be_bytes());
     reply
+}
+
+pub trait NbdBackend: Send + Sync {
+    fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error>;
+    fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error>;
+    fn flush(&self) -> Result<(), std::io::Error>;
+}
+
+pub struct NbdCommandHandler<B: NbdBackend> {
+    backend: Arc<B>,
+}
+
+impl<B: NbdBackend> NbdCommandHandler<B> {
+    pub fn new(backend: Arc<B>) -> Self {
+        Self { backend }
+    }
+
+    pub fn handle_flush(&self) -> Result<(), std::io::Error> {
+        self.backend.flush()
+    }
 }
 
 // Linux NBD ioctl 常量
@@ -310,7 +327,7 @@ impl Drop for NbdServer {
 /// 请求处理循环。
 ///
 /// 从 user_fd 读取 NBD 请求，按策略处理，写回响应。
-pub fn run_request_loop(user_fd: RawFd, volume: &VirtualVolume, write_back: &mut WriteBackManager) {
+pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
     let mut request_buf = [0u8; NBD_REQUEST_SIZE];
 
     loop {
@@ -329,11 +346,22 @@ pub fn run_request_loop(user_fd: RawFd, volume: &VirtualVolume, write_back: &mut
         };
 
         match req.command {
-            NbdCommand::Read => handle_read(user_fd, &req, volume),
-            NbdCommand::Write => handle_write(user_fd, &req, volume, write_back),
+            NbdCommand::Read => handle_read(user_fd, &req, backend.as_ref()),
+            NbdCommand::Write => handle_write(user_fd, &req, backend.as_ref()),
             NbdCommand::Flush => {
-                let _ = write_back.flush();
-                let reply = build_reply(req.handle, 0);
+                let error = match backend.flush() {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        warn!(
+                            offset = req.from,
+                            len = req.len,
+                            error = %e,
+                            "NBD FLUSH 失败"
+                        );
+                        EIO
+                    }
+                };
+                let reply = build_reply(req.handle, error);
                 let _ = write_all(user_fd, &reply);
             }
             NbdCommand::Disconnect => {
@@ -350,70 +378,30 @@ pub fn run_request_loop(user_fd: RawFd, volume: &VirtualVolume, write_back: &mut
 }
 
 /// 处理 READ 请求。
-fn handle_read(user_fd: RawFd, req: &NbdRequest, volume: &VirtualVolume) {
-    let sector = req.from / SECTOR_SIZE as u64;
-    let num_sectors = req.len / SECTOR_SIZE;
+fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let mut response_data = Vec::with_capacity(16 + req.len as usize);
-    let mut has_error = false;
-
-    let mut data_buf = Vec::with_capacity(req.len as usize);
-
-    for i in 0..num_sectors {
-        let s = sector + i as u64;
-        let content = volume.read_sector(s);
-
-        match content {
-            SectorContent::Metadata(data) => {
-                data_buf.extend_from_slice(&data);
-            }
-            SectorContent::FileData {
-                real_path,
-                offset,
-                valid_bytes,
-                blocked,
-            } => {
-                if blocked {
-                    has_error = true;
-                    break;
-                }
-                // 从真实文件读取数据
-                match read_file_data(&real_path, offset, valid_bytes) {
-                    Ok(data) => {
-                        let mut sector_data = data;
-                        sector_data.resize(SECTOR_SIZE as usize, 0);
-                        data_buf.extend_from_slice(&sector_data);
-                    }
-                    Err(e) => {
-                        warn!("读取文件数据失败: {}: {}", real_path.display(), e);
-                        has_error = true;
-                        break;
-                    }
-                }
-            }
-            SectorContent::Zero => {
-                data_buf.extend(vec![0u8; SECTOR_SIZE as usize]);
-            }
+    match backend.read_at(req.from, req.len as usize) {
+        Ok(data) => {
+            let reply = build_reply(req.handle, 0);
+            response_data.extend_from_slice(&reply);
+            response_data.extend_from_slice(&data);
+            let _ = write_all(user_fd, &response_data);
         }
-    }
-
-    if has_error {
-        let reply = build_reply(req.handle, EIO);
-        let _ = write_all(user_fd, &reply);
-    } else {
-        let reply = build_reply(req.handle, 0);
-        response_data.extend_from_slice(&reply);
-        response_data.extend_from_slice(&data_buf);
-        let _ = write_all(user_fd, &response_data);
+        Err(e) => {
+            warn!(
+                offset = req.from,
+                len = req.len,
+                error = %e,
+                "NBD READ 失败"
+            );
+            let reply = build_reply(req.handle, EIO);
+            let _ = write_all(user_fd, &reply);
+        }
     }
 }
 
 /// 处理 WRITE 请求。
-fn handle_write(
-    user_fd: RawFd,
-    req: &NbdRequest,
-    volume: &VirtualVolume,
-    write_back: &mut WriteBackManager,
-) {
+fn handle_write<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     // 先读取写入数据
     let mut write_data = vec![0u8; req.len as usize];
     if read_exact(user_fd, &mut write_data).is_err() {
@@ -421,35 +409,21 @@ fn handle_write(
         return;
     }
 
-    let sector = req.from / SECTOR_SIZE as u64;
-    let num_sectors = req.len / SECTOR_SIZE;
-
-    let mut error = 0u32;
-    for i in 0..num_sectors {
-        let s = sector + i as u64;
-        let offset = (i as usize) * SECTOR_SIZE as usize;
-        let data = &write_data[offset..offset + SECTOR_SIZE as usize];
-
-        if let Err(e) = write_back.handle_write(s, data, volume) {
-            warn!("写回失败: sector={}, error={}", s, e);
-            error = EIO;
-            break;
+    let error = match backend.write_at(req.from, &write_data) {
+        Ok(()) => 0,
+        Err(e) => {
+            warn!(
+                offset = req.from,
+                len = req.len,
+                error = %e,
+                "NBD WRITE 失败"
+            );
+            EIO
         }
-    }
+    };
 
     let reply = build_reply(req.handle, error);
     let _ = write_all(user_fd, &reply);
-}
-
-/// 从真实文件读取数据。
-fn read_file_data(path: &Path, offset: u64, valid_bytes: u32) -> Result<Vec<u8>, std::io::Error> {
-    use std::io::Seek;
-
-    let mut file = std::fs::File::open(path)?;
-    file.seek(std::io::SeekFrom::Start(offset))?;
-    let mut buf = vec![0u8; valid_bytes as usize];
-    file.read_exact(&mut buf)?;
-    Ok(buf)
 }
 
 /// 从 fd 精确读取。

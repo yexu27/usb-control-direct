@@ -5,12 +5,12 @@
 
 pub mod error;
 pub mod types;
+pub mod vfs;
 pub mod exec_detect;
 pub mod autorun;
 pub mod file_tree;
 pub mod policy;
 pub mod exfat;
-pub mod write_back;
 pub mod nbd;
 pub mod gadget;
 pub mod gadget_bootstrap;

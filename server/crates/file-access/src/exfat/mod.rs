@@ -7,3 +7,6 @@ pub mod bitmap;
 pub mod fat;
 pub mod dir_entry;
 pub mod volume;
+pub mod allocator;
+pub mod directory_parser;
+pub mod fs;
