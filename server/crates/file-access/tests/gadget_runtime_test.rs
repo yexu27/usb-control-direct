@@ -67,7 +67,35 @@ fn attach_sets_lun_attributes_and_backing_path() {
         fs::read_to_string(lun.join("file")).unwrap(),
         backing.display().to_string()
     );
-    assert_eq!(runtime.current_backing().unwrap(), backing.display().to_string());
+    assert_eq!(
+        runtime.current_backing().unwrap(),
+        backing.display().to_string()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn attach_binds_available_udc_when_current_binding_is_empty() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let lun = make_lun(root, "mass_storage.usb0", true);
+    let backing = dir.path().join("nbd3");
+    let class_udc = dir.path().join("class_udc");
+    fs::write(root.join("rockchip").join("UDC"), "\n").unwrap();
+    fs::write(&backing, "").unwrap();
+    fs::create_dir_all(class_udc.join("fcc00000.dwc3")).unwrap();
+
+    let runtime = GadgetRuntime::discover_under_with_udc_root(root, &class_udc).unwrap();
+    runtime.attach_mass_storage(&backing, true).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
+    assert_eq!(
+        fs::read_to_string(lun.join("file")).unwrap(),
+        backing.display().to_string()
+    );
 }
 
 #[cfg(unix)]

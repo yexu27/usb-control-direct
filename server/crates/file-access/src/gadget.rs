@@ -38,6 +38,7 @@ pub struct MassStorageLun {
 #[derive(Debug, Clone)]
 pub struct GadgetRuntime {
     lun: MassStorageLun,
+    udc_root: PathBuf,
 }
 
 impl GadgetRuntime {
@@ -46,6 +47,13 @@ impl GadgetRuntime {
     }
 
     pub fn discover_under(root: impl AsRef<Path>) -> Result<Self, GadgetError> {
+        Self::discover_under_with_udc_root(root, UDC_CLASS_ROOT)
+    }
+
+    pub fn discover_under_with_udc_root(
+        root: impl AsRef<Path>,
+        udc_root: impl AsRef<Path>,
+    ) -> Result<Self, GadgetError> {
         let root = root.as_ref();
         if !root.exists() {
             return Err(GadgetError::ConfigfsMissing(root.display().to_string()));
@@ -127,6 +135,7 @@ impl GadgetRuntime {
                 gadget_dir,
                 lun_dir,
             },
+            udc_root: udc_root.as_ref().to_path_buf(),
         })
     }
 
@@ -164,8 +173,9 @@ impl GadgetRuntime {
     }
 
     fn bind_udc(&self, previous: Option<String>) -> Result<(), GadgetError> {
-        let Some(udc) = previous else {
-            return Ok(());
+        let udc = match previous {
+            Some(udc) => udc,
+            None => first_udc_name(&self.udc_root)?,
         };
 
         fs::write(self.udc_path(), format!("{udc}\n"))?;
@@ -174,7 +184,7 @@ impl GadgetRuntime {
     }
 
     pub fn bind_udc_if_empty(&self) -> Result<(), GadgetError> {
-        self.bind_udc_if_empty_under(UDC_CLASS_ROOT)
+        self.bind_udc_if_empty_under(&self.udc_root)
     }
 
     pub fn bind_udc_if_empty_under(&self, udc_root: impl AsRef<Path>) -> Result<(), GadgetError> {
