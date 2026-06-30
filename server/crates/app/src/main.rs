@@ -12,10 +12,17 @@ use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
-use license_upgrade::{LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
+use file_access::engine::FileAccessEngine;
+use file_access::gadget::GadgetRuntime;
+use hid_access::hid_gadget::{discover_hidg_nodes, ensure_hid_functions_under, HidgNodes};
+use license_upgrade::{
+    LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
+};
 use log_audit::AuditService;
+use malware_scan::clam_scanner::ClamScanner;
+use malware_scan::scan_service::ScanService;
 use policy_import_export::{FileKeyProvider, PolicyService};
-use protocol_gateway::connection::{ConnectionManager, handle_connection};
+use protocol_gateway::connection::{handle_connection, ConnectionManager};
 use protocol_gateway::context::AppState;
 use protocol_gateway::handlers::register::{
     register_auth_handlers, register_file_access_handlers, register_license_handlers,
@@ -25,14 +32,40 @@ use protocol_gateway::handlers::register::{
 use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
-use file_access::engine::FileAccessEngine;
-use file_access::gadget::GadgetRuntime;
-use hid_access::hid_gadget::discover_hidg_nodes;
-use malware_scan::clam_scanner::ClamScanner;
-use malware_scan::scan_service::ScanService;
 use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
+
+fn prepare_usb_gadget_startup() -> Result<(GadgetRuntime, HidgNodes), String> {
+    let gadget_runtime =
+        GadgetRuntime::discover().map_err(|e| format!("RK mass_storage LUN 发现失败: {e}"))?;
+
+    let gadget_dir = gadget_runtime
+        .lun_dir()
+        .parent()
+        .and_then(|function_dir| function_dir.parent())
+        .and_then(|functions_dir| functions_dir.parent())
+        .ok_or_else(|| {
+            format!(
+                "无法从 LUN 路径推导 gadget 目录: {}",
+                gadget_runtime.lun_dir().display()
+            )
+        })?;
+
+    ensure_hid_functions_under(gadget_dir).map_err(|e| format!("HID function 配置失败: {e}"))?;
+
+    gadget_runtime
+        .prepare_empty_lun()
+        .map_err(|e| format!("RK mass_storage LUN 初始化失败: {e}"))?;
+
+    gadget_runtime
+        .bind_udc_if_empty()
+        .map_err(|e| format!("USB gadget UDC 绑定失败: {e}"))?;
+
+    let hidg_nodes = discover_hidg_nodes().map_err(|e| format!("hidg 节点发现失败: {e}"))?;
+
+    Ok((gadget_runtime, hidg_nodes))
+}
 
 #[tokio::main]
 async fn main() {
@@ -47,15 +80,15 @@ async fn main() {
 
     let db_path = config.database_path.clone();
 
-    let storage = Arc::new(
-        Storage::open_with_pool_size(&db_path, 8).expect("数据库未就绪"),
-    );
+    let storage = Arc::new(Storage::open_with_pool_size(&db_path, 8).expect("数据库未就绪"));
 
-    let auth_service = Arc::new(AuthService::new(Arc::clone(&storage), SessionManager::new()));
+    let auth_service = Arc::new(AuthService::new(
+        Arc::clone(&storage),
+        SessionManager::new(),
+    ));
     let audit_service = Arc::new(AuditService::new(Arc::clone(&storage), &db_path));
-    let whitelist_manager = Arc::new(
-        WhitelistManager::new(Arc::clone(&storage)).expect("白名单管理器初始化失败"),
-    );
+    let whitelist_manager =
+        Arc::new(WhitelistManager::new(Arc::clone(&storage)).expect("白名单管理器初始化失败"));
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
 
     let key_provider = Arc::new(FileKeyProvider::new(&config.policy_key_dir));
@@ -77,19 +110,16 @@ async fn main() {
     );
 
     // ===== USB Gadget 运行时检查 =====
-    let gadget_runtime = GadgetRuntime::discover().expect("RK mass_storage LUN 发现失败");
-    gadget_runtime
-        .prepare_empty_lun()
-        .expect("RK mass_storage LUN 初始化失败");
+    let (gadget_runtime, hidg_nodes) =
+        prepare_usb_gadget_startup().expect("USB gadget 启动准备失败");
     info!(
         gadget = %gadget_runtime.gadget_name(),
         function = %gadget_runtime.function_name(),
         lun = %gadget_runtime.lun_dir().display(),
-        "RK mass_storage LUN 已准备为空介质状态"
+        keyboard = %hidg_nodes.keyboard.display(),
+        mouse = %hidg_nodes.mouse.display(),
+        "USB gadget 启动准备完成"
     );
-
-    let hidg_nodes = discover_hidg_nodes().expect("hidg 节点发现失败");
-    info!("HID gadget: keyboard={}, mouse={}", hidg_nodes.keyboard.display(), hidg_nodes.mouse.display());
 
     // ===== 实例化下游服务 =====
     let scan_service = Arc::new(ScanService::new(
@@ -205,9 +235,7 @@ async fn main() {
 
         let source_ip = peer_addr.ip().to_string();
 
-        if let Err(e) =
-            handle_connection(tls_stream, &router, guard, &state, source_ip).await
-        {
+        if let Err(e) = handle_connection(tls_stream, &router, guard, &state, source_ip).await {
             info!("连接结束: {}", e);
         }
     }

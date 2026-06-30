@@ -23,10 +23,49 @@ pub fn ensure_hid_functions_under(gadget_dir: &Path) -> Result<(), HidAccessErro
     let keyboard_dir = functions_dir.join(KEYBOARD_FUNCTION);
     let mouse_dir = functions_dir.join(MOUSE_FUNCTION);
 
-    configure_hid_function(&keyboard_dir, 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)?;
-    configure_hid_function(&mouse_dir, 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)?;
+    ensure_hid_function(&keyboard_dir, 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)?;
+    ensure_hid_function(&mouse_dir, 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)?;
 
     Ok(())
+}
+
+fn ensure_hid_function(
+    function_dir: &Path,
+    protocol: u8,
+    report_desc: &[u8],
+    report_len: usize,
+) -> Result<(), HidAccessError> {
+    if hid_function_matches(function_dir, protocol, report_desc, report_len) {
+        return Ok(());
+    }
+
+    configure_hid_function(function_dir, protocol, report_desc, report_len)
+}
+
+fn hid_function_matches(
+    function_dir: &Path,
+    protocol: u8,
+    report_desc: &[u8],
+    report_len: usize,
+) -> bool {
+    let protocol_matches = read_attr_trimmed(function_dir, "protocol")
+        .map(|value| value == protocol.to_string())
+        .unwrap_or(false);
+    let subclass_matches = read_attr_trimmed(function_dir, "subclass")
+        .map(|value| value == "1")
+        .unwrap_or(false);
+    let report_len_matches = read_attr_trimmed(function_dir, "report_length")
+        .map(|value| value == report_len.to_string())
+        .unwrap_or(false);
+    let report_desc_matches = fs::read(function_dir.join("report_desc"))
+        .map(|value| value == report_desc)
+        .unwrap_or(false);
+
+    protocol_matches && subclass_matches && report_len_matches && report_desc_matches
+}
+
+fn read_attr_trimmed(dir: &Path, filename: &str) -> Result<String, std::io::Error> {
+    Ok(fs::read_to_string(dir.join(filename))?.trim().to_string())
 }
 
 /// 配置单个 HID function。
@@ -75,11 +114,7 @@ fn write_configfs_attr(
     let path = dir.join(filename);
     fs::write(&path, value).map_err(|e| {
         error!(path = %path.display(), reason = %e, "configfs 属性写入失败");
-        HidAccessError::Internal(format!(
-            "写 configfs {} 失败: {}",
-            path.display(),
-            e
-        ))
+        HidAccessError::Internal(format!("写 configfs {} 失败: {}", path.display(), e))
     })
 }
 
@@ -97,14 +132,12 @@ pub struct HidgNodes {
 pub fn discover_hidg_nodes() -> Result<HidgNodes, HidAccessError> {
     let mut nodes: Vec<PathBuf> = Vec::new();
 
-    let dev_dir = fs::read_dir("/dev").map_err(|e| {
-        HidAccessError::Internal(format!("读取 /dev 目录失败: {}", e))
-    })?;
+    let dev_dir = fs::read_dir("/dev")
+        .map_err(|e| HidAccessError::Internal(format!("读取 /dev 目录失败: {}", e)))?;
 
     for entry in dev_dir {
-        let entry = entry.map_err(|e| {
-            HidAccessError::Internal(format!("读取 /dev 条目失败: {}", e))
-        })?;
+        let entry =
+            entry.map_err(|e| HidAccessError::Internal(format!("读取 /dev 条目失败: {}", e)))?;
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with("hidg") {
             nodes.push(entry.path());
