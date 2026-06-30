@@ -11,6 +11,7 @@ use thiserror::Error;
 use tracing::{debug, info};
 
 const CONFIGFS_ROOT: &str = "/sys/kernel/config/usb_gadget";
+const UDC_CLASS_ROOT: &str = "/sys/class/udc";
 
 #[derive(Debug, Error)]
 pub enum GadgetError {
@@ -22,6 +23,8 @@ pub enum GadgetError {
     Io(#[from] std::io::Error),
     #[error("backing path is not UTF-8: {0}")]
     BackingPathInvalid(String),
+    #[error("no available UDC found under: {0}")]
+    UdcNotFound(String),
 }
 
 #[derive(Debug, Clone)]
@@ -170,6 +173,28 @@ impl GadgetRuntime {
         Ok(())
     }
 
+    pub fn bind_udc_if_empty(&self) -> Result<(), GadgetError> {
+        self.bind_udc_if_empty_under(UDC_CLASS_ROOT)
+    }
+
+    pub fn bind_udc_if_empty_under(&self, udc_root: impl AsRef<Path>) -> Result<(), GadgetError> {
+        let path = self.udc_path();
+        if !path.exists() {
+            return Ok(());
+        }
+
+        let current = fs::read_to_string(&path).unwrap_or_default();
+        if !current.trim().is_empty() {
+            debug!(udc = %current.trim(), "UDC already bound");
+            return Ok(());
+        }
+
+        let udc = first_udc_name(udc_root.as_ref())?;
+        fs::write(&path, format!("{udc}\n"))?;
+        info!(udc = %udc, "bound UDC for USB gadget startup");
+        Ok(())
+    }
+
     pub fn current_backing(&self) -> Result<String, GadgetError> {
         let value = fs::read_to_string(self.lun.lun_dir.join("file"))?;
         Ok(value.trim_end_matches('\n').to_string())
@@ -219,4 +244,20 @@ impl GadgetRuntime {
         self.bind_udc(previous)?;
         Ok(())
     }
+}
+
+fn first_udc_name(udc_root: &Path) -> Result<String, GadgetError> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(udc_root)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+    names.sort();
+    names
+        .into_iter()
+        .next()
+        .ok_or_else(|| GadgetError::UdcNotFound(udc_root.display().to_string()))
 }

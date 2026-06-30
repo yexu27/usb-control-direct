@@ -84,3 +84,41 @@ fn detach_clears_backing_file() {
     assert_eq!(fs::read_to_string(lun.join("file")).unwrap(), "\n");
     assert_eq!(runtime.current_backing().unwrap(), "");
 }
+
+#[cfg(unix)]
+#[test]
+fn bind_udc_if_empty_binds_available_udc() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    make_lun(root, "mass_storage.usb0", true);
+    let class_udc = dir.path().join("class_udc");
+    fs::create_dir_all(class_udc.join("fcc00000.dwc3")).unwrap();
+    fs::write(root.join("rockchip").join("UDC"), "\n").unwrap();
+
+    let runtime = GadgetRuntime::discover_under(root).unwrap();
+    runtime.bind_udc_if_empty_under(&class_udc).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bind_udc_if_empty_keeps_existing_binding() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    make_lun(root, "mass_storage.usb0", true);
+    let class_udc = dir.path().join("class_udc");
+    fs::create_dir_all(class_udc.join("fcc00000.dwc3")).unwrap();
+    fs::write(root.join("rockchip").join("UDC"), "already-bound\n").unwrap();
+
+    let runtime = GadgetRuntime::discover_under(root).unwrap();
+    runtime.bind_udc_if_empty_under(&class_udc).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "already-bound\n"
+    );
+}
