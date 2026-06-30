@@ -9,10 +9,25 @@ use std::path::{Path, PathBuf};
 use tracing::{error, info};
 
 use crate::error::HidAccessError;
+use crate::hid_report::{
+    KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN,
+};
 
 /// HID function 名称常量。
 pub const KEYBOARD_FUNCTION: &str = "hid.usb0";
 pub const MOUSE_FUNCTION: &str = "hid.usb1";
+
+/// 确保标准键盘和鼠标 HID function 已配置。
+pub fn ensure_hid_functions_under(gadget_dir: &Path) -> Result<(), HidAccessError> {
+    let functions_dir = gadget_dir.join("functions");
+    let keyboard_dir = functions_dir.join(KEYBOARD_FUNCTION);
+    let mouse_dir = functions_dir.join(MOUSE_FUNCTION);
+
+    configure_hid_function(&keyboard_dir, 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)?;
+    configure_hid_function(&mouse_dir, 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)?;
+
+    Ok(())
+}
 
 /// 配置单个 HID function。
 ///
