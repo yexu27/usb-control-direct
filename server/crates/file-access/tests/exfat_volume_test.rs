@@ -1,7 +1,8 @@
 use std::fs;
 
 use file_access::exfat::layout::{
-    EXFAT_SIGNATURE, MIN_VIRTUAL_VOLUME_BYTES, PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
+    CLUSTER_SIZE, EXFAT_SIGNATURE, FAT_END_OF_CHAIN, MIN_VIRTUAL_VOLUME_BYTES,
+    PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
 };
 use file_access::exfat::volume::VirtualVolume;
 use file_access::file_tree::build_file_tree;
@@ -80,12 +81,20 @@ fn volume_file_data_maps_to_real_path() {
 
     // 查找 data.bin 的数据扇区
     let file_sectors = volume.find_file_data_sectors("data.bin");
-    assert!(!file_sectors.is_empty(), "Should have data sectors for data.bin");
+    assert!(
+        !file_sectors.is_empty(),
+        "Should have data sectors for data.bin"
+    );
 
     let first_sector = file_sectors[0];
     let content = volume.read_sector(first_sector);
     match content {
-        SectorContent::FileData { real_path, offset, valid_bytes: _, blocked } => {
+        SectorContent::FileData {
+            real_path,
+            offset,
+            valid_bytes: _,
+            blocked,
+        } => {
             assert_eq!(real_path, tmp.path().join("data.bin"));
             assert_eq!(offset, 0);
             assert!(!blocked);
@@ -146,4 +155,52 @@ fn virtual_volume_uses_source_capacity_when_larger_than_minimum() {
     let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size);
 
     assert!(volume.total_sectors() * SECTOR_SIZE as u64 >= source_size);
+}
+
+#[test]
+fn allocation_bitmap_chain_covers_large_source_capacity() {
+    let source_size = 512 * 1024 * 1024;
+    let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size);
+    let layout = volume.layout();
+
+    let root_sector = layout.cluster_to_sector(2);
+    let root = match volume.read_sector(root_sector) {
+        SectorContent::Metadata(data) => data,
+        other => panic!("root directory sector should be metadata, got {other:?}"),
+    };
+
+    let bitmap_entry = &root[32..64];
+    assert_eq!(bitmap_entry[0], 0x81);
+    let bitmap_cluster = u32::from_le_bytes(bitmap_entry[20..24].try_into().unwrap());
+    let bitmap_len = u64::from_le_bytes(bitmap_entry[24..32].try_into().unwrap());
+    assert_eq!(bitmap_cluster, 3);
+    assert!(bitmap_len > CLUSTER_SIZE as u64);
+
+    let mut chain_clusters = 0u64;
+    let mut cluster = bitmap_cluster;
+    loop {
+        chain_clusters += 1;
+        let fat_offset = cluster as u64 * 4;
+        let fat_sector =
+            PARTITION_OFFSET_SECTORS + layout.fat_offset_sectors + fat_offset / SECTOR_SIZE as u64;
+        let fat_sector_data = match volume.read_sector(fat_sector) {
+            SectorContent::Metadata(data) => data,
+            other => panic!("FAT sector should be metadata, got {other:?}"),
+        };
+        let offset_in_sector = (fat_offset % SECTOR_SIZE as u64) as usize;
+        let next = u32::from_le_bytes(
+            fat_sector_data[offset_in_sector..offset_in_sector + 4]
+                .try_into()
+                .unwrap(),
+        );
+        if next == FAT_END_OF_CHAIN {
+            break;
+        }
+        cluster = next;
+    }
+
+    assert!(
+        chain_clusters * CLUSTER_SIZE as u64 >= bitmap_len,
+        "bitmap chain has {chain_clusters} clusters for {bitmap_len} bytes"
+    );
 }

@@ -154,6 +154,30 @@ fn file_clusters(file_size: u64) -> u32 {
     clusters.min(u32::MAX as u64) as u32
 }
 
+fn bitmap_clusters_for(cluster_count: u32) -> u32 {
+    let bitmap_bytes = (cluster_count as u64).div_ceil(8);
+    bitmap_bytes.div_ceil(CLUSTER_SIZE as u64).max(1) as u32
+}
+
+fn write_cluster_data(
+    metadata_sectors: &mut HashMap<u64, Vec<u8>>,
+    layout: &DiskLayout,
+    cluster: u32,
+    data_offset: usize,
+    data: &[u8],
+) {
+    let cluster_sector_start = layout.cluster_to_sector(cluster);
+    for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
+        let offset = data_offset + i * SECTOR_SIZE as usize;
+        let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
+        let end = (offset + SECTOR_SIZE as usize).min(data.len());
+        if offset < data.len() {
+            sector_data[..end - offset].copy_from_slice(&data[offset..end]);
+        }
+        metadata_sectors.insert(cluster_sector_start + i as u64, sector_data);
+    }
+}
+
 impl<'a> VolumeBuilder<'a> {
     fn new(snapshot: &'a PolicySnapshot, source_size_bytes: u64) -> Self {
         VolumeBuilder {
@@ -336,8 +360,27 @@ impl<'a> VolumeBuilder<'a> {
             None
         };
 
+        let mut bitmap_extra_start = None;
+        let mut bitmap_extra_clusters = 0;
+        let layout = loop {
+            let allocated_clusters = self.next_cluster - FIRST_CLUSTER;
+            let layout =
+                DiskLayout::new_with_min_total_bytes(allocated_clusters, self.min_total_bytes);
+            let bitmap_clusters_needed = bitmap_clusters_for(layout.cluster_count);
+            let required_extra_clusters = bitmap_clusters_needed.saturating_sub(1);
+            if required_extra_clusters <= bitmap_extra_clusters {
+                break layout;
+            }
+
+            let additional = required_extra_clusters - bitmap_extra_clusters;
+            let start = self.allocate_clusters(additional);
+            if bitmap_extra_start.is_none() {
+                bitmap_extra_start = Some(start);
+            }
+            bitmap_extra_clusters += additional;
+        };
+
         let allocated_clusters = self.next_cluster - FIRST_CLUSTER;
-        let layout = DiskLayout::new_with_min_total_bytes(allocated_clusters, self.min_total_bytes);
         let total_clusters = layout.cluster_count;
 
         let mut metadata_sectors = HashMap::new();
@@ -373,8 +416,12 @@ impl<'a> VolumeBuilder<'a> {
             // cluster 2 -> root_extra_start -> root_extra_start+1 -> ... -> EOF
             fat_builder.set_chain_from_parts(2, root_extra_start.unwrap(), root_extra_clusters);
         }
-        // Bitmap: cluster 3, single
-        fat_builder.set_single(3);
+        // Bitmap: cluster 3, possibly chained to extra bitmap clusters.
+        if bitmap_extra_clusters == 0 {
+            fat_builder.set_single(3);
+        } else {
+            fat_builder.set_chain_from_parts(3, bitmap_extra_start.unwrap(), bitmap_extra_clusters);
+        }
 
         for alloc in &self.cluster_allocations {
             match alloc {
@@ -426,15 +473,17 @@ impl<'a> VolumeBuilder<'a> {
                 .copy_from_slice(&(bitmap_data.len() as u64).to_le_bytes());
         }
 
-        let bitmap_sector_start = layout.cluster_to_sector(3);
-        for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
-            let offset = i * SECTOR_SIZE as usize;
-            let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
-            let end = (offset + SECTOR_SIZE as usize).min(bitmap_data.len());
-            if offset < bitmap_data.len() {
-                sector_data[..end - offset].copy_from_slice(&bitmap_data[offset..end]);
+        write_cluster_data(&mut metadata_sectors, &layout, 3, 0, &bitmap_data);
+        if let Some(extra_start) = bitmap_extra_start {
+            for c in 0..bitmap_extra_clusters {
+                write_cluster_data(
+                    &mut metadata_sectors,
+                    &layout,
+                    extra_start + c,
+                    (c + 1) as usize * CLUSTER_SIZE as usize,
+                    &bitmap_data,
+                );
             }
-            metadata_sectors.insert(bitmap_sector_start + i as u64, sector_data);
         }
 
         // Root Directory — 按实际大小写入多簇
