@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -94,9 +95,13 @@ impl DeviceMapper for FileAccessEngine {
             log_blocked_entries(&tree, &snapshot);
 
             // 4. 生成虚拟 exFAT 卷
-            let volume = VirtualVolume::build(&tree, &snapshot);
+            let volume = VirtualVolume::build_with_capacity(&tree, &snapshot, ctx.source_size_bytes);
             let total_sectors = volume.total_sectors();
-            info!("虚拟卷生成完成: {} 扇区", total_sectors);
+            info!(
+                total_sectors,
+                source_size_bytes = ctx.source_size_bytes,
+                "虚拟卷生成完成"
+            );
 
             // 5. 启动 NBD 服务
             let readonly = ctx.permission == 0;
@@ -116,6 +121,16 @@ impl DeviceMapper for FileAccessEngine {
                 let mut write_back = WriteBackManager::new(&mount_path_owned, readonly);
                 run_request_loop(user_fd, &volume_clone, &mut write_back);
             });
+
+            if let Err(e) = nbd_server.wait_ready(total_sectors, Duration::from_millis(500)) {
+                nbd_server.stop();
+                return Err(MapError::NbdFailed(format!("NBD backing 未就绪: {}", e)));
+            }
+            debug!(
+                nbd = %nbd_device,
+                total_sectors,
+                "NBD backing 已就绪"
+            );
 
             // 7. 启用 OTG Gadget
             let gadget = match GadgetRuntime::discover() {
