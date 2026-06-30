@@ -95,7 +95,8 @@ impl DeviceMapper for FileAccessEngine {
             log_blocked_entries(&tree, &snapshot);
 
             // 4. 生成虚拟 exFAT 卷
-            let volume = VirtualVolume::build_with_capacity(&tree, &snapshot, ctx.source_size_bytes);
+            let volume =
+                VirtualVolume::build_with_capacity(&tree, &snapshot, ctx.source_size_bytes);
             let total_sectors = volume.total_sectors();
             info!(
                 total_sectors,
@@ -164,9 +165,8 @@ impl DeviceMapper for FileAccessEngine {
     fn unmap_device(
         &self,
         session: MappedSession,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>,
-    > {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>>
+    {
         Box::pin(async move {
             let mut state = self.mapped.lock().await;
 

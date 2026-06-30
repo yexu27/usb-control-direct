@@ -124,10 +124,18 @@ struct VolumeBuilder<'a> {
 #[derive(Debug)]
 enum ClusterAllocation {
     /// 元数据（bitmap / upcase / 目录）。
-    Metadata { start: u32, count: u32, data: Vec<u8> },
+    Metadata {
+        start: u32,
+        count: u32,
+        data: Vec<u8>,
+    },
     /// 文件数据。
     #[allow(dead_code)]
-    FileData { start: u32, count: u32, name: String },
+    FileData {
+        start: u32,
+        count: u32,
+        name: String,
+    },
 }
 
 /// 文件映射。
@@ -181,8 +189,10 @@ impl<'a> VolumeBuilder<'a> {
         let upcase_cluster = self.allocate_clusters(upcase_clusters);
 
         // 根目录项：Volume Label + Bitmap + Upcase
-        self.root_dir_entries.extend(build_volume_label_entry("USB_CTRL"));
-        self.root_dir_entries.extend(build_bitmap_entry(bitmap_cluster, 0)); // 大小后面更新
+        self.root_dir_entries
+            .extend(build_volume_label_entry("USB_CTRL"));
+        self.root_dir_entries
+            .extend(build_bitmap_entry(bitmap_cluster, 0)); // 大小后面更新
         self.root_dir_entries.extend(build_upcase_entry(
             upcase_cluster,
             upcase_data.len() as u64,
@@ -229,13 +239,14 @@ impl<'a> VolumeBuilder<'a> {
                                 data: vec![0u8; CLUSTER_SIZE as usize],
                             });
                         } else {
-                            let (file_cluster, file_clusters) = if child.is_virus || child.file_size == 0 {
-                                (0, 0)
-                            } else {
-                                let clusters = file_clusters(child.file_size);
-                                let start = self.allocate_clusters(clusters);
-                                (start, clusters)
-                            };
+                            let (file_cluster, file_clusters) =
+                                if child.is_virus || child.file_size == 0 {
+                                    (0, 0)
+                                } else {
+                                    let clusters = file_clusters(child.file_size);
+                                    let start = self.allocate_clusters(clusters);
+                                    (start, clusters)
+                                };
 
                             let child_entry = build_file_entry_set(
                                 &child.virtual_name,
@@ -268,13 +279,8 @@ impl<'a> VolumeBuilder<'a> {
                 let dir_cluster = self.allocate_clusters(dir_clusters_needed);
 
                 // 生成目录项（放入父目录，即 root_dir_entries）
-                let dir_entry_data = build_file_entry_set(
-                    &entry.virtual_name,
-                    true,
-                    dir_cluster,
-                    0,
-                    false,
-                );
+                let dir_entry_data =
+                    build_file_entry_set(&entry.virtual_name, true, dir_cluster, 0, false);
                 self.root_dir_entries.extend(dir_entry_data);
 
                 // 填充到簇对齐大小
@@ -478,8 +484,7 @@ impl<'a> VolumeBuilder<'a> {
         let mut file_sector_map = HashMap::new();
         for mapping in &self.file_mappings {
             let cluster_start_sector = layout.cluster_to_sector(mapping.start_cluster);
-            let total_data_sectors =
-                mapping.file_size.div_ceil(SECTOR_SIZE as u64);
+            let total_data_sectors = mapping.file_size.div_ceil(SECTOR_SIZE as u64);
             let mut sectors = Vec::new();
 
             for i in 0..total_data_sectors {

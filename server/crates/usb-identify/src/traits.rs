@@ -111,7 +111,5 @@ pub trait DeviceMapper: Send + Sync {
     fn unmap_device(
         &self,
         session: MappedSession,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>,
-    >;
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>>;
 }

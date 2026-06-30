@@ -217,7 +217,10 @@ impl GadgetRuntime {
 
         let previous = self.unbind_udc()?;
         let _ = fs::write(self.lun.lun_dir.join("file"), "\n");
-        let _ = fs::write(self.lun.lun_dir.join("ro"), if readonly { "1\n" } else { "0\n" });
+        let _ = fs::write(
+            self.lun.lun_dir.join("ro"),
+            if readonly { "1\n" } else { "0\n" },
+        );
         let _ = fs::write(self.lun.lun_dir.join("removable"), "1\n");
         let _ = fs::write(self.lun.lun_dir.join("nofua"), "1\n");
         let _ = fs::write(self.lun.lun_dir.join("cdrom"), "0\n");

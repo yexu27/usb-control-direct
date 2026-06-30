@@ -190,14 +190,9 @@ impl DeviceOrchestrator {
     }
 
     async fn has_active_storage_session(&self) -> bool {
-        self.active_sessions
-            .lock()
-            .await
-            .values()
-            .any(|session| {
-                session.device_type == common::types::DeviceType::Storage
-                    && session.nbd_index.is_some()
-            })
+        self.active_sessions.lock().await.values().any(|session| {
+            session.device_type == common::types::DeviceType::Storage && session.nbd_index.is_some()
+        })
     }
 
     async fn cleanup_storage_session(
@@ -290,13 +285,13 @@ impl DeviceOrchestrator {
         self.active_sessions.lock().await.insert(
             parent_path.clone(),
             ActiveSession {
-                        device_type: common::types::DeviceType::Storage,
-                        nbd_index: Some(nbd_index),
-                        mount_path: None,
-                        mapped_session: None,
-                        cancel_tx,
-                        audit_detail: "授权设备".into(),
-                    },
+                device_type: common::types::DeviceType::Storage,
+                nbd_index: Some(nbd_index),
+                mount_path: None,
+                mapped_session: None,
+                cancel_tx,
+                audit_detail: "授权设备".into(),
+            },
         );
 
         info!(serial = %serial, nbd = nbd_index, "Storage 设备开始编排");
@@ -341,12 +336,8 @@ impl DeviceOrchestrator {
                 .await;
                 return;
             }
-            Self::set_storage_mount_path(
-                &active_sessions,
-                &task_parent_path,
-                mount_point.clone(),
-            )
-            .await;
+            Self::set_storage_mount_path(&active_sessions, &task_parent_path, mount_point.clone())
+                .await;
             let mount_path_str = mount_point.to_string_lossy().to_string();
 
             let scan_result = tokio::select! {

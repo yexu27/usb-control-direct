@@ -66,7 +66,12 @@ impl NbdRequest {
         let from = u64::from_be_bytes(buf[16..24].try_into().unwrap());
         let len = u32::from_be_bytes(buf[24..28].try_into().unwrap());
 
-        Some(NbdRequest { command, handle, from, len })
+        Some(NbdRequest {
+            command,
+            handle,
+            from,
+            len,
+        })
     }
 }
 
@@ -198,7 +203,11 @@ impl NbdServer {
         Ok(user_fd)
     }
 
-    pub fn wait_ready(&self, expected_sectors: u64, timeout: Duration) -> Result<(), std::io::Error> {
+    pub fn wait_ready(
+        &self,
+        expected_sectors: u64,
+        timeout: Duration,
+    ) -> Result<(), std::io::Error> {
         self.wait_ready_under(Path::new("/sys/block"), expected_sectors, timeout)
     }
 
@@ -301,11 +310,7 @@ impl Drop for NbdServer {
 /// 请求处理循环。
 ///
 /// 从 user_fd 读取 NBD 请求，按策略处理，写回响应。
-pub fn run_request_loop(
-    user_fd: RawFd,
-    volume: &VirtualVolume,
-    write_back: &mut WriteBackManager,
-) {
+pub fn run_request_loop(user_fd: RawFd, volume: &VirtualVolume, write_back: &mut WriteBackManager) {
     let mut request_buf = [0u8; NBD_REQUEST_SIZE];
 
     loop {
@@ -361,7 +366,12 @@ fn handle_read(user_fd: RawFd, req: &NbdRequest, volume: &VirtualVolume) {
             SectorContent::Metadata(data) => {
                 data_buf.extend_from_slice(&data);
             }
-            SectorContent::FileData { real_path, offset, valid_bytes, blocked } => {
+            SectorContent::FileData {
+                real_path,
+                offset,
+                valid_bytes,
+                blocked,
+            } => {
                 if blocked {
                     has_error = true;
                     break;
@@ -448,7 +458,11 @@ fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
     while pos < buf.len() {
         // 安全性: fd 为有效文件描述符，buf[pos..] 为有效可写内存区域。
         let n = unsafe {
-            libc::read(fd, buf[pos..].as_mut_ptr() as *mut libc::c_void, buf.len() - pos)
+            libc::read(
+                fd,
+                buf[pos..].as_mut_ptr() as *mut libc::c_void,
+                buf.len() - pos,
+            )
         };
         if n <= 0 {
             return Err(std::io::Error::last_os_error());
@@ -464,7 +478,11 @@ fn write_all(fd: RawFd, data: &[u8]) -> Result<(), std::io::Error> {
     while pos < data.len() {
         // 安全性: fd 为有效文件描述符，data[pos..] 为有效只读内存区域。
         let n = unsafe {
-            libc::write(fd, data[pos..].as_ptr() as *const libc::c_void, data.len() - pos)
+            libc::write(
+                fd,
+                data[pos..].as_ptr() as *const libc::c_void,
+                data.len() - pos,
+            )
         };
         if n <= 0 {
             return Err(std::io::Error::last_os_error());

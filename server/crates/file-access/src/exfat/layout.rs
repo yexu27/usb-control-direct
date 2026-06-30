@@ -80,8 +80,8 @@ impl DiskLayout {
         let fat_length_sectors = fat_bytes.div_ceil(SECTOR_SIZE as u64);
         let raw_heap_offset = fat_offset_sectors + fat_length_sectors;
         let cluster_heap_offset_sectors = align_up(raw_heap_offset, SECTORS_PER_CLUSTER as u64);
-        let volume_length_sectors = cluster_heap_offset_sectors
-            + data_cluster_count as u64 * SECTORS_PER_CLUSTER as u64;
+        let volume_length_sectors =
+            cluster_heap_offset_sectors + data_cluster_count as u64 * SECTORS_PER_CLUSTER as u64;
         let total_sectors = PARTITION_OFFSET_SECTORS + volume_length_sectors;
 
         DiskLayout {
@@ -107,9 +107,7 @@ impl DiskLayout {
             }
 
             let missing_sectors = min_total_sectors - layout.total_sectors;
-            let missing_clusters = missing_sectors
-                .div_ceil(SECTORS_PER_CLUSTER as u64)
-                .max(1);
+            let missing_clusters = missing_sectors.div_ceil(SECTORS_PER_CLUSTER as u64).max(1);
             let max_additional = u32::MAX as u64 - data_cluster_count as u64;
             if max_additional == 0 {
                 return layout;
