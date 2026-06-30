@@ -155,34 +155,6 @@ impl GadgetRuntime {
         self.lun.gadget_dir.join("UDC")
     }
 
-    fn unbind_udc(&self) -> Result<Option<String>, GadgetError> {
-        let path = self.udc_path();
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let current = fs::read_to_string(&path).unwrap_or_default();
-        let current = current.trim().to_string();
-        if current.is_empty() {
-            return Ok(None);
-        }
-
-        fs::write(&path, "\n")?;
-        info!(udc = %current, "unbound UDC for mass storage LUN update");
-        Ok(Some(current))
-    }
-
-    fn bind_udc(&self, previous: Option<String>) -> Result<(), GadgetError> {
-        let udc = match previous {
-            Some(udc) => udc,
-            None => first_udc_name(&self.udc_root)?,
-        };
-
-        fs::write(self.udc_path(), format!("{udc}\n"))?;
-        info!(udc = %udc, "rebound UDC after mass storage LUN update");
-        Ok(())
-    }
-
     pub fn bind_udc_if_empty(&self) -> Result<(), GadgetError> {
         self.bind_udc_if_empty_under(&self.udc_root)
     }
@@ -211,12 +183,10 @@ impl GadgetRuntime {
     }
 
     pub fn prepare_empty_lun(&self) -> Result<(), GadgetError> {
-        let previous = self.unbind_udc()?;
         fs::write(self.lun.lun_dir.join("file"), "\n")?;
         let _ = fs::write(self.lun.lun_dir.join("removable"), "1\n");
         let _ = fs::write(self.lun.lun_dir.join("nofua"), "1\n");
         let _ = fs::write(self.lun.lun_dir.join("cdrom"), "0\n");
-        self.bind_udc(previous)?;
         Ok(())
     }
 
@@ -225,7 +195,6 @@ impl GadgetRuntime {
             .to_str()
             .ok_or_else(|| GadgetError::BackingPathInvalid(backing.display().to_string()))?;
 
-        let previous = self.unbind_udc()?;
         let _ = fs::write(self.lun.lun_dir.join("file"), "\n");
         let _ = fs::write(
             self.lun.lun_dir.join("ro"),
@@ -235,7 +204,7 @@ impl GadgetRuntime {
         let _ = fs::write(self.lun.lun_dir.join("nofua"), "1\n");
         let _ = fs::write(self.lun.lun_dir.join("cdrom"), "0\n");
         fs::write(self.lun.lun_dir.join("file"), backing_str)?;
-        self.bind_udc(previous)?;
+        self.bind_udc_if_empty()?;
 
         info!(
             backing = %backing_str,
@@ -246,7 +215,6 @@ impl GadgetRuntime {
     }
 
     pub fn detach_mass_storage(&self) -> Result<(), GadgetError> {
-        let previous = self.unbind_udc()?;
         let current = self.current_backing().unwrap_or_default();
         fs::write(self.lun.lun_dir.join("file"), "\n")?;
         if current.is_empty() {
@@ -254,7 +222,7 @@ impl GadgetRuntime {
         } else {
             info!(backing = %current, "cleared mass storage LUN backing");
         }
-        self.bind_udc(previous)?;
+        self.bind_udc_if_empty()?;
         Ok(())
     }
 }

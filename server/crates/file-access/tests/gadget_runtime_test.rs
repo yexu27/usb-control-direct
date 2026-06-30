@@ -68,6 +68,10 @@ fn attach_sets_lun_attributes_and_backing_path() {
         backing.display().to_string()
     );
     assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
+    assert_eq!(
         runtime.current_backing().unwrap(),
         backing.display().to_string()
     );
@@ -110,6 +114,10 @@ fn detach_clears_backing_file() {
     runtime.detach_mass_storage().unwrap();
 
     assert_eq!(fs::read_to_string(lun.join("file")).unwrap(), "\n");
+    assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
     assert_eq!(runtime.current_backing().unwrap(), "");
 }
 
