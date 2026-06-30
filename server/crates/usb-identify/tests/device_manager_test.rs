@@ -35,6 +35,14 @@ fn parent_path_strips_interface_suffix() {
 }
 
 #[test]
+fn parent_path_strips_real_sysfs_interface_leaf() {
+    assert_eq!(
+        parent_device_path("/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0"),
+        "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1"
+    );
+}
+
+#[test]
 fn parent_path_preserves_non_interface() {
     assert_eq!(
         parent_device_path("/sys/.../usb2/2-1"),

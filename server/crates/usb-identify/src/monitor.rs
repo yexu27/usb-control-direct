@@ -119,7 +119,12 @@ impl DeviceManager {
         let parent_path = parent_device_path(sys_path);
 
         let record = self.records.get_mut(&parent_path)?;
-        record.interfaces.retain(|iface| iface != sys_path);
+        if let Some(pos) = record.interfaces.iter().position(|iface| iface == sys_path) {
+            record.interfaces.remove(pos);
+            if pos < record.interface_classes.len() {
+                record.interface_classes.remove(pos);
+            }
+        }
 
         if record.interfaces.is_empty() {
             let removed = self.records.remove(&parent_path);
@@ -171,12 +176,19 @@ impl DeviceManager {
 
 /// 从接口 sys_path 提取父设备路径。
 ///
-/// 规则：去掉最后一个 `:N.M` 后缀。
-/// 示例: `/sys/.../2-1.1:1.0` → `/sys/.../2-1.1`
+/// 规则：去掉最后一个 `:N.M` 后缀。真实 sysfs 接口路径形如
+/// `/sys/.../2-1.1/2-1.1:1.0`，父设备路径应为 `/sys/.../2-1.1`。
+/// 简化路径 `/sys/.../2-1.1:1.0` 仍返回 `/sys/.../2-1.1`。
 pub fn parent_device_path(sys_path: &str) -> String {
     match sys_path.rsplit_once(':') {
-        Some((parent, suffix)) if suffix.chars().all(|c| c.is_ascii_digit() || c == '.') => {
-            parent.to_string()
+        Some((without_suffix, suffix)) if suffix.chars().all(|c| c.is_ascii_digit() || c == '.') => {
+            let path = std::path::Path::new(without_suffix);
+            if let (Some(name), Some(parent)) = (path.file_name(), path.parent()) {
+                if parent.file_name() == Some(name) {
+                    return parent.to_string_lossy().to_string();
+                }
+            }
+            without_suffix.to_string()
         }
         _ => sys_path.to_string(),
     }

@@ -133,7 +133,7 @@ async fn test_storage_whitelist_denied() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-        let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
+    let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
 
     tx.send(DeviceEvent::StorageAdded(test_storage_info("SN-NOT-IN-WHITELIST"))).unwrap();
     drop(tx);
@@ -149,7 +149,7 @@ async fn test_keyboard_added() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-        let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
+    let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
 
     tx.send(DeviceEvent::KeyboardAdded(test_keyboard_info())).unwrap();
     drop(tx);
@@ -165,7 +165,7 @@ async fn test_mouse_added() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-        let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
+    let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
 
     tx.send(DeviceEvent::MouseAdded(test_mouse_info())).unwrap();
     drop(tx);
@@ -181,7 +181,7 @@ async fn test_unsupported_device_blocked() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-        let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
+    let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
 
     let info = UsbDeviceInfo {
         sys_path: "/sys/devices/test_unknown".into(),
@@ -210,12 +210,138 @@ async fn test_device_removed() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-        let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
+    let orchestrator = DeviceOrchestrator::new(rx, whitelist, audit, device_manager, Arc::new(MockScanner), Arc::new(MockDeviceMapper), test_hidg_nodes());
 
     tx.send(DeviceEvent::DeviceRemoved("/sys/devices/test_remove".into())).unwrap();
     drop(tx);
 
     orchestrator.run().await;
+}
+
+#[tokio::test]
+async fn test_parent_device_removed_clears_registered_device() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    {
+        let mut dm = device_manager.write().unwrap();
+        let mut info = test_keyboard_info();
+        info.sys_path =
+            "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into();
+        dm.add(info);
+    }
+
+    let orchestrator = DeviceOrchestrator::new(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        Arc::new(MockScanner),
+        Arc::new(MockDeviceMapper),
+        test_hidg_nodes(),
+    );
+
+    tx.send(DeviceEvent::DeviceRemoved(
+        "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into(),
+    ))
+    .unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(device_manager.read().unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn test_multi_interface_keyboard_registers_one_device() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let orchestrator = DeviceOrchestrator::new(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        Arc::new(MockScanner),
+        Arc::new(MockDeviceMapper),
+        test_hidg_nodes(),
+    );
+
+    let mut kb0 = test_keyboard_info();
+    kb0.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into();
+
+    let mut kb1 = test_keyboard_info();
+    kb1.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.1".into();
+    kb1.interface_protocol = 0x00;
+    kb1.device_type = DeviceType::Unsupported;
+
+    tx.send(DeviceEvent::KeyboardAdded(kb0)).unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        kb1,
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    let dm = device_manager.read().unwrap();
+    assert_eq!(dm.count(), 1);
+    let record = dm
+        .get_by_parent("/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1")
+        .unwrap();
+    assert_eq!(record.interfaces.len(), 2);
+}
+
+#[tokio::test]
+async fn test_multi_interface_remove_waits_until_last_interface() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    {
+        let mut dm = device_manager.write().unwrap();
+        let mut kb0 = test_keyboard_info();
+        kb0.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into();
+        dm.add(kb0);
+
+        let mut kb1 = test_keyboard_info();
+        kb1.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.1".into();
+        kb1.device_type = DeviceType::Unsupported;
+        dm.add(kb1);
+    }
+
+    let orchestrator = DeviceOrchestrator::new(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        Arc::new(MockScanner),
+        Arc::new(MockDeviceMapper),
+        test_hidg_nodes(),
+    );
+
+    tx.send(DeviceEvent::DeviceRemoved(
+        "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(
+        "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.1".into(),
+    ))
+    .unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(device_manager.read().unwrap().count(), 0);
 }
 
 #[test]

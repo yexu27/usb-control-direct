@@ -10,6 +10,13 @@ use tracing::{error, info};
 use crate::descriptor::{classify_device, parse_hex_u8, read_sysfs_attr, UsbDeviceInfo};
 use crate::orchestrator::DeviceEvent;
 
+/// 判断 USB udev 事件是否需要转发给编排器。
+///
+/// 插拔事件必须是接口级事件，因为设备分类和生命周期都按接口归并到父设备。
+pub fn should_forward_usb_event(action: &str, devtype: &str) -> bool {
+    matches!(action, "add" | "remove") && devtype == "usb_interface"
+}
+
 /// 启动 udev 监听循环。
 ///
 /// 在 spawn_blocking 中运行 udev 事件轮询（阻塞操作）。
@@ -49,13 +56,13 @@ pub async fn start_udev_monitor(
                     .map(|v| v.to_string_lossy().to_string())
                     .unwrap_or_default();
 
-                if devtype != "usb_interface" {
+                if !should_forward_usb_event(&action, &devtype) {
                     continue;
                 }
 
                 match action.as_str() {
                     "add" => {
-                        info!(sys_path = %sys_path, "USB 设备插入事件");
+                        info!(sys_path = %sys_path, devtype = %devtype, "USB 设备插入事件");
                         if let Some(info) = parse_device_info(&event) {
                             let event = match info.device_type {
                                 common::types::DeviceType::Storage => {
@@ -76,7 +83,7 @@ pub async fn start_udev_monitor(
                         }
                     }
                     "remove" => {
-                        info!(sys_path = %sys_path, "USB 设备拔出事件");
+                        info!(sys_path = %sys_path, devtype = %devtype, "USB 设备拔出事件");
                         let _ = tx.send(DeviceEvent::DeviceRemoved(sys_path));
                     }
                     _ => {}
@@ -137,12 +144,13 @@ pub fn enumerate_and_send(tx: mpsc::UnboundedSender<DeviceEvent>) {
     }
 }
 
-/// 从 USB 父设备 sysfs 目录查找块设备路径和容量。
+/// 从 USB interface sysfs 目录查找块设备路径和容量。
 ///
-/// 遍历 parent_path 下所有 host*/target*/block/sd* 子路径，
+/// RK3568 上 usb-storage 的 host*/target*/block/sd* 挂在 interface 目录下，
+/// 形如 `/sys/.../2-1.2/2-1.2:1.0/host1/.../block/sda`。
 /// 提取 /dev/sdX 和扇区数 × 512 = 字节容量。
-fn find_block_device(parent_path: &std::path::Path) -> Option<(String, i64)> {
-    let entries = std::fs::read_dir(parent_path).ok()?;
+fn find_block_device(interface_path: &std::path::Path) -> Option<(String, i64)> {
+    let entries = std::fs::read_dir(interface_path).ok()?;
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
@@ -155,6 +163,16 @@ fn find_block_device(parent_path: &std::path::Path) -> Option<(String, i64)> {
         if let Some(result) = find_block_in_host(&path) {
             return Some(result);
         }
+    }
+    None
+}
+
+fn find_block_device_with_retry(interface_path: &std::path::Path) -> Option<(String, i64)> {
+    for _ in 0..20 {
+        if let Some(found) = find_block_device(interface_path) {
+            return Some(found);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
     None
 }
@@ -249,7 +267,7 @@ fn parse_device_info_from_syspath(syspath: &std::path::Path) -> Option<UsbDevice
     let product = read_sysfs_attr(parent, "product").unwrap_or_default();
 
     let (dev_path, capacity_bytes) = if device_type == common::types::DeviceType::Storage {
-        find_block_device(syspath)
+        find_block_device_with_retry(syspath)
             .map(|(dev, cap)| (Some(dev), Some(cap)))
             .unwrap_or((None, None))
     } else {
