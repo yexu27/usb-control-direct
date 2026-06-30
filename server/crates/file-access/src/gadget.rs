@@ -25,6 +25,8 @@ pub enum GadgetError {
     BackingPathInvalid(String),
     #[error("no available UDC found under: {0}")]
     UdcNotFound(String),
+    #[error("真实 U 盘分区不能直接绑定到 LUN: {0}")]
+    RealBlockDeviceForbidden(String),
 }
 
 #[derive(Debug, Clone)]
@@ -36,12 +38,56 @@ pub struct MassStorageLun {
 }
 
 #[derive(Debug, Clone)]
+pub struct MassStorageHandle {
+    gadget_name: String,
+    function_name: String,
+    gadget_dir: PathBuf,
+    lun_dir: PathBuf,
+}
+
+impl MassStorageHandle {
+    pub fn new(
+        gadget_name: String,
+        function_name: String,
+        gadget_dir: PathBuf,
+        lun_dir: PathBuf,
+    ) -> Self {
+        Self {
+            gadget_name,
+            function_name,
+            gadget_dir,
+            lun_dir,
+        }
+    }
+
+    pub fn function_name(&self) -> &str {
+        &self.function_name
+    }
+
+    pub fn lun_dir(&self) -> &Path {
+        &self.lun_dir
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct GadgetRuntime {
     lun: MassStorageLun,
     udc_root: PathBuf,
 }
 
 impl GadgetRuntime {
+    pub fn from_handle(handle: MassStorageHandle, udc_root: PathBuf) -> Self {
+        Self {
+            lun: MassStorageLun {
+                gadget_name: handle.gadget_name,
+                function_name: handle.function_name,
+                gadget_dir: handle.gadget_dir,
+                lun_dir: handle.lun_dir,
+            },
+            udc_root,
+        }
+    }
+
     pub fn discover() -> Result<Self, GadgetError> {
         Self::discover_under(CONFIGFS_ROOT)
     }
@@ -151,6 +197,19 @@ impl GadgetRuntime {
         &self.lun.lun_dir
     }
 
+    pub fn gadget_dir(&self) -> &Path {
+        &self.lun.gadget_dir
+    }
+
+    pub fn mass_storage(&self) -> MassStorageHandle {
+        MassStorageHandle::new(
+            self.lun.gadget_name.clone(),
+            self.lun.function_name.clone(),
+            self.lun.gadget_dir.clone(),
+            self.lun.lun_dir.clone(),
+        )
+    }
+
     fn udc_path(&self) -> PathBuf {
         self.lun.gadget_dir.join("UDC")
     }
@@ -194,6 +253,7 @@ impl GadgetRuntime {
         let backing_str = backing
             .to_str()
             .ok_or_else(|| GadgetError::BackingPathInvalid(backing.display().to_string()))?;
+        reject_direct_block_device(backing)?;
 
         let _ = fs::write(self.lun.lun_dir.join("file"), "\n");
         let _ = fs::write(
@@ -225,6 +285,26 @@ impl GadgetRuntime {
         self.bind_udc_if_empty()?;
         Ok(())
     }
+}
+
+fn reject_direct_block_device(backing: &Path) -> Result<(), GadgetError> {
+    if !backing.starts_with("/dev") {
+        return Ok(());
+    }
+
+    let Some(name) = backing.file_name().map(|value| value.to_string_lossy()) else {
+        return Err(GadgetError::BackingPathInvalid(
+            backing.display().to_string(),
+        ));
+    };
+
+    if name.starts_with("nbd") {
+        return Ok(());
+    }
+
+    Err(GadgetError::RealBlockDeviceForbidden(
+        backing.display().to_string(),
+    ))
 }
 
 fn first_udc_name(udc_root: &Path) -> Result<String, GadgetError> {

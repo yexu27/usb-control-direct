@@ -9,6 +9,7 @@ description = "S04 文件访问控制引擎"
 [dependencies]
 storage = { workspace = true }
 usb-identify = { path = "../usb-identify" }
+hid-access = { path = "../hid-access" }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }

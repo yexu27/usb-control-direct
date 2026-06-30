@@ -1,6 +1,6 @@
 //! HID gadget configfs 配置与 hidg 节点发现。
 //!
-//! 在 USB gadget 的 functions/ 目录下创建并配置 hid.usbN 实例，
+//! 在 USB gadget 的 functions/ 目录下创建并配置 HID 实例，
 //! 服务启动时执行一次，设备接入时只通过 /dev/hidgX 读写。
 
 use std::fs;
@@ -13,19 +13,54 @@ use crate::hid_report::{
     KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN,
 };
 
-/// HID function 名称常量。
+/// HID function 默认名称。
 pub const KEYBOARD_FUNCTION: &str = "hid.usb0";
 pub const MOUSE_FUNCTION: &str = "hid.usb1";
 
+#[derive(Debug, Clone)]
+pub struct HidFunctionNames {
+    pub keyboard: String,
+    pub mouse: String,
+}
+
+impl Default for HidFunctionNames {
+    fn default() -> Self {
+        Self {
+            keyboard: KEYBOARD_FUNCTION.to_string(),
+            mouse: MOUSE_FUNCTION.to_string(),
+        }
+    }
+}
+
 /// 确保标准键盘和鼠标 HID function 已配置。
-pub fn ensure_hid_functions_under(gadget_dir: &Path) -> Result<(), HidAccessError> {
+pub fn ensure_hid_functions_under(
+    gadget_dir: &Path,
+    names: &HidFunctionNames,
+) -> Result<(), HidAccessError> {
+    if names.keyboard == names.mouse {
+        return Err(HidAccessError::Internal(
+            "键盘和鼠标 HID function 不能相同".to_string(),
+        ));
+    }
+    validate_function_name(&names.keyboard)?;
+    validate_function_name(&names.mouse)?;
+
     let functions_dir = gadget_dir.join("functions");
-    let keyboard_dir = functions_dir.join(KEYBOARD_FUNCTION);
-    let mouse_dir = functions_dir.join(MOUSE_FUNCTION);
+    let keyboard_dir = functions_dir.join(&names.keyboard);
+    let mouse_dir = functions_dir.join(&names.mouse);
 
     ensure_hid_function(&keyboard_dir, 1, KEYBOARD_REPORT_DESC, KEYBOARD_REPORT_LEN)?;
     ensure_hid_function(&mouse_dir, 2, MOUSE_REPORT_DESC, MOUSE_REPORT_LEN)?;
 
+    Ok(())
+}
+
+fn validate_function_name(name: &str) -> Result<(), HidAccessError> {
+    if name.is_empty() || name.contains('/') || name.contains("..") {
+        return Err(HidAccessError::Internal(format!(
+            "非法 HID function 名称: {name}"
+        )));
+    }
     Ok(())
 }
 
@@ -160,4 +195,13 @@ pub fn discover_hidg_nodes() -> Result<HidgNodes, HidAccessError> {
     info!(?mapping, "发现 hidg 节点");
 
     Ok(mapping)
+}
+
+pub fn discover_hidg_nodes_for_functions(
+    _gadget_dir: &Path,
+    _names: &HidFunctionNames,
+) -> Result<HidgNodes, HidAccessError> {
+    // RK 4.19 暂无法从 /dev/hidgX 稳定反查 function 名称；bootstrap 阶段按配置创建并链接
+    // keyboard 后 mouse，因此这里保留排序策略，但调用方不再硬编码 function 名称。
+    discover_hidg_nodes()
 }

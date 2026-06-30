@@ -13,6 +13,7 @@ pub mod exfat;
 pub mod write_back;
 pub mod nbd;
 pub mod gadget;
+pub mod gadget_bootstrap;
 pub mod engine;
 
 pub use engine::FileAccessEngine;

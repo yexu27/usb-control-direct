@@ -26,6 +26,8 @@ pub struct FileAccessEngine {
     storage: Arc<Storage>,
     /// 当前映射状态。
     mapped: Mutex<Option<MappingState>>,
+    /// 启动阶段确认的业务 mass storage gadget。
+    gadget: GadgetRuntime,
 }
 
 /// 映射运行状态。
@@ -39,10 +41,11 @@ impl FileAccessEngine {
     ///
     /// 参数:
     ///   - storage: 数据库实例。
-    pub fn new(storage: Arc<Storage>) -> Self {
+    pub fn new(storage: Arc<Storage>, gadget: GadgetRuntime) -> Self {
         FileAccessEngine {
             storage,
             mapped: Mutex::new(None),
+            gadget,
         }
     }
 
@@ -134,13 +137,7 @@ impl DeviceMapper for FileAccessEngine {
             );
 
             // 7. 启用 OTG Gadget
-            let gadget = match GadgetRuntime::discover() {
-                Ok(gadget) => gadget,
-                Err(e) => {
-                    nbd_server.stop();
-                    return Err(MapError::GadgetFailed(e.to_string()));
-                }
-            };
+            let gadget = self.gadget.clone();
             if let Err(e) = gadget.attach_mass_storage(&nbd_device_path, readonly) {
                 nbd_server.stop();
                 return Err(MapError::GadgetFailed(e.to_string()));

@@ -14,7 +14,7 @@ use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
 use file_access::engine::FileAccessEngine;
 use file_access::gadget::GadgetRuntime;
-use hid_access::hid_gadget::{discover_hidg_nodes, ensure_hid_functions_under, HidgNodes};
+use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
 };
@@ -36,33 +36,29 @@ use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
-fn prepare_usb_gadget_startup() -> Result<(GadgetRuntime, HidgNodes), String> {
-    let gadget_runtime =
-        GadgetRuntime::discover().map_err(|e| format!("RK mass_storage LUN 发现失败: {e}"))?;
+fn prepare_usb_gadget_startup(config: &AppConfig) -> Result<(GadgetRuntime, HidgNodes), String> {
+    let bootstrap_config = file_access::gadget_bootstrap::GadgetBootstrapConfig {
+        configfs_root: std::path::PathBuf::from("/sys/kernel/config/usb_gadget"),
+        udc_root: std::path::PathBuf::from("/sys/class/udc"),
+        gadget_name: config.gadget.name.clone(),
+        config_name: config.gadget.config.clone(),
+        udc: config.gadget.udc.clone(),
+        keep_adb: config.gadget.keep_adb,
+        storage_function: config.gadget.storage.function.clone(),
+        storage_lun: config.gadget.storage.lun,
+        keyboard_function: config.gadget.keyboard.function.clone(),
+        mouse_function: config.gadget.mouse.function.clone(),
+    };
 
-    let gadget_dir = gadget_runtime
-        .lun_dir()
-        .parent()
-        .and_then(|function_dir| function_dir.parent())
-        .and_then(|functions_dir| functions_dir.parent())
-        .ok_or_else(|| {
-            format!(
-                "无法从 LUN 路径推导 gadget 目录: {}",
-                gadget_runtime.lun_dir().display()
-            )
-        })?;
+    let gadget_runtime = file_access::gadget_bootstrap::GadgetBootstrap::prepare(bootstrap_config)
+        .map_err(|e| format!("USB gadget bootstrap 失败: {e}"))?;
 
-    ensure_hid_functions_under(gadget_dir).map_err(|e| format!("HID function 配置失败: {e}"))?;
-
-    gadget_runtime
-        .prepare_empty_lun()
-        .map_err(|e| format!("RK mass_storage LUN 初始化失败: {e}"))?;
-
-    gadget_runtime
-        .bind_udc_if_empty()
-        .map_err(|e| format!("USB gadget UDC 绑定失败: {e}"))?;
-
-    let hidg_nodes = discover_hidg_nodes().map_err(|e| format!("hidg 节点发现失败: {e}"))?;
+    let names = HidFunctionNames {
+        keyboard: config.gadget.keyboard.function.clone(),
+        mouse: config.gadget.mouse.function.clone(),
+    };
+    let hidg_nodes = discover_hidg_nodes_for_functions(gadget_runtime.gadget_dir(), &names)
+        .map_err(|e| format!("hidg 节点发现失败: {e}"))?;
 
     Ok((gadget_runtime, hidg_nodes))
 }
@@ -111,7 +107,7 @@ async fn main() {
 
     // ===== USB Gadget 运行时检查 =====
     let (gadget_runtime, hidg_nodes) =
-        prepare_usb_gadget_startup().expect("USB gadget 启动准备失败");
+        prepare_usb_gadget_startup(&config).expect("USB gadget 启动准备失败");
     info!(
         gadget = %gadget_runtime.gadget_name(),
         function = %gadget_runtime.function_name(),
@@ -128,7 +124,10 @@ async fn main() {
         &config.scan_log_dir,
     ));
 
-    let file_access_engine = Arc::new(FileAccessEngine::new(Arc::clone(&storage)));
+    let file_access_engine = Arc::new(FileAccessEngine::new(
+        Arc::clone(&storage),
+        gadget_runtime.clone(),
+    ));
 
     let state = Arc::new(AppState {
         auth_service,

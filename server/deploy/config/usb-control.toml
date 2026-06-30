@@ -10,3 +10,19 @@ log_dir = "/var/log/usb-control"
 log_level_conf = "/etc/usb-control/log.conf"
 clamdscan_path = "/usr/bin/clamdscan"
 scan_log_dir = "/var/log/usb-control/scan"
+
+[gadget]
+name = "rockchip"
+config = "b.1"
+udc = "fcc00000.dwc3"
+keep_adb = false
+
+[gadget.storage]
+function = "mass_storage.usb0"
+lun = 0
+
+[gadget.keyboard]
+function = "hid.keyboard"
+
+[gadget.mouse]
+function = "hid.mouse"

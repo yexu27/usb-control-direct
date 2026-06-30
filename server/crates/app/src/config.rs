@@ -56,6 +56,66 @@ pub struct AppConfig {
     pub log_level_conf: PathBuf,
     pub clamdscan_path: String,
     pub scan_log_dir: PathBuf,
+    #[serde(default)]
+    pub gadget: GadgetConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GadgetConfig {
+    pub name: String,
+    pub config: String,
+    pub udc: Option<String>,
+    #[serde(default)]
+    pub keep_adb: bool,
+    pub storage: GadgetStorageConfig,
+    pub keyboard: GadgetHidConfig,
+    pub mouse: GadgetHidConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GadgetStorageConfig {
+    pub function: String,
+    pub lun: u8,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GadgetHidConfig {
+    pub function: String,
+}
+
+impl Default for GadgetConfig {
+    fn default() -> Self {
+        Self {
+            name: "rockchip".to_string(),
+            config: "b.1".to_string(),
+            udc: Some("fcc00000.dwc3".to_string()),
+            keep_adb: false,
+            storage: GadgetStorageConfig::default(),
+            keyboard: GadgetHidConfig {
+                function: "hid.keyboard".to_string(),
+            },
+            mouse: GadgetHidConfig {
+                function: "hid.mouse".to_string(),
+            },
+        }
+    }
+}
+
+impl Default for GadgetStorageConfig {
+    fn default() -> Self {
+        Self {
+            function: "mass_storage.usb0".to_string(),
+            lun: 0,
+        }
+    }
+}
+
+impl Default for GadgetHidConfig {
+    fn default() -> Self {
+        Self {
+            function: String::new(),
+        }
+    }
 }
 
 impl Default for AppConfig {
@@ -74,6 +134,7 @@ impl Default for AppConfig {
             log_level_conf: PathBuf::from("/etc/usb-control/log.conf"),
             clamdscan_path: "/usr/bin/clamdscan".to_string(),
             scan_log_dir: PathBuf::from("/var/log/usb-control/scan"),
+            gadget: GadgetConfig::default(),
         }
     }
 }
@@ -125,13 +186,80 @@ impl AppConfig {
             path: path.to_path_buf(),
             source,
         })?;
-        let mut cfg: Self = toml::from_str(&content).map_err(|source| {
-            ConfigError::ParseFailed {
+        let mut cfg: Self =
+            toml::from_str(&content).map_err(|source| ConfigError::ParseFailed {
                 path: path.to_path_buf(),
                 source,
-            }
-        })?;
+            })?;
         cfg.config_path = path.to_path_buf();
         Ok(cfg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_gadget_config_with_production_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("usb-control.toml");
+        std::fs::write(
+            &cfg_path,
+            r#"
+listen_addr = "0.0.0.0:9600"
+database_path = "/var/lib/usb-control/device.db"
+tls_cert_path = "/etc/usb-control/tls/server.crt"
+tls_key_path = "/etc/usb-control/tls/server.key"
+install_dir = "/opt/usb-control"
+service_name = "usb-control"
+policy_key_dir = "/etc/usb-control/keys"
+license_pubkey_path = "/etc/usb-control/keys/license_verify.pub"
+log_dir = "/var/log/usb-control"
+log_level_conf = "/etc/usb-control/log.conf"
+clamdscan_path = "/usr/bin/clamdscan"
+scan_log_dir = "/var/log/usb-control/scan"
+
+[gadget]
+name = "rockchip"
+config = "b.1"
+udc = "fcc00000.dwc3"
+keep_adb = false
+
+[gadget.storage]
+function = "mass_storage.usb0"
+lun = 0
+
+[gadget.keyboard]
+function = "hid.keyboard"
+
+[gadget.mouse]
+function = "hid.mouse"
+"#,
+        )
+        .unwrap();
+
+        let cfg = AppConfig::load_from_path(&cfg_path).unwrap();
+        assert_eq!(cfg.gadget.name, "rockchip");
+        assert_eq!(cfg.gadget.config, "b.1");
+        assert_eq!(cfg.gadget.udc.as_deref(), Some("fcc00000.dwc3"));
+        assert!(!cfg.gadget.keep_adb);
+        assert_eq!(cfg.gadget.storage.function, "mass_storage.usb0");
+        assert_eq!(cfg.gadget.storage.lun, 0);
+        assert_eq!(cfg.gadget.keyboard.function, "hid.keyboard");
+        assert_eq!(cfg.gadget.mouse.function, "hid.mouse");
+    }
+
+    #[test]
+    fn default_config_disables_adb_and_uses_business_functions() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.gadget.name, "rockchip");
+        assert_eq!(cfg.gadget.config, "b.1");
+        assert_eq!(cfg.gadget.udc.as_deref(), Some("fcc00000.dwc3"));
+        assert!(!cfg.gadget.keep_adb);
+        assert_eq!(cfg.gadget.storage.function, "mass_storage.usb0");
+        assert_eq!(cfg.gadget.storage.lun, 0);
+        assert_eq!(cfg.gadget.keyboard.function, "hid.keyboard");
+        assert_eq!(cfg.gadget.mouse.function, "hid.mouse");
     }
 }
