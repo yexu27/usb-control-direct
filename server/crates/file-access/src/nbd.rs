@@ -7,6 +7,7 @@
 use std::io::Read;
 use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
@@ -195,6 +196,69 @@ impl NbdServer {
         self.do_it_complete = Some(rx);
 
         Ok(user_fd)
+    }
+
+    pub fn wait_ready(&self, expected_sectors: u64, timeout: Duration) -> Result<(), std::io::Error> {
+        self.wait_ready_under(Path::new("/sys/block"), expected_sectors, timeout)
+    }
+
+    pub fn wait_ready_under(
+        &self,
+        sys_block_root: &Path,
+        expected_sectors: u64,
+        timeout: Duration,
+    ) -> Result<(), std::io::Error> {
+        let name = self
+            .nbd_device_path
+            .file_name()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("invalid NBD path: {}", self.nbd_device_path.display()),
+                )
+            })?
+            .to_string_lossy()
+            .to_string();
+
+        let nbd_sys = sys_block_root.join(&name);
+        let deadline = Instant::now() + timeout;
+        let mut stable_matches = 0;
+
+        loop {
+            let pid_ready = std::fs::read_to_string(nbd_sys.join("pid"))
+                .map(|value| {
+                    let value = value.trim();
+                    !value.is_empty() && value != "0"
+                })
+                .unwrap_or(false);
+            let size_ready = std::fs::read_to_string(nbd_sys.join("size"))
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())
+                .map(|size| size == expected_sectors)
+                .unwrap_or(false);
+
+            if pid_ready && size_ready {
+                stable_matches += 1;
+                if stable_matches >= 2 {
+                    return Ok(());
+                }
+            } else {
+                stable_matches = 0;
+            }
+
+            if Instant::now() >= deadline {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "NBD device {} not ready: expected size {} sectors",
+                        self.nbd_device_path.display(),
+                        expected_sectors
+                    ),
+                ));
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// 停止 NBD 服务。
