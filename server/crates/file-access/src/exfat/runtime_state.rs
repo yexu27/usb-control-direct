@@ -11,6 +11,7 @@ use crate::exfat::layout::{
 };
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
 use crate::exfat::volume::{FileDataSectorInfo, VirtualVolume};
+use crate::exfat::write_interpreter::WriteInterpreter;
 use crate::types::{ControlledEntry, PolicySnapshot};
 use crate::vfs::{VfsIndex, VfsNode};
 
@@ -64,6 +65,16 @@ impl ExfatRuntimeState {
             layout.fat_length_sectors,
             SectorOwner::Fat,
         )?;
+        if FIRST_CLUSTER + 1 < FIRST_CLUSTER + layout.cluster_count {
+            let bitmap_cluster = FIRST_CLUSTER + 1;
+            bitmap.mark_allocated(bitmap_cluster)?;
+            fat.set_chain(&[bitmap_cluster])?;
+            sector_owners.mark_range(
+                layout.cluster_to_sector(bitmap_cluster),
+                SECTORS_PER_CLUSTER as u64,
+                SectorOwner::AllocationBitmap,
+            )?;
+        }
 
         let path_to_id = index
             .iter_nodes()
@@ -152,6 +163,15 @@ impl ExfatRuntimeState {
 
     pub fn cluster_to_sector(&self, cluster: u32) -> u64 {
         self.volume.layout().cluster_to_sector(cluster)
+    }
+
+    pub fn record_write(
+        &self,
+        tx: &mut crate::exfat::transaction::PendingTransaction,
+        sector: u64,
+        data: &[u8],
+    ) -> Result<(), std::io::Error> {
+        WriteInterpreter::new().record_sector_write(tx, sector, self.sector_owner(sector), data)
     }
 }
 
