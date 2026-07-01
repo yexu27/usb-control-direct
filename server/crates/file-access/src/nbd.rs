@@ -85,6 +85,10 @@ pub trait NbdBackend: Send + Sync {
     fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error>;
     fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error>;
     fn flush(&self) -> Result<(), std::io::Error>;
+
+    fn shutdown(&self) -> Result<(), std::io::Error> {
+        self.flush()
+    }
 }
 
 pub struct NbdCommandHandler<B: NbdBackend> {
@@ -101,7 +105,7 @@ impl<B: NbdBackend> NbdCommandHandler<B> {
     }
 
     pub fn handle_disconnect(&self) -> Result<(), std::io::Error> {
-        self.backend.flush()
+        self.backend.shutdown()
     }
 }
 
@@ -369,8 +373,8 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
                 let _ = write_all(user_fd, &reply);
             }
             NbdCommand::Disconnect => {
-                if let Err(e) = backend.flush() {
-                    warn!(error = %e, "NBD DISCONNECT 前 flush 失败");
+                if let Err(e) = backend.shutdown() {
+                    warn!(error = %e, "NBD DISCONNECT 前 shutdown 失败");
                 }
                 info!("NBD 收到 DISCONNECT");
                 break;
