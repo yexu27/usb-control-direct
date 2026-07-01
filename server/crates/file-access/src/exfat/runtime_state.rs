@@ -19,6 +19,7 @@ use crate::vfs::committer::RealFsCommitter;
 use crate::vfs::mutation::{FsMutation, NodeKind};
 use crate::vfs::operation_guard::{FsOperation, OperationGuard};
 use crate::vfs::{VfsIndex, VfsNode};
+use crate::vfs::VfsNodeKind;
 
 #[derive(Debug, Clone)]
 pub struct ExfatRuntimeState {
@@ -260,6 +261,27 @@ impl ExfatRuntimeState {
                 .map(|node| node.virtual_path.clone()),
             _ => None,
         }
+    }
+
+    pub fn immediate_children(&self, parent_path: &str) -> Vec<(String, String, NodeKind)> {
+        let Some(parent_id) = self.index.lookup_path(parent_path) else {
+            return Vec::new();
+        };
+        let Some(parent) = self.index.node(parent_id) else {
+            return Vec::new();
+        };
+        parent
+            .children
+            .iter()
+            .filter_map(|child_id| self.index.node(*child_id))
+            .map(|node| {
+                let kind = match node.kind {
+                    VfsNodeKind::File => NodeKind::File,
+                    VfsNodeKind::Directory => NodeKind::Directory,
+                };
+                (node.name.clone(), node.virtual_path.clone(), kind)
+            })
+            .collect()
     }
 }
 

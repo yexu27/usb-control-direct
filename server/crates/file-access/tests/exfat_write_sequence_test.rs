@@ -24,9 +24,32 @@ fn write_directory_entry(
     directory_sector: u64,
     entry: Vec<u8>,
 ) {
+    write_directory_entries(state, tx, directory_sector, vec![entry]);
+}
+
+fn write_directory_entries(
+    state: &ExfatRuntimeState,
+    tx: &mut PendingTransaction,
+    directory_sector: u64,
+    entries: Vec<Vec<u8>>,
+) {
     let mut sector = vec![0u8; SECTOR_SIZE as usize];
-    sector[..entry.len()].copy_from_slice(&entry);
+    let mut cursor = 0usize;
+    for entry in entries {
+        sector[cursor..cursor + entry.len()].copy_from_slice(&entry);
+        cursor += entry.len();
+    }
     state.record_write(tx, directory_sector, &sector).unwrap();
+}
+
+fn write_empty_directory_sector(
+    state: &ExfatRuntimeState,
+    tx: &mut PendingTransaction,
+    directory_sector: u64,
+) {
+    state
+        .record_write(tx, directory_sector, &vec![0u8; SECTOR_SIZE as usize])
+        .unwrap();
 }
 
 fn file(path: PathBuf, name: &str, size: u64) -> ControlledEntry {
@@ -182,11 +205,14 @@ fn write_at_sequence_creates_empty_dir_and_zero_file_without_flush() {
     assert!(state.lookup_path("/closed_empty_dir").unwrap().is_dir());
 
     let mut tx = PendingTransaction::new(3);
-    write_directory_entry(
+    write_directory_entries(
         &state,
         &mut tx,
         root_sector,
-        build_file_entry_set("closed_zero.txt", false, 0, 0, false),
+        vec![
+            build_file_entry_set("closed_empty_dir", true, free_cluster, 0, false),
+            build_file_entry_set("closed_zero.txt", false, 0, 0, false),
+        ],
     );
     let mutations = state.try_commit_closed_transaction(&tx).unwrap();
     assert_eq!(mutations.len(), 1);
@@ -240,4 +266,128 @@ fn write_at_sequence_creates_file_and_commits_data_to_real_usb() {
         b"hello world"
     );
     assert_eq!(state.lookup_path("/created.txt").unwrap().size, 11);
+}
+
+#[test]
+fn write_at_sequence_deletes_outer_directory_tree() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("matrix/a/b")).unwrap();
+    std::fs::write(tmp.path().join("matrix/a/b/data.txt"), b"data").unwrap();
+    let tree = vec![dir(
+        tmp.path().join("matrix"),
+        "matrix",
+        vec![dir(
+            tmp.path().join("matrix/a"),
+            "a",
+            vec![dir(
+                tmp.path().join("matrix/a/b"),
+                "b",
+                vec![file(tmp.path().join("matrix/a/b/data.txt"), "data.txt", 4)],
+            )],
+        )],
+    )];
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024)
+            .unwrap();
+    let root_sector = state.cluster_to_sector(
+        state
+            .directory_store()
+            .directory_clusters("/")
+            .unwrap()
+            .first()
+            .copied()
+            .unwrap(),
+    );
+
+    let mut tx = PendingTransaction::new(5);
+    write_empty_directory_sector(&state, &mut tx, root_sector);
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+
+    assert!(mutations.iter().any(|mutation| {
+        matches!(
+            mutation,
+            file_access::vfs::mutation::FsMutation::Delete { virtual_path, .. }
+                if virtual_path == "/matrix"
+        )
+    }));
+    assert!(!tmp.path().join("matrix").exists());
+    assert!(state.lookup_path("/matrix").is_none());
+}
+
+#[test]
+fn write_at_sequence_renames_file_from_directory_entry_change() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("old.txt"), b"old-data").unwrap();
+    let tree = vec![file(tmp.path().join("old.txt"), "old.txt", 8)];
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024)
+            .unwrap();
+    let root_sector = state.cluster_to_sector(
+        state
+            .directory_store()
+            .directory_clusters("/")
+            .unwrap()
+            .first()
+            .copied()
+            .unwrap(),
+    );
+
+    let mut tx = PendingTransaction::new(6);
+    write_directory_entry(
+        &state,
+        &mut tx,
+        root_sector,
+        build_file_entry_set("renamed.txt", false, 900, 8, false),
+    );
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+
+    assert!(mutations.iter().any(|mutation| {
+        matches!(
+            mutation,
+            file_access::vfs::mutation::FsMutation::Rename { from, to, .. }
+                if from == "/old.txt" && to == "/renamed.txt"
+        )
+    }));
+    assert!(!tmp.path().join("old.txt").exists());
+    assert_eq!(std::fs::read(tmp.path().join("renamed.txt")).unwrap(), b"old-data");
+    assert!(state.lookup_path("/old.txt").is_none());
+    assert!(state.lookup_path("/renamed.txt").is_some());
+}
+
+#[test]
+fn write_at_sequence_truncates_existing_file_from_directory_entry_length() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("data.txt"), b"12345678").unwrap();
+    let tree = vec![file(tmp.path().join("data.txt"), "data.txt", 8)];
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024)
+            .unwrap();
+    let root_sector = state.cluster_to_sector(
+        state
+            .directory_store()
+            .directory_clusters("/")
+            .unwrap()
+            .first()
+            .copied()
+            .unwrap(),
+    );
+
+    let mut tx = PendingTransaction::new(7);
+    write_directory_entry(
+        &state,
+        &mut tx,
+        root_sector,
+        build_file_entry_set("data.txt", false, 901, 2, false),
+    );
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+
+    assert!(mutations.iter().any(|mutation| {
+        matches!(
+            mutation,
+            file_access::vfs::mutation::FsMutation::Truncate { virtual_path, len }
+                if virtual_path == "/data.txt" && *len == 2
+        )
+    }));
+    assert_eq!(std::fs::read(tmp.path().join("data.txt")).unwrap(), b"12");
+    assert_eq!(state.lookup_path("/data.txt").unwrap().size, 2);
 }

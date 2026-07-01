@@ -6,6 +6,7 @@ use crate::exfat::sector_owner::SectorOwner;
 use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation};
+use std::collections::HashSet;
 
 #[derive(Debug, Default, Clone)]
 pub struct TransactionResolver;
@@ -28,9 +29,49 @@ impl TransactionResolver {
             let Some(parent) = state.parent_path_for_directory_owner(owner) else {
                 continue;
             };
-            for entry in parse_entry_sets(data)? {
+            let parsed_entries = parse_entry_sets(data)?;
+            let parsed_names = parsed_entries
+                .iter()
+                .map(|entry| entry.name.clone())
+                .collect::<HashSet<_>>();
+            let existing_children = state.immediate_children(&parent);
+            let missing_children = existing_children
+                .iter()
+                .filter(|(name, _, _)| !parsed_names.contains(name))
+                .cloned()
+                .collect::<Vec<_>>();
+            let new_entries = parsed_entries
+                .iter()
+                .filter(|entry| {
+                    let virtual_path = join_virtual_path(&parent, &entry.name);
+                    state.lookup_path(&virtual_path).is_none()
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if missing_children.len() == 1 && new_entries.len() == 1 {
+                let (_, from, kind) = &missing_children[0];
+                let to = join_virtual_path(&parent, &new_entries[0].name);
+                mutations.push(FsMutation::Rename {
+                    from: from.clone(),
+                    to,
+                    kind: *kind,
+                });
+                continue;
+            }
+
+            for (_, virtual_path, kind) in missing_children {
+                mutations.push(FsMutation::Delete { virtual_path, kind });
+            }
+            for entry in parsed_entries {
                 let virtual_path = join_virtual_path(&parent, &entry.name);
-                if state.lookup_path(&virtual_path).is_some() {
+                if let Some(node) = state.lookup_path(&virtual_path) {
+                    if !entry.is_dir && entry.data_length != node.size {
+                        mutations.push(FsMutation::Truncate {
+                            virtual_path,
+                            len: entry.data_length,
+                        });
+                    }
                     continue;
                 }
                 let chain = if entry.first_cluster == 0 {
