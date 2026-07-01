@@ -51,14 +51,16 @@ impl RealFsCommitter {
             .open(self.resolve_virtual_path(virtual_path)?)?;
         file.seek(SeekFrom::Start(offset))?;
         file.write_all(data)?;
+        file.sync_data()?;
         Ok(())
     }
 
     pub fn truncate(&self, virtual_path: &str, len: u64) -> Result<(), std::io::Error> {
-        OpenOptions::new()
+        let file = OpenOptions::new()
             .write(true)
-            .open(self.resolve_virtual_path(virtual_path)?)?
-            .set_len(len)
+            .open(self.resolve_virtual_path(virtual_path)?)?;
+        file.set_len(len)?;
+        file.sync_all()
     }
 
     pub fn rename(&self, from: &str, to: &str) -> Result<(), std::io::Error> {
