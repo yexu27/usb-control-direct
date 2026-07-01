@@ -30,7 +30,7 @@ impl RealFsCommitter {
 
     pub fn create_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
         let path = self.resolve_virtual_path(virtual_path)?;
-        match fs::create_dir(&path) {
+        match fs::create_dir_all(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => {}
             Err(e) => return Err(e),
@@ -86,7 +86,7 @@ impl RealFsCommitter {
 
     pub fn delete_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
         let path = self.resolve_virtual_path(virtual_path)?;
-        match fs::remove_dir(&path) {
+        match fs::remove_dir_all(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e),
@@ -111,8 +111,18 @@ impl RealFsCommitter {
     }
 
     fn sync_parent(&self, path: &Path) -> Result<(), std::io::Error> {
-        if let Some(parent) = path.parent() {
-            OpenOptions::new().read(true).open(parent)?.sync_all()?;
+        let mut current = path.parent();
+        while let Some(parent) = current {
+            match OpenOptions::new().read(true).open(parent) {
+                Ok(dir) => {
+                    dir.sync_all()?;
+                    return Ok(());
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    current = parent.parent();
+                }
+                Err(e) => return Err(e),
+            }
         }
         Ok(())
     }

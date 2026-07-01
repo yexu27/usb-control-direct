@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::exfat::allocator::ExfatAllocator;
 use crate::exfat::diff::diff_directory_snapshots;
@@ -27,6 +27,7 @@ pub struct VirtualExfatFs {
     volume: VirtualVolume,
     journal: Mutex<WriteJournal>,
     metadata_overlay: Mutex<HashMap<u64, Vec<u8>>>,
+    committed_metadata_sectors: Mutex<HashMap<u64, Vec<u8>>>,
     dirty_metadata_sectors: Mutex<BTreeSet<u64>>,
     data_overlay: Mutex<HashMap<u64, Vec<u8>>>,
     runtime_directory_sector_paths: Mutex<HashMap<u64, String>>,
@@ -65,6 +66,7 @@ impl VirtualExfatFs {
             volume,
             journal: Mutex::new(WriteJournal::new()),
             metadata_overlay: Mutex::new(HashMap::new()),
+            committed_metadata_sectors: Mutex::new(HashMap::new()),
             dirty_metadata_sectors: Mutex::new(BTreeSet::new()),
             data_overlay: Mutex::new(HashMap::new()),
             runtime_directory_sector_paths: Mutex::new(HashMap::new()),
@@ -130,7 +132,8 @@ impl VirtualExfatFs {
             let sector = current / SECTOR_SIZE as u64;
             let sector_offset = (current % SECTOR_SIZE as u64) as usize;
             let take = (SECTOR_SIZE as usize - sector_offset).min(len - out.len());
-            if let Some(data) = self.metadata_overlay.lock().unwrap().get(&sector) {
+            if self.directory_path_for_sector(sector)?.is_some() {
+                let data = self.visible_sector_data(sector);
                 out.extend_from_slice(&data[sector_offset..sector_offset + take]);
                 current += take as u64;
                 continue;
@@ -212,10 +215,7 @@ impl VirtualExfatFs {
                 ));
             }
             if self.directory_path_for_sector(sector)?.is_some() {
-                let mut sector_data = match self.volume.read_sector(sector) {
-                    SectorContent::Metadata(data) => data,
-                    _ => vec![0u8; SECTOR_SIZE as usize],
-                };
+                let mut sector_data = self.visible_sector_data(sector);
                 sector_data[..chunk.len()].copy_from_slice(chunk);
                 self.metadata_overlay
                     .lock()
@@ -228,8 +228,13 @@ impl VirtualExfatFs {
                 self.operation_guard().check(&FsOperation::WriteFile {
                     virtual_path: runtime.virtual_path.clone(),
                 })?;
+                self.capture_data_overlay_when_metadata_dirty(sector, chunk);
                 let write_offset = runtime.file_offset;
-                let write_len = chunk.len().min(runtime.valid_bytes as usize);
+                let write_len = if runtime.valid_bytes == 0 {
+                    chunk.len()
+                } else {
+                    chunk.len().min(runtime.valid_bytes as usize)
+                };
                 self.write_file(&runtime.virtual_path, write_offset, &chunk[..write_len])?;
                 continue;
             }
@@ -246,14 +251,12 @@ impl VirtualExfatFs {
                             "文件被策略阻断，禁止写入",
                         ));
                     }
+                    self.capture_data_overlay_when_metadata_dirty(sector, chunk);
                     let write_len = chunk.len().min(valid_bytes as usize);
                     self.write_real_file_sector(&real_path, offset, &chunk[..write_len])?;
                 }
                 SectorContent::Metadata(_) => {
-                    let mut sector_data = match self.volume.read_sector(sector) {
-                        SectorContent::Metadata(data) => data,
-                        _ => vec![0u8; SECTOR_SIZE as usize],
-                    };
+                    let mut sector_data = self.visible_sector_data(sector);
                     sector_data[..chunk.len()].copy_from_slice(chunk);
                     self.metadata_overlay
                         .lock()
@@ -362,7 +365,7 @@ impl VirtualExfatFs {
     pub fn flush(&self) -> Result<(), std::io::Error> {
         self.commit_overlay_mutations()?;
         self.journal.lock().unwrap().flush(&self.committer)?;
-        self.dirty_metadata_sectors.lock().unwrap().clear();
+        self.promote_metadata_overlay_to_committed();
         self.data_overlay.lock().unwrap().clear();
         Ok(())
     }
@@ -373,6 +376,35 @@ impl VirtualExfatFs {
 
     fn operation_guard(&self) -> OperationGuard {
         OperationGuard::new(self.snapshot.clone())
+    }
+
+    fn base_sector_data(&self, sector: u64) -> Vec<u8> {
+        if let Some(data) = self
+            .committed_metadata_sectors
+            .lock()
+            .unwrap()
+            .get(&sector)
+            .cloned()
+        {
+            return data;
+        }
+        match self.volume.read_sector(sector) {
+            SectorContent::Metadata(data) => data,
+            _ => vec![0u8; SECTOR_SIZE as usize],
+        }
+    }
+
+    fn visible_sector_data(&self, sector: u64) -> Vec<u8> {
+        if let Some(data) = self
+            .metadata_overlay
+            .lock()
+            .unwrap()
+            .get(&sector)
+            .cloned()
+        {
+            return data;
+        }
+        self.base_sector_data(sector)
     }
 
     fn write_real_file_sector(
@@ -388,6 +420,16 @@ impl VirtualExfatFs {
         Ok(())
     }
 
+    fn capture_data_overlay_when_metadata_dirty(&self, sector: u64, chunk: &[u8]) {
+        if self.dirty_metadata_sectors.lock().unwrap().is_empty() {
+            return;
+        }
+
+        let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
+        sector_data[..chunk.len()].copy_from_slice(chunk);
+        self.data_overlay.lock().unwrap().insert(sector, sector_data);
+    }
+
     fn commit_overlay_mutations(&self) -> Result<(), std::io::Error> {
         loop {
             let snapshots = self.collect_dirty_directory_snapshots()?;
@@ -399,7 +441,9 @@ impl VirtualExfatFs {
                 mutations.extend(diff_directory_snapshots(&old, &new)?);
             }
             for mutation in mutations {
-                self.apply_mutation_with_policy(self.attach_data_patches(mutation)?)?;
+                let mutation = self.attach_data_patches(mutation)?;
+                trace!(?mutation, "提交虚拟 exFAT 变更");
+                self.apply_mutation_with_policy(mutation)?;
             }
             self.promote_directory_data_overlay_to_metadata()?;
         }
@@ -436,21 +480,16 @@ impl VirtualExfatFs {
     ) -> Result<DirectorySnapshot, std::io::Error> {
         let clusters = self.directory_clusters_for_path(path)?;
         let mut data = Vec::new();
-        let overlay = self.metadata_overlay.lock().unwrap();
         for cluster in clusters {
             let start_sector = self.volume.layout().cluster_to_sector(cluster);
             for i in 0..SECTORS_PER_CLUSTER as u64 {
                 let sector = start_sector + i;
-                if with_overlay {
-                    if let Some(sector_data) = overlay.get(&sector) {
-                        data.extend_from_slice(sector_data);
-                        continue;
-                    }
-                }
-                match self.volume.read_sector(sector) {
-                    SectorContent::Metadata(sector_data) => data.extend_from_slice(&sector_data),
-                    _ => data.extend(vec![0u8; SECTOR_SIZE as usize]),
-                }
+                let sector_data = if with_overlay {
+                    self.visible_sector_data(sector)
+                } else {
+                    self.base_sector_data(sector)
+                };
+                data.extend_from_slice(&sector_data);
             }
         }
         DirectorySnapshot::parse(path, &data)
@@ -553,7 +592,11 @@ impl VirtualExfatFs {
                 self.journal
                     .lock()
                     .unwrap()
-                    .record(FileMutation::Truncate { virtual_path, len });
+                    .record(FileMutation::Truncate {
+                        virtual_path: virtual_path.clone(),
+                        len,
+                    });
+                self.update_runtime_file_len(&virtual_path, len);
                 Ok(())
             }
             FsMutation::Rename { from, to, .. } => {
@@ -562,7 +605,11 @@ impl VirtualExfatFs {
                 self.journal
                     .lock()
                     .unwrap()
-                    .record(FileMutation::Rename { from, to });
+                    .record(FileMutation::Rename {
+                        from: from.clone(),
+                        to: to.clone(),
+                    });
+                self.rename_runtime_path(&from, &to);
                 Ok(())
             }
             FsMutation::Delete { virtual_path, kind } => {
@@ -571,10 +618,15 @@ impl VirtualExfatFs {
                     is_virus: false,
                 })?;
                 let mutation = match kind {
-                    NodeKind::File => FileMutation::DeleteFile { virtual_path },
-                    NodeKind::Directory => FileMutation::DeleteDir { virtual_path },
+                    NodeKind::File => FileMutation::DeleteFile {
+                        virtual_path: virtual_path.clone(),
+                    },
+                    NodeKind::Directory => FileMutation::DeleteDir {
+                        virtual_path: virtual_path.clone(),
+                    },
                 };
                 self.journal.lock().unwrap().record(mutation);
+                self.unregister_runtime_path(&virtual_path);
                 Ok(())
             }
         }
@@ -682,6 +734,80 @@ impl VirtualExfatFs {
             .cloned()
     }
 
+    fn unregister_runtime_path(&self, path: &str) {
+        let removed_clusters = {
+            let mut path_clusters = self.runtime_directory_path_clusters.lock().unwrap();
+            let removed_paths = path_clusters
+                .keys()
+                .filter(|candidate| is_same_path_or_child(candidate, path))
+                .cloned()
+                .collect::<Vec<_>>();
+            removed_paths
+                .into_iter()
+                .filter_map(|removed| path_clusters.remove(&removed))
+                .flatten()
+                .collect::<Vec<_>>()
+        };
+
+        if !removed_clusters.is_empty() {
+            let mut sector_paths = self.runtime_directory_sector_paths.lock().unwrap();
+            for cluster in removed_clusters {
+                let start = self.volume.layout().cluster_to_sector(cluster);
+                for i in 0..SECTORS_PER_CLUSTER as u64 {
+                    sector_paths.remove(&(start + i));
+                }
+            }
+        }
+
+        self.runtime_directory_sector_paths
+            .lock()
+            .unwrap()
+            .retain(|_, mapped_path| !is_same_path_or_child(mapped_path, path));
+        self.runtime_file_sector_paths
+            .lock()
+            .unwrap()
+            .retain(|_, runtime| !is_same_path_or_child(&runtime.virtual_path, path));
+    }
+
+    fn rename_runtime_path(&self, from: &str, to: &str) {
+        {
+            let mut path_clusters = self.runtime_directory_path_clusters.lock().unwrap();
+            let renamed = path_clusters
+                .iter()
+                .filter_map(|(path, clusters)| {
+                    remap_virtual_path(path, from, to).map(|renamed| (renamed, clusters.clone()))
+                })
+                .collect::<Vec<_>>();
+            path_clusters.retain(|path, _| !is_same_path_or_child(path, from));
+            for (path, clusters) in renamed {
+                path_clusters.insert(path, clusters);
+            }
+        }
+
+        for path in self.runtime_directory_sector_paths.lock().unwrap().values_mut() {
+            if let Some(renamed) = remap_virtual_path(path, from, to) {
+                *path = renamed;
+            }
+        }
+
+        for runtime in self.runtime_file_sector_paths.lock().unwrap().values_mut() {
+            if let Some(renamed) = remap_virtual_path(&runtime.virtual_path, from, to) {
+                runtime.virtual_path = renamed;
+            }
+        }
+    }
+
+    fn update_runtime_file_len(&self, path: &str, len: u64) {
+        for runtime in self.runtime_file_sector_paths.lock().unwrap().values_mut() {
+            if runtime.virtual_path != path {
+                continue;
+            }
+            runtime.valid_bytes = len
+                .saturating_sub(runtime.file_offset)
+                .min(SECTOR_SIZE as u64) as u32;
+        }
+    }
+
     fn promote_directory_data_overlay_to_metadata(&self) -> Result<(), std::io::Error> {
         let sectors = self.data_overlay.lock().unwrap().keys().copied().collect::<Vec<_>>();
         let mut promoted = Vec::new();
@@ -705,6 +831,23 @@ impl VirtualExfatFs {
         }
         Ok(())
     }
+
+    fn promote_metadata_overlay_to_committed(&self) {
+        let overlay = {
+            let mut overlay = self.metadata_overlay.lock().unwrap();
+            std::mem::take(&mut *overlay)
+        };
+        if overlay.is_empty() {
+            self.dirty_metadata_sectors.lock().unwrap().clear();
+            return;
+        }
+
+        let mut committed = self.committed_metadata_sectors.lock().unwrap();
+        for (sector, data) in overlay {
+            committed.insert(sector, data);
+        }
+        self.dirty_metadata_sectors.lock().unwrap().clear();
+    }
 }
 
 fn join_virtual_path(parent: &str, name: &str) -> String {
@@ -713,6 +856,23 @@ fn join_virtual_path(parent: &str, name: &str) -> String {
     } else {
         format!("{}/{}", parent, name)
     }
+}
+
+fn is_same_path_or_child(candidate: &str, root: &str) -> bool {
+    candidate == root
+        || candidate
+            .strip_prefix(root)
+            .map(|suffix| suffix.starts_with('/'))
+            .unwrap_or(false)
+}
+
+fn remap_virtual_path(path: &str, from: &str, to: &str) -> Option<String> {
+    if path == from {
+        return Some(to.to_string());
+    }
+    path.strip_prefix(from)
+        .filter(|suffix| suffix.starts_with('/'))
+        .map(|suffix| format!("{}{}", to, suffix))
 }
 
 impl crate::nbd::NbdBackend for VirtualExfatFs {

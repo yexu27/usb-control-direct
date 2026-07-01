@@ -85,3 +85,71 @@ fn diff_detects_same_name_file_truncate() {
         len: 2,
     }));
 }
+
+#[test]
+fn diff_detects_rename_and_truncate_by_same_entry_identity() {
+    let old = snapshot(
+        "/",
+        vec![build_file_entry_set("old.txt", false, 88, 8, false)],
+    );
+    let new = snapshot(
+        "/",
+        vec![build_file_entry_set("new.txt", false, 88, 4, false)],
+    );
+
+    let mutations = diff_directory_snapshots(&old, &new).unwrap();
+    assert!(mutations.contains(&FsMutation::Rename {
+        from: "/old.txt".to_string(),
+        to: "/new.txt".to_string(),
+        kind: NodeKind::File,
+    }));
+    assert!(mutations.contains(&FsMutation::Truncate {
+        virtual_path: "/new.txt".to_string(),
+        len: 4,
+    }));
+}
+
+#[test]
+fn diff_treats_reused_cluster_at_different_entry_offset_as_delete_and_create() {
+    let old = snapshot(
+        "/",
+        vec![
+            build_file_entry_set("old.txt", false, 88, 8, false),
+            build_file_entry_set("keep.txt", false, 99, 4, false),
+        ],
+    );
+    let new = snapshot(
+        "/",
+        vec![
+            build_file_entry_set("keep.txt", false, 99, 4, false),
+            build_file_entry_set("new.txt", false, 88, 4, false),
+        ],
+    );
+
+    let mutations = diff_directory_snapshots(&old, &new).unwrap();
+    assert!(!mutations.iter().any(|mutation| {
+        matches!(
+            mutation,
+            FsMutation::Rename {
+                from,
+                to,
+                kind: NodeKind::File,
+            } if from == "/old.txt" && to == "/new.txt"
+        )
+    }));
+    assert!(mutations.contains(&FsMutation::Delete {
+        virtual_path: "/old.txt".to_string(),
+        kind: NodeKind::File,
+    }));
+    assert!(mutations.contains(&FsMutation::CreateFile {
+        parent: "/".to_string(),
+        name: "new.txt".to_string(),
+        size: 4,
+        valid_data_len: 4,
+        chain: Some(ClusterChain {
+            first_cluster: 88,
+            clusters: vec![88],
+        }),
+        data_patches: vec![],
+    }));
+}

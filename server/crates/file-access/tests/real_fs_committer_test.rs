@@ -30,3 +30,52 @@ fn committer_rejects_path_escape() {
     let err = committer.create_file("/../escape.txt").unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
 }
+
+#[test]
+fn committer_deletes_non_empty_directory_tree_inside_mount_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let committer = RealFsCommitter::new(tmp.path().to_path_buf());
+
+    fs::create_dir_all(tmp.path().join("tree/a/b")).unwrap();
+    fs::write(tmp.path().join("tree/root.txt"), b"root").unwrap();
+    fs::write(tmp.path().join("tree/a/child.txt"), b"child").unwrap();
+    fs::write(tmp.path().join("tree/a/b/deep.txt"), b"deep").unwrap();
+
+    committer.delete_dir("/tree").unwrap();
+
+    assert!(!tmp.path().join("tree").exists());
+}
+
+#[test]
+fn committer_delete_dir_keeps_path_escape_denied() {
+    let tmp = tempfile::tempdir().unwrap();
+    let committer = RealFsCommitter::new(tmp.path().to_path_buf());
+
+    let err = committer.delete_dir("/../outside").unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn committer_delete_dir_is_idempotent_when_parent_was_removed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let committer = RealFsCommitter::new(tmp.path().to_path_buf());
+
+    fs::create_dir_all(tmp.path().join("mixed_dir/inner")).unwrap();
+    fs::write(tmp.path().join("mixed_dir/inner/mixed.txt"), b"mixed").unwrap();
+
+    committer.delete_dir("/mixed_dir").unwrap();
+    committer.delete_dir("/mixed_dir/inner").unwrap();
+
+    assert!(!tmp.path().join("mixed_dir").exists());
+}
+
+#[test]
+fn committer_creates_nested_directory_when_parent_is_missing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let committer = RealFsCommitter::new(tmp.path().to_path_buf());
+
+    committer.create_dir("/after_delete/deep").unwrap();
+
+    assert!(tmp.path().join("after_delete/deep").is_dir());
+}

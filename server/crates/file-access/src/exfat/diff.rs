@@ -33,6 +33,12 @@ pub fn diff_directory_snapshots(
                     to: join_virtual_path(&parent, &new_entry.name),
                     kind,
                 });
+                if !new_entry.is_dir && old_entry.data_length != new_entry.data_length {
+                    mutations.push(FsMutation::Truncate {
+                        virtual_path: join_virtual_path(&parent, &new_entry.name),
+                        len: new_entry.data_length,
+                    });
+                }
                 renamed_old_offsets.insert(old_entry.entry_offset);
                 renamed_new_offsets.insert(new_entry.entry_offset);
                 break;
@@ -100,9 +106,9 @@ fn same_entry_identity(
     new_entry: &ParsedDirectoryEntry,
 ) -> bool {
     old_entry.is_dir == new_entry.is_dir
+        && old_entry.entry_offset == new_entry.entry_offset
         && old_entry.first_cluster != 0
         && old_entry.first_cluster == new_entry.first_cluster
-        && old_entry.data_length == new_entry.data_length
 }
 
 fn cluster_chain_from_entry(entry: &ParsedDirectoryEntry) -> Option<ClusterChain> {
