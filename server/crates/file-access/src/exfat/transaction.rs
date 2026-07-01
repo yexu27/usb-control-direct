@@ -70,4 +70,9 @@ impl PendingTransaction {
     pub fn transition(&mut self, state: MutationCommitState) {
         self.state = state;
     }
+
+    pub fn clear(&mut self) {
+        self.writes.clear();
+        self.state = MutationCommitState::PendingWrite;
+    }
 }

@@ -11,6 +11,8 @@ use crate::exfat::allocator::ExfatAllocator;
 use crate::exfat::diff::diff_directory_snapshots;
 use crate::exfat::dir_snapshot::DirectorySnapshot;
 use crate::exfat::layout::{SECTOR_SIZE, SECTORS_PER_CLUSTER};
+use crate::exfat::runtime_state::ExfatRuntimeState;
+use crate::exfat::transaction::PendingTransaction;
 use crate::exfat::volume::VirtualVolume;
 use crate::policy::evaluate_access;
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot, SectorContent};
@@ -33,6 +35,8 @@ pub struct VirtualExfatFs {
     runtime_directory_sector_paths: Mutex<HashMap<u64, String>>,
     runtime_directory_path_clusters: Mutex<HashMap<String, Vec<u32>>>,
     runtime_file_sector_paths: Mutex<HashMap<u64, RuntimeFileSector>>,
+    runtime: Mutex<ExfatRuntimeState>,
+    pending_runtime_tx: Mutex<PendingTransaction>,
     committer: RealFsCommitter,
     readonly: bool,
 }
@@ -55,6 +59,8 @@ impl VirtualExfatFs {
         let index = VfsIndex::from_controlled_tree(mount_root, tree)?;
         let allocator = ExfatAllocator::build(&index, source_size_bytes)?;
         let volume = VirtualVolume::build_with_capacity(&tree, &snapshot, source_size_bytes);
+        let runtime =
+            ExfatRuntimeState::from_controlled_tree(mount_root, tree, snapshot.clone(), source_size_bytes)?;
         debug!(
             source_size_bytes,
             metadata_memory_bytes = allocator.estimated_memory_bytes(),
@@ -72,6 +78,8 @@ impl VirtualExfatFs {
             runtime_directory_sector_paths: Mutex::new(HashMap::new()),
             runtime_directory_path_clusters: Mutex::new(HashMap::new()),
             runtime_file_sector_paths: Mutex::new(HashMap::new()),
+            runtime: Mutex::new(runtime),
+            pending_runtime_tx: Mutex::new(PendingTransaction::new(1)),
             committer: RealFsCommitter::new(mount_root.to_path_buf()),
             readonly,
         })
@@ -215,6 +223,7 @@ impl VirtualExfatFs {
                     "禁止修改 exFAT boot sector",
                 ));
             }
+            self.record_runtime_write(sector, chunk)?;
             if self.directory_path_for_sector(sector)?.is_some() {
                 let mut sector_data = self.visible_sector_data(sector);
                 sector_data[..chunk.len()].copy_from_slice(chunk);
@@ -278,6 +287,12 @@ impl VirtualExfatFs {
             self.flush()?;
         }
         Ok(())
+    }
+
+    fn record_runtime_write(&self, sector: u64, chunk: &[u8]) -> Result<(), std::io::Error> {
+        let runtime = self.runtime.lock().unwrap();
+        let mut tx = self.pending_runtime_tx.lock().unwrap();
+        runtime.record_write(&mut tx, sector, chunk)
     }
 
     pub fn create_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
