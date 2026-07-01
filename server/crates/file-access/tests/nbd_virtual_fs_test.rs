@@ -30,3 +30,11 @@ fn nbd_flush_calls_backend_flush() {
     handler.handle_flush().unwrap();
     assert_eq!(backend.flush_count.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn nbd_disconnect_calls_backend_flush() {
+    let backend = Arc::new(MockBackend::default());
+    let handler = NbdCommandHandler::new(Arc::clone(&backend));
+    handler.handle_disconnect().unwrap();
+    assert_eq!(backend.flush_count.load(Ordering::SeqCst), 1);
+}

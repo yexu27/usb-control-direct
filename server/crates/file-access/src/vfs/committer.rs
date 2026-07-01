@@ -19,12 +19,23 @@ impl RealFsCommitter {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        OpenOptions::new().create_new(true).write(true).open(path)?;
+        match OpenOptions::new().create_new(true).write(true).open(&path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_file() => {}
+            Err(e) => return Err(e),
+        }
+        self.sync_parent(&path)?;
         Ok(())
     }
 
     pub fn create_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        fs::create_dir(self.resolve_virtual_path(virtual_path)?)?;
+        let path = self.resolve_virtual_path(virtual_path)?;
+        match fs::create_dir(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => {}
+            Err(e) => return Err(e),
+        }
+        self.sync_parent(&path)?;
         Ok(())
     }
 
@@ -51,18 +62,36 @@ impl RealFsCommitter {
     }
 
     pub fn rename(&self, from: &str, to: &str) -> Result<(), std::io::Error> {
-        fs::rename(
-            self.resolve_virtual_path(from)?,
-            self.resolve_virtual_path(to)?,
-        )
+        let from = self.resolve_virtual_path(from)?;
+        let to = self.resolve_virtual_path(to)?;
+        if !from.exists() && to.exists() {
+            self.sync_parent(&to)?;
+            return Ok(());
+        }
+        fs::rename(&from, &to)?;
+        self.sync_parent(&from)?;
+        self.sync_parent(&to)?;
+        Ok(())
     }
 
     pub fn delete_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        fs::remove_file(self.resolve_virtual_path(virtual_path)?)
+        let path = self.resolve_virtual_path(virtual_path)?;
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        self.sync_parent(&path)
     }
 
     pub fn delete_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        fs::remove_dir(self.resolve_virtual_path(virtual_path)?)
+        let path = self.resolve_virtual_path(virtual_path)?;
+        match fs::remove_dir(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        self.sync_parent(&path)
     }
 
     pub fn flush_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
@@ -73,8 +102,19 @@ impl RealFsCommitter {
             .sync_all()
     }
 
+    pub fn real_path_for_virtual(&self, virtual_path: &str) -> Result<PathBuf, std::io::Error> {
+        self.resolve_virtual_path(virtual_path)
+    }
+
     pub fn sync_mount_root(&self) -> Result<(), std::io::Error> {
         OpenOptions::new().read(true).open(&self.mount_root)?.sync_all()
+    }
+
+    fn sync_parent(&self, path: &Path) -> Result<(), std::io::Error> {
+        if let Some(parent) = path.parent() {
+            OpenOptions::new().read(true).open(parent)?.sync_all()?;
+        }
+        Ok(())
     }
 
     fn resolve_virtual_path(&self, virtual_path: &str) -> Result<PathBuf, std::io::Error> {

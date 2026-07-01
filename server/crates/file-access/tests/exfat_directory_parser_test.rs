@@ -19,3 +19,15 @@ fn parser_ignores_zero_padding() {
     let entries = parse_entry_sets(&bytes).unwrap();
     assert!(entries.is_empty());
 }
+
+#[test]
+fn parser_ignores_deleted_entry_sets() {
+    let mut bytes = build_file_entry_set("deleted.txt", false, 10, 5, false);
+    bytes[0] &= 0x7f;
+    bytes[32] &= 0x7f;
+    bytes[64] &= 0x7f;
+
+    let entries = parse_entry_sets(&bytes).unwrap();
+
+    assert!(entries.is_empty());
+}

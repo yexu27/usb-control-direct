@@ -22,6 +22,7 @@ pub struct VfsNode {
     pub real_path: PathBuf,
     pub kind: VfsNodeKind,
     pub size: u64,
+    pub first_cluster: Option<u32>,
     pub is_virus: bool,
     pub exec_type: Option<ExecFileType>,
     pub extension: String,

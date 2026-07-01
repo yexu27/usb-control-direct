@@ -25,6 +25,10 @@ pub struct VirtualVolume {
     layout: DiskLayout,
     /// 文件名到其数据扇区范围的映射（用于测试辅助）。
     file_sector_map: HashMap<String, Vec<u64>>,
+    /// 目录扇区到虚拟目录路径的映射。
+    directory_sector_paths: HashMap<u64, String>,
+    /// 虚拟目录路径到目录簇链的映射。
+    directory_path_clusters: HashMap<String, Vec<u32>>,
 }
 
 /// 文件数据映射。
@@ -97,8 +101,20 @@ impl VirtualVolume {
 
     /// 判断扇区是否为目录数据扇区。
     pub fn is_directory_sector(&self, sector: u64) -> bool {
-        self.metadata_sectors.contains_key(&sector)
-            && self.layout.sector_to_cluster(sector).is_some()
+        self.directory_sector_paths.contains_key(&sector)
+    }
+
+    pub fn directory_path_for_sector(
+        &self,
+        sector: u64,
+    ) -> Result<Option<String>, std::io::Error> {
+        Ok(self.directory_sector_paths.get(&sector).cloned())
+    }
+
+    pub fn directory_clusters_for_path(&self, path: &str) -> Option<&[u32]> {
+        self.directory_path_clusters
+            .get(path)
+            .map(|clusters| clusters.as_slice())
     }
 }
 
@@ -128,6 +144,7 @@ enum ClusterAllocation {
         start: u32,
         count: u32,
         data: Vec<u8>,
+        directory_path: Option<String>,
     },
     /// 文件数据。
     #[allow(dead_code)]
@@ -228,73 +245,25 @@ impl<'a> VolumeBuilder<'a> {
             start: upcase_cluster,
             count: upcase_clusters,
             data: upcase_data,
+            directory_path: None,
         });
     }
 
     /// 分配文件和子目录。
     fn allocate_files(&mut self, entries: &[ControlledEntry], _parent_path: &[String]) {
+        let entries_data = self.build_directory_entries("/", entries);
+        self.root_dir_entries.extend(entries_data);
+    }
+
+    fn build_directory_entries(&mut self, parent_path: &str, entries: &[ControlledEntry]) -> Vec<u8> {
+        let mut directory_data = Vec::new();
         for entry in entries {
             let decision = evaluate_access(entry, self.snapshot);
             let blocked = matches!(decision, AccessDecision::Deny(_));
 
             if entry.is_dir {
-                // 目录：按实际子目录项大小动态分配簇数
-                let mut child_dir_data = Vec::new();
-                if !entry.children.is_empty() {
-                    for child in &entry.children {
-                        let child_decision = evaluate_access(child, self.snapshot);
-                        let child_blocked = matches!(child_decision, AccessDecision::Deny(_));
-
-                        if child.is_dir {
-                            // 子目录的簇号会在递归中分配
-                            let child_cluster = self.allocate_clusters(1);
-                            let child_entry = build_file_entry_set(
-                                &child.virtual_name,
-                                true,
-                                child_cluster,
-                                0,
-                                false,
-                            );
-                            child_dir_data.extend(child_entry);
-
-                            self.cluster_allocations.push(ClusterAllocation::Metadata {
-                                start: child_cluster,
-                                count: 1,
-                                data: vec![0u8; CLUSTER_SIZE as usize],
-                            });
-                        } else {
-                            let (file_cluster, file_clusters) =
-                                if child.is_virus || child.file_size == 0 {
-                                    (0, 0)
-                                } else {
-                                    let clusters = file_clusters(child.file_size);
-                                    let start = self.allocate_clusters(clusters);
-                                    (start, clusters)
-                                };
-
-                            let child_entry = build_file_entry_set(
-                                &child.virtual_name,
-                                false,
-                                file_cluster,
-                                child.file_size,
-                                child.is_virus,
-                            );
-                            child_dir_data.extend(child_entry);
-
-                            if file_clusters > 0 {
-                                self.file_mappings.push(FileMapping {
-                                    name: child.virtual_name.clone(),
-                                    real_path: child.real_path.clone(),
-                                    start_cluster: file_cluster,
-                                    file_size: child.file_size,
-                                    blocked: child_blocked,
-                                });
-                            }
-                        }
-                    }
-                }
-
-                // 按实际子目录项大小动态分配簇
+                let virtual_path = join_virtual_path(parent_path, &entry.virtual_name);
+                let mut child_dir_data = self.build_directory_entries(&virtual_path, &entry.children);
                 let dir_clusters_needed = if child_dir_data.is_empty() {
                     1
                 } else {
@@ -305,7 +274,7 @@ impl<'a> VolumeBuilder<'a> {
                 // 生成目录项（放入父目录，即 root_dir_entries）
                 let dir_entry_data =
                     build_file_entry_set(&entry.virtual_name, true, dir_cluster, 0, false);
-                self.root_dir_entries.extend(dir_entry_data);
+                directory_data.extend(dir_entry_data);
 
                 // 填充到簇对齐大小
                 child_dir_data.resize((dir_clusters_needed as usize) * CLUSTER_SIZE as usize, 0);
@@ -313,6 +282,7 @@ impl<'a> VolumeBuilder<'a> {
                     start: dir_cluster,
                     count: dir_clusters_needed,
                     data: child_dir_data,
+                    directory_path: Some(virtual_path),
                 });
             } else {
                 // 文件
@@ -331,7 +301,7 @@ impl<'a> VolumeBuilder<'a> {
                     entry.file_size,
                     entry.is_virus,
                 );
-                self.root_dir_entries.extend(file_entry);
+                directory_data.extend(file_entry);
 
                 if file_clusters > 0 {
                     self.file_mappings.push(FileMapping {
@@ -344,6 +314,7 @@ impl<'a> VolumeBuilder<'a> {
                 }
             }
         }
+        directory_data
     }
 
     /// 生成最终的虚拟卷。
@@ -385,6 +356,8 @@ impl<'a> VolumeBuilder<'a> {
 
         let mut metadata_sectors = HashMap::new();
         let mut file_data_sectors = HashMap::new();
+        let mut directory_sector_paths = HashMap::new();
+        let mut directory_path_clusters = HashMap::new();
 
         // MBR
         let mbr = generate_mbr(&layout);
@@ -492,29 +465,42 @@ impl<'a> VolumeBuilder<'a> {
 
         // 写入 cluster 2（第一个簇）
         let root_sector_start = layout.cluster_to_sector(2);
+        let mut root_clusters = vec![2];
         for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
             let offset = i * SECTOR_SIZE as usize;
             let data = root_data[offset..offset + SECTOR_SIZE as usize].to_vec();
-            metadata_sectors.insert(root_sector_start + i as u64, data);
+            let sector = root_sector_start + i as u64;
+            metadata_sectors.insert(sector, data);
+            directory_sector_paths.insert(sector, "/".to_string());
         }
 
         // 写入额外簇
         if let Some(extra_start) = root_extra_start {
             for c in 0..root_extra_clusters {
                 let cluster = extra_start + c;
+                root_clusters.push(cluster);
                 let cluster_sector_start = layout.cluster_to_sector(cluster);
                 let cluster_data_offset = ((c + 1) as usize) * CLUSTER_SIZE as usize;
                 for i in 0..(CLUSTER_SIZE as usize / SECTOR_SIZE as usize) {
                     let offset = cluster_data_offset + i * SECTOR_SIZE as usize;
                     let data = root_data[offset..offset + SECTOR_SIZE as usize].to_vec();
-                    metadata_sectors.insert(cluster_sector_start + i as u64, data);
+                    let sector = cluster_sector_start + i as u64;
+                    metadata_sectors.insert(sector, data);
+                    directory_sector_paths.insert(sector, "/".to_string());
                 }
             }
         }
+        directory_path_clusters.insert("/".to_string(), root_clusters);
 
         // 元数据簇（upcase / 子目录）
         for alloc in &self.cluster_allocations {
-            if let ClusterAllocation::Metadata { start, count, data } = alloc {
+            if let ClusterAllocation::Metadata {
+                start,
+                count,
+                data,
+                directory_path,
+            } = alloc
+            {
                 let cluster_start_sector = layout.cluster_to_sector(*start);
                 let total_sectors_for_alloc = *count as u64 * SECTORS_PER_CLUSTER as u64;
                 for i in 0..total_sectors_for_alloc {
@@ -524,7 +510,15 @@ impl<'a> VolumeBuilder<'a> {
                     if offset < data.len() {
                         sector_data[..end - offset].copy_from_slice(&data[offset..end]);
                     }
-                    metadata_sectors.insert(cluster_start_sector + i, sector_data);
+                    let sector = cluster_start_sector + i;
+                    metadata_sectors.insert(sector, sector_data);
+                    if let Some(path) = directory_path {
+                        directory_sector_paths.insert(sector, path.clone());
+                    }
+                }
+                if let Some(path) = directory_path {
+                    let clusters = (0..*count).map(|offset| *start + offset).collect();
+                    directory_path_clusters.insert(path.clone(), clusters);
                 }
             }
         }
@@ -566,7 +560,17 @@ impl<'a> VolumeBuilder<'a> {
             file_data_sectors,
             layout,
             file_sector_map,
+            directory_sector_paths,
+            directory_path_clusters,
         }
+    }
+}
+
+fn join_virtual_path(parent: &str, name: &str) -> String {
+    if parent == "/" {
+        format!("/{}", name)
+    } else {
+        format!("{}/{}", parent, name)
     }
 }
 

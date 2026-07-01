@@ -99,6 +99,10 @@ impl<B: NbdBackend> NbdCommandHandler<B> {
     pub fn handle_flush(&self) -> Result<(), std::io::Error> {
         self.backend.flush()
     }
+
+    pub fn handle_disconnect(&self) -> Result<(), std::io::Error> {
+        self.backend.flush()
+    }
 }
 
 // Linux NBD ioctl 常量
@@ -365,6 +369,9 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
                 let _ = write_all(user_fd, &reply);
             }
             NbdCommand::Disconnect => {
+                if let Err(e) = backend.flush() {
+                    warn!(error = %e, "NBD DISCONNECT 前 flush 失败");
+                }
                 info!("NBD 收到 DISCONNECT");
                 break;
             }

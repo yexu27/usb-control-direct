@@ -9,6 +9,10 @@ pub struct ParsedDirectoryEntry {
     pub is_dir: bool,
     pub first_cluster: u32,
     pub data_length: u64,
+    pub valid_data_length: u64,
+    pub attributes: u16,
+    pub entry_offset: usize,
+    pub set_len: usize,
     pub is_deleted: bool,
 }
 
@@ -36,9 +40,14 @@ pub fn parse_entry_sets(data: &[u8]) -> Result<Vec<ParsedDirectoryEntry>, std::i
                 "directory entry set exceeds buffer",
             ));
         }
+        if is_deleted {
+            offset += set_len;
+            continue;
+        }
 
         let file_entry = &data[offset..offset + DIR_ENTRY_SIZE as usize];
-        let is_dir = u16::from_le_bytes([file_entry[4], file_entry[5]]) & 0x10 != 0;
+        let attributes = u16::from_le_bytes([file_entry[4], file_entry[5]]);
+        let is_dir = attributes & 0x10 != 0;
         let stream_offset = offset + DIR_ENTRY_SIZE as usize;
         if data[stream_offset] != ENTRY_TYPE_STREAM {
             return Err(std::io::Error::new(
@@ -49,6 +58,11 @@ pub fn parse_entry_sets(data: &[u8]) -> Result<Vec<ParsedDirectoryEntry>, std::i
 
         let first_cluster = u32::from_le_bytes(
             data[stream_offset + 20..stream_offset + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let valid_data_length = u64::from_le_bytes(
+            data[stream_offset + 8..stream_offset + 16]
                 .try_into()
                 .unwrap(),
         );
@@ -81,6 +95,10 @@ pub fn parse_entry_sets(data: &[u8]) -> Result<Vec<ParsedDirectoryEntry>, std::i
             is_dir,
             first_cluster,
             data_length,
+            valid_data_length,
+            attributes,
+            entry_offset: offset,
+            set_len,
             is_deleted,
         });
         offset += set_len;
