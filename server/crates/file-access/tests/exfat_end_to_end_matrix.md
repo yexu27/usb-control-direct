@@ -2,6 +2,19 @@
 
 本文件是 RK3568 + 受控 Windows 验收清单，不替代 Rust 自动化测试。
 
+## Runtime exFAT VM 自动化覆盖
+
+VM 自动化必须先覆盖以下 S04 runtime 场景，再进入 RK3568 + Windows 验收：
+
+- 初始递归目录完整可见，包含空目录和 0 字节文件。
+- 通过 runtime sector/write transaction 创建空目录、0 字节文件和普通文件。
+- 普通文件数据写入真实落盘，内容与 pending data 一致。
+- 目录 entry 改名解析为 rename，真实 U 盘旧路径消失、新路径存在。
+- 目录 entry data length 缩短解析为 truncate，真实文件 size 和内容同步。
+- 父目录 entry 删除解析为目录树删除，真实 U 盘整棵目录消失。
+- 只读权限拒绝 create/write/delete/rename/truncate，真实 U 盘和 runtime 不产生稳定变更。
+- 策略阻断和病毒文件禁止操作不修改真实 U 盘。
+
 ## 环境
 
 - VM：`ssh -p 2222 -i ~/.ssh/WinPC-Personal root@172.16.0.219`
@@ -12,6 +25,7 @@
 ## 必须记录的证据
 
 - VM `cargo test -p file-access -- --nocapture` 输出。
+- VM `cargo test -p file-access --test exfat_runtime_matrix_test -- --nocapture` 输出。
 - VM 交叉编译输出。
 - RK 服务启动日志、LUN file、`lsblk`。
 - Windows `Get-Volume` 输出。
