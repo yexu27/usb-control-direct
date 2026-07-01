@@ -16,6 +16,7 @@ use crate::policy::evaluate_access;
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot, SectorContent};
 
 /// 虚拟 exFAT 卷。
+#[derive(Debug, Clone)]
 pub struct VirtualVolume {
     /// 预生成的元数据扇区（扇区号 → 数据）。
     metadata_sectors: HashMap<u64, Vec<u8>>,
@@ -38,6 +39,15 @@ struct FileDataMapping {
     offset: u64,
     valid_bytes: u32,
     blocked: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileDataSectorInfo {
+    pub sector: u64,
+    pub real_path: PathBuf,
+    pub offset: u64,
+    pub valid_bytes: u32,
+    pub blocked: bool,
 }
 
 impl VirtualVolume {
@@ -115,6 +125,26 @@ impl VirtualVolume {
         self.directory_path_clusters
             .get(path)
             .map(|clusters| clusters.as_slice())
+    }
+
+    pub fn metadata_sector_numbers(&self) -> impl Iterator<Item = u64> + '_ {
+        self.metadata_sectors.keys().copied()
+    }
+
+    pub fn directory_cluster_entries(&self) -> impl Iterator<Item = (String, Vec<u32>)> + '_ {
+        self.directory_path_clusters
+            .iter()
+            .map(|(path, clusters)| (path.clone(), clusters.clone()))
+    }
+
+    pub fn file_data_sector_entries(&self) -> impl Iterator<Item = FileDataSectorInfo> + '_ {
+        self.file_data_sectors.iter().map(|(sector, mapping)| FileDataSectorInfo {
+            sector: *sector,
+            real_path: mapping.real_path.clone(),
+            offset: mapping.offset,
+            valid_bytes: mapping.valid_bytes,
+            blocked: mapping.blocked,
+        })
     }
 }
 
