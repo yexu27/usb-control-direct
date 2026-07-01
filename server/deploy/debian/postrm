@@ -15,7 +15,11 @@ fi
 
 if [ "$action" = "purge" ]; then
   rm -rf /etc/usb-control
+  rm -rf /var/lib/usb-control
+  rm -rf /var/log/usb-control
+  echo "usb-control postrm: purged all data"
+else
+  echo "usb-control postrm: preserved /var/lib/usb-control and /var/log/usb-control"
 fi
 
-echo "usb-control postrm: preserved /var/lib/usb-control"
 exit 0
