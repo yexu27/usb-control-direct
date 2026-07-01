@@ -10,9 +10,14 @@ use crate::exfat::layout::{
     BOOT_REGION_SECTORS, FIRST_CLUSTER, PARTITION_OFFSET_SECTORS, SECTORS_PER_CLUSTER,
 };
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
+use crate::exfat::transaction::PendingTransaction;
+use crate::exfat::transaction_resolver::TransactionResolver;
 use crate::exfat::volume::{FileDataSectorInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
 use crate::types::{ControlledEntry, PolicySnapshot};
+use crate::vfs::committer::RealFsCommitter;
+use crate::vfs::mutation::{FsMutation, NodeKind};
+use crate::vfs::operation_guard::{FsOperation, OperationGuard};
 use crate::vfs::{VfsIndex, VfsNode};
 
 #[derive(Debug, Clone)]
@@ -24,6 +29,7 @@ pub struct ExfatRuntimeState {
     bitmap: BitmapState,
     sector_owners: SectorOwnerMap,
     snapshot: PolicySnapshot,
+    committer: RealFsCommitter,
 }
 
 impl ExfatRuntimeState {
@@ -142,6 +148,7 @@ impl ExfatRuntimeState {
             bitmap,
             sector_owners,
             snapshot,
+            committer: RealFsCommitter::new(mount_root.to_path_buf()),
         })
     }
 
@@ -167,11 +174,92 @@ impl ExfatRuntimeState {
 
     pub fn record_write(
         &self,
-        tx: &mut crate::exfat::transaction::PendingTransaction,
+        tx: &mut PendingTransaction,
         sector: u64,
         data: &[u8],
     ) -> Result<(), std::io::Error> {
         WriteInterpreter::new().record_sector_write(tx, sector, self.sector_owner(sector), data)
+    }
+
+    pub fn try_commit_closed_transaction(
+        &mut self,
+        tx: &PendingTransaction,
+    ) -> Result<Vec<FsMutation>, std::io::Error> {
+        let mutations = TransactionResolver::new().resolve_closed(tx, self)?;
+        for mutation in &mutations {
+            self.commit_mutation(mutation.clone())?;
+        }
+        Ok(mutations)
+    }
+
+    pub fn commit_mutation(&mut self, mutation: FsMutation) -> Result<(), std::io::Error> {
+        self.check_mutation(&mutation)?;
+        match &mutation {
+            FsMutation::CreateDir { parent, name, .. } => {
+                self.committer.create_dir(&join_virtual_path(parent, name))?;
+            }
+            FsMutation::CreateFile {
+                parent,
+                name,
+                data_patches,
+                ..
+            } => {
+                let path = join_virtual_path(parent, name);
+                self.committer.create_file(&path)?;
+                for patch in data_patches {
+                    self.committer
+                        .write_at(&patch.virtual_path, patch.offset, &patch.data)?;
+                    self.committer.flush_file(&patch.virtual_path)?;
+                }
+            }
+            FsMutation::WriteFile {
+                virtual_path,
+                offset,
+                data,
+            } => {
+                self.committer.write_at(virtual_path, *offset, data)?;
+                self.committer.flush_file(virtual_path)?;
+            }
+            FsMutation::Truncate { virtual_path, len } => {
+                self.committer.truncate(virtual_path, *len)?;
+                self.committer.flush_file(virtual_path)?;
+            }
+            FsMutation::Rename { from, to, .. } => {
+                self.committer.rename(from, to)?;
+            }
+            FsMutation::Delete { virtual_path, kind } => match kind {
+                NodeKind::File => self.committer.delete_file(virtual_path)?,
+                NodeKind::Directory => self.committer.delete_dir(virtual_path)?,
+            },
+            FsMutation::RewriteFile {
+                virtual_path,
+                size,
+                data_patches,
+                ..
+            } => {
+                self.committer.truncate(virtual_path, *size)?;
+                for patch in data_patches {
+                    self.committer
+                        .write_at(&patch.virtual_path, patch.offset, &patch.data)?;
+                }
+                self.committer.flush_file(virtual_path)?;
+            }
+        }
+        self.index.apply_mutation(&mutation)?;
+        self.refresh_runtime_metadata_after_mutation(&mutation)?;
+        Ok(())
+    }
+
+    pub fn parent_path_for_directory_owner(&self, owner: &SectorOwner) -> Option<String> {
+        match owner {
+            SectorOwner::RootDirectory => Some("/".to_string()),
+            SectorOwner::DirectoryData { node_id } => self
+                .index
+                .iter_nodes()
+                .find(|node| node.id.0 == *node_id)
+                .map(|node| node.virtual_path.clone()),
+            _ => None,
+        }
     }
 }
 
@@ -202,4 +290,110 @@ fn mark_file_sector(
 
 fn normalize_path(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+impl ExfatRuntimeState {
+    fn check_mutation(&self, mutation: &FsMutation) -> Result<(), std::io::Error> {
+        let guard = OperationGuard::new(self.snapshot.clone());
+        match mutation {
+            FsMutation::CreateDir { parent, name, .. } => guard.check(&FsOperation::CreateDir {
+                virtual_path: join_virtual_path(parent, name),
+            }),
+            FsMutation::CreateFile { parent, name, .. } => guard.check(&FsOperation::CreateFile {
+                virtual_path: join_virtual_path(parent, name),
+            }),
+            FsMutation::WriteFile { virtual_path, .. }
+            | FsMutation::RewriteFile { virtual_path, .. } => guard.check(&FsOperation::WriteFile {
+                virtual_path: virtual_path.clone(),
+            }),
+            FsMutation::Truncate { virtual_path, .. } => guard.check(&FsOperation::Truncate {
+                virtual_path: virtual_path.clone(),
+            }),
+            FsMutation::Rename { from, to, .. } => guard.check(&FsOperation::Rename {
+                from: from.clone(),
+                to: to.clone(),
+            }),
+            FsMutation::Delete { virtual_path, .. } => guard.check(&FsOperation::Delete {
+                virtual_path: virtual_path.clone(),
+                is_virus: self
+                    .lookup_path(virtual_path)
+                    .map(|node| node.is_virus)
+                    .unwrap_or(false),
+            }),
+        }
+    }
+
+    fn refresh_runtime_metadata_after_mutation(
+        &mut self,
+        mutation: &FsMutation,
+    ) -> Result<(), std::io::Error> {
+        match mutation {
+            FsMutation::CreateDir { parent, name, chain } => {
+                let path = join_virtual_path(parent, name);
+                let id = self.index.lookup_path(&path).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "created dir not in VFS")
+                })?;
+                if let Some(chain) = chain {
+                    self.directory_store
+                        .insert_directory(path, id, chain.clusters.clone());
+                    self.fat.set_chain(&chain.clusters)?;
+                    for cluster in &chain.clusters {
+                        self.bitmap.mark_allocated(*cluster)?;
+                        self.sector_owners.mark_range(
+                            self.volume.layout().cluster_to_sector(*cluster),
+                            SECTORS_PER_CLUSTER as u64,
+                            SectorOwner::DirectoryData { node_id: id.0 },
+                        )?;
+                    }
+                }
+            }
+            FsMutation::CreateFile {
+                parent,
+                name,
+                chain,
+                size,
+                ..
+            } => {
+                let path = join_virtual_path(parent, name);
+                let id = self.index.lookup_path(&path).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "created file not in VFS")
+                })?;
+                if let Some(chain) = chain {
+                    self.fat.set_chain(&chain.clusters)?;
+                    let mut remaining = *size;
+                    let mut offset = 0_u64;
+                    for cluster in &chain.clusters {
+                        self.bitmap.mark_allocated(*cluster)?;
+                        for i in 0..SECTORS_PER_CLUSTER as u64 {
+                            if remaining == 0 {
+                                break;
+                            }
+                            let valid_bytes = remaining.min(crate::exfat::layout::SECTOR_SIZE as u64);
+                            self.sector_owners.mark_range(
+                                self.volume.layout().cluster_to_sector(*cluster) + i,
+                                1,
+                                SectorOwner::FileData {
+                                    node_id: id.0,
+                                    file_offset: offset,
+                                    valid_bytes: valid_bytes as u32,
+                                },
+                            )?;
+                            remaining = remaining.saturating_sub(valid_bytes);
+                            offset += valid_bytes;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+fn join_virtual_path(parent: &str, name: &str) -> String {
+    if parent == "/" {
+        format!("/{name}")
+    } else {
+        format!("{parent}/{name}")
+    }
 }

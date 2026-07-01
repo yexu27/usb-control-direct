@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use file_access::exfat::layout::{PARTITION_OFFSET_SECTORS, SECTOR_SIZE};
+use file_access::exfat::dir_entry::build_file_entry_set;
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::sector_owner::SectorOwner;
 use file_access::exfat::transaction::{PendingTransaction, TransactionWrite};
@@ -15,6 +16,17 @@ fn snapshot() -> PolicySnapshot {
         blacklist_extensions: HashSet::new(),
         permission: 1,
     }
+}
+
+fn write_directory_entry(
+    state: &ExfatRuntimeState,
+    tx: &mut PendingTransaction,
+    directory_sector: u64,
+    entry: Vec<u8>,
+) {
+    let mut sector = vec![0u8; SECTOR_SIZE as usize];
+    sector[..entry.len()].copy_from_slice(&entry);
+    state.record_write(tx, directory_sector, &sector).unwrap();
 }
 
 fn file(path: PathBuf, name: &str, size: u64) -> ControlledEntry {
@@ -132,4 +144,100 @@ fn write_interpreter_records_real_fat_bitmap_directory_and_data_sectors() {
         .record_write(&mut tx, state.total_sectors() + 1, &data)
         .unwrap_err();
     assert_eq!(out_of_range_err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn write_at_sequence_creates_empty_dir_and_zero_file_without_flush() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &[], snapshot(), 16 * 1024 * 1024)
+            .unwrap();
+    let root_sector = state.cluster_to_sector(
+        state
+            .directory_store()
+            .directory_clusters("/")
+            .unwrap()
+            .first()
+            .copied()
+            .unwrap(),
+    );
+    let free_cluster =
+        match state.sector_owner(first_sector_matching(&state, |owner| {
+            matches!(owner, SectorOwner::FreeCluster { .. })
+        })) {
+            SectorOwner::FreeCluster { cluster } => cluster,
+            other => panic!("expected free cluster, got {other:?}"),
+        };
+
+    let mut tx = PendingTransaction::new(2);
+    write_directory_entry(
+        &state,
+        &mut tx,
+        root_sector,
+        build_file_entry_set("closed_empty_dir", true, free_cluster, 0, false),
+    );
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    assert_eq!(mutations.len(), 1);
+    assert!(tmp.path().join("closed_empty_dir").is_dir());
+    assert!(state.lookup_path("/closed_empty_dir").unwrap().is_dir());
+
+    let mut tx = PendingTransaction::new(3);
+    write_directory_entry(
+        &state,
+        &mut tx,
+        root_sector,
+        build_file_entry_set("closed_zero.txt", false, 0, 0, false),
+    );
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    assert_eq!(mutations.len(), 1);
+    assert_eq!(
+        std::fs::metadata(tmp.path().join("closed_zero.txt"))
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(state.lookup_path("/closed_zero.txt").unwrap().size, 0);
+}
+
+#[test]
+fn write_at_sequence_creates_file_and_commits_data_to_real_usb() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &[], snapshot(), 16 * 1024 * 1024)
+            .unwrap();
+    let root_sector = state.cluster_to_sector(
+        state
+            .directory_store()
+            .directory_clusters("/")
+            .unwrap()
+            .first()
+            .copied()
+            .unwrap(),
+    );
+    let free_sector = first_sector_matching(&state, |owner| {
+        matches!(owner, SectorOwner::FreeCluster { .. })
+    });
+    let file_cluster = match state.sector_owner(free_sector) {
+        SectorOwner::FreeCluster { cluster } => cluster,
+        other => panic!("expected free cluster, got {other:?}"),
+    };
+
+    let mut tx = PendingTransaction::new(4);
+    let mut data_sector = vec![0u8; SECTOR_SIZE as usize];
+    data_sector[..11].copy_from_slice(b"hello world");
+    state.record_write(&mut tx, free_sector, &data_sector).unwrap();
+    write_directory_entry(
+        &state,
+        &mut tx,
+        root_sector,
+        build_file_entry_set("created.txt", false, file_cluster, 11, false),
+    );
+
+    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    assert_eq!(mutations.len(), 1);
+    assert_eq!(
+        std::fs::read(tmp.path().join("created.txt")).unwrap(),
+        b"hello world"
+    );
+    assert_eq!(state.lookup_path("/created.txt").unwrap().size, 11);
 }

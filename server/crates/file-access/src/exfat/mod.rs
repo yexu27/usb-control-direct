@@ -18,4 +18,5 @@ pub mod fs;
 pub mod runtime_state;
 pub mod sector_owner;
 pub mod transaction;
+pub mod transaction_resolver;
 pub mod write_interpreter;
