@@ -61,7 +61,7 @@ fn attach_sets_lun_attributes_and_backing_path() {
 
     assert_eq!(fs::read_to_string(lun.join("ro")).unwrap(), "0\n");
     assert_eq!(fs::read_to_string(lun.join("removable")).unwrap(), "1\n");
-    assert_eq!(fs::read_to_string(lun.join("nofua")).unwrap(), "1\n");
+    assert_eq!(fs::read_to_string(lun.join("nofua")).unwrap(), "0\n");
     assert_eq!(fs::read_to_string(lun.join("cdrom")).unwrap(), "0\n");
     assert_eq!(
         fs::read_to_string(lun.join("file")).unwrap(),

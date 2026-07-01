@@ -206,6 +206,7 @@ impl VirtualExfatFs {
         }
 
         let start_sector = offset / SECTOR_SIZE as u64;
+        let mut metadata_touched = false;
         for (i, chunk) in data.chunks(SECTOR_SIZE as usize).enumerate() {
             let sector = start_sector + i as u64;
             if sector == 0 {
@@ -222,6 +223,7 @@ impl VirtualExfatFs {
                     .unwrap()
                     .insert(sector, sector_data);
                 self.dirty_metadata_sectors.lock().unwrap().insert(sector);
+                metadata_touched = true;
                 continue;
             }
             if let Some(runtime) = self.runtime_file_sector_for_sector(sector) {
@@ -263,6 +265,7 @@ impl VirtualExfatFs {
                         .unwrap()
                         .insert(sector, sector_data);
                     self.dirty_metadata_sectors.lock().unwrap().insert(sector);
+                    metadata_touched = true;
                 }
                 SectorContent::Zero => {
                     let mut sector_data = vec![0u8; SECTOR_SIZE as usize];
@@ -270,6 +273,9 @@ impl VirtualExfatFs {
                     self.data_overlay.lock().unwrap().insert(sector, sector_data);
                 }
             }
+        }
+        if metadata_touched {
+            self.flush()?;
         }
         Ok(())
     }
@@ -527,6 +533,34 @@ impl VirtualExfatFs {
                     data_patches,
                 })
             }
+            FsMutation::RewriteFile {
+                virtual_path,
+                size,
+                valid_data_len,
+                chain,
+                ..
+            } => {
+                let data_patches = if let Some(chain) = &chain {
+                    if size == 0 {
+                        Vec::new()
+                    } else {
+                        vec![FileDataPatch {
+                            virtual_path: virtual_path.clone(),
+                            offset: 0,
+                            data: self.collect_overlay_file_data(chain.first_cluster, size)?,
+                        }]
+                    }
+                } else {
+                    Vec::new()
+                };
+                Ok(FsMutation::RewriteFile {
+                    virtual_path,
+                    size,
+                    valid_data_len,
+                    chain,
+                    data_patches,
+                })
+            }
             other => Ok(other),
         }
     }
@@ -584,6 +618,33 @@ impl VirtualExfatFs {
                     .lock()
                     .unwrap()
                     .record(FileMutation::Write { virtual_path, offset, data });
+                Ok(())
+            }
+            FsMutation::RewriteFile {
+                virtual_path,
+                chain,
+                data_patches,
+                size,
+                ..
+            } => {
+                self.operation_guard()
+                    .check(&FsOperation::WriteFile { virtual_path: virtual_path.clone() })?;
+                if let Some(chain) = &chain {
+                    self.register_runtime_file(&virtual_path, &chain.clusters, size);
+                }
+                let mut journal = self.journal.lock().unwrap();
+                journal.record(FileMutation::Truncate {
+                    virtual_path: virtual_path.clone(),
+                    len: size,
+                });
+                for patch in data_patches {
+                    journal.record(FileMutation::Write {
+                        virtual_path: patch.virtual_path,
+                        offset: patch.offset,
+                        data: patch.data,
+                    });
+                }
+                self.update_runtime_file_len(&virtual_path, size);
                 Ok(())
             }
             FsMutation::Truncate { virtual_path, len } => {

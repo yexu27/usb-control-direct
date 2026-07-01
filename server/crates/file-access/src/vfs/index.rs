@@ -102,6 +102,15 @@ impl VfsIndex {
                 self.nodes.get_mut(&id).unwrap().size = *len;
                 Ok(())
             }
+            FsMutation::RewriteFile {
+                virtual_path, size, ..
+            } => {
+                let id = self.lookup_path(virtual_path).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "node not found")
+                })?;
+                self.nodes.get_mut(&id).unwrap().size = *size;
+                Ok(())
+            }
             FsMutation::WriteFile { .. } => Ok(()),
         }
     }

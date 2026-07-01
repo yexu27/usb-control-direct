@@ -48,14 +48,22 @@ pub fn diff_directory_snapshots(
 
     for new_entry in new.entries() {
         if let Some(old_entry) = old.get_by_name(&new_entry.name) {
-            if !new_entry.is_dir
-                && !old_entry.is_dir
-                && old_entry.data_length != new_entry.data_length
-            {
-                mutations.push(FsMutation::Truncate {
-                    virtual_path: join_virtual_path(&parent, &new_entry.name),
-                    len: new_entry.data_length,
-                });
+            if !new_entry.is_dir && !old_entry.is_dir {
+                let virtual_path = join_virtual_path(&parent, &new_entry.name);
+                if old_entry.first_cluster != new_entry.first_cluster {
+                    mutations.push(FsMutation::RewriteFile {
+                        virtual_path,
+                        size: new_entry.data_length,
+                        valid_data_len: new_entry.valid_data_length,
+                        chain: cluster_chain_from_entry(new_entry),
+                        data_patches: Vec::new(),
+                    });
+                } else if old_entry.data_length != new_entry.data_length {
+                    mutations.push(FsMutation::Truncate {
+                        virtual_path,
+                        len: new_entry.data_length,
+                    });
+                }
             }
         }
         if renamed_new_offsets.contains(&new_entry.entry_offset) {

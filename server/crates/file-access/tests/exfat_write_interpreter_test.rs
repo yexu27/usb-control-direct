@@ -61,6 +61,16 @@ fn root_entry_cluster(fs: &VirtualExfatFs, name: &str) -> u32 {
         .first_cluster
 }
 
+fn directory_entry_cluster(fs: &VirtualExfatFs, dir_cluster: u32, name: &str) -> u32 {
+    let data = fs.read_at(fs.cluster_offset_for_test(dir_cluster), 4096).unwrap();
+    let entries = parse_entry_sets(&data).unwrap();
+    entries
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .unwrap()
+        .first_cluster
+}
+
 fn mark_entry_set_deleted(entry_set: &mut [u8]) {
     let secondary_count = entry_set[1] as usize;
     for idx in 0..=secondary_count {
@@ -242,6 +252,118 @@ fn write_interpreter_commits_file_inside_runtime_created_directory() {
         std::fs::read(tmp.path().join("runtime_dir/child.txt")).unwrap(),
         b"child"
     );
+}
+
+#[test]
+fn write_interpreter_commits_deep_empty_file_without_explicit_flush() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("1/2/3")).unwrap();
+    std::fs::write(tmp.path().join("1/1.txt"), b"").unwrap();
+    std::fs::write(tmp.path().join("1/2/2.txt"), b"").unwrap();
+    std::fs::write(tmp.path().join("1/2/3/3.txt"), b"").unwrap();
+    let tree = vec![dir(
+        tmp.path().join("1"),
+        "1",
+        vec![
+            file(tmp.path().join("1/1.txt"), "1.txt", 0),
+            dir(
+                tmp.path().join("1/2"),
+                "2",
+                vec![
+                    file(tmp.path().join("1/2/2.txt"), "2.txt", 0),
+                    dir(
+                        tmp.path().join("1/2/3"),
+                        "3",
+                        vec![file(tmp.path().join("1/2/3/3.txt"), "3.txt", 0)],
+                    ),
+                ],
+            ),
+        ],
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
+    let one_cluster = root_entry_cluster(&fs, "1");
+    let two_cluster = directory_entry_cluster(&fs, one_cluster, "2");
+    let three_cluster = directory_entry_cluster(&fs, two_cluster, "3");
+    let four_cluster = 520;
+
+    write_dir_entries(
+        &fs,
+        three_cluster,
+        vec![
+            build_file_entry_set(
+                "3.txt",
+                false,
+                directory_entry_cluster(&fs, three_cluster, "3.txt"),
+                0,
+                false,
+            ),
+            build_file_entry_set("4", true, four_cluster, 0, false),
+        ],
+    );
+    write_dir_entries(
+        &fs,
+        four_cluster,
+        vec![build_file_entry_set("4.txt", false, 0, 0, false)],
+    );
+
+    assert!(tmp.path().join("1/2/3/4").is_dir());
+    assert!(tmp.path().join("1/2/3/4/4.txt").is_file());
+}
+
+#[test]
+fn write_interpreter_commits_deep_directory_when_child_cluster_is_written_before_parent_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("1/2/3")).unwrap();
+    std::fs::write(tmp.path().join("1/1.txt"), b"").unwrap();
+    std::fs::write(tmp.path().join("1/2/2.txt"), b"").unwrap();
+    std::fs::write(tmp.path().join("1/2/3/3.txt"), b"").unwrap();
+    let tree = vec![dir(
+        tmp.path().join("1"),
+        "1",
+        vec![
+            file(tmp.path().join("1/1.txt"), "1.txt", 0),
+            dir(
+                tmp.path().join("1/2"),
+                "2",
+                vec![
+                    file(tmp.path().join("1/2/2.txt"), "2.txt", 0),
+                    dir(
+                        tmp.path().join("1/2/3"),
+                        "3",
+                        vec![file(tmp.path().join("1/2/3/3.txt"), "3.txt", 0)],
+                    ),
+                ],
+            ),
+        ],
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
+    let one_cluster = root_entry_cluster(&fs, "1");
+    let two_cluster = directory_entry_cluster(&fs, one_cluster, "2");
+    let three_cluster = directory_entry_cluster(&fs, two_cluster, "3");
+    let four_cluster = 530;
+
+    write_dir_entries(
+        &fs,
+        four_cluster,
+        vec![build_file_entry_set("4.txt", false, 0, 0, false)],
+    );
+    write_dir_entries(
+        &fs,
+        three_cluster,
+        vec![
+            build_file_entry_set(
+                "3.txt",
+                false,
+                directory_entry_cluster(&fs, three_cluster, "3.txt"),
+                0,
+                false,
+            ),
+            build_file_entry_set("4", true, four_cluster, 0, false),
+        ],
+    );
+
+    assert!(tmp.path().join("1/2/3/4").is_dir());
+    assert!(tmp.path().join("1/2/3/4/4.txt").is_file());
 }
 
 #[test]

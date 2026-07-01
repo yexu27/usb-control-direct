@@ -244,7 +244,7 @@ impl GadgetRuntime {
     pub fn prepare_empty_lun(&self) -> Result<(), GadgetError> {
         fs::write(self.lun.lun_dir.join("file"), "\n")?;
         let _ = fs::write(self.lun.lun_dir.join("removable"), "1\n");
-        let _ = fs::write(self.lun.lun_dir.join("nofua"), "1\n");
+        let _ = fs::write(self.lun.lun_dir.join("nofua"), "0\n");
         let _ = fs::write(self.lun.lun_dir.join("cdrom"), "0\n");
         Ok(())
     }
@@ -261,7 +261,7 @@ impl GadgetRuntime {
             if readonly { "1\n" } else { "0\n" },
         );
         let _ = fs::write(self.lun.lun_dir.join("removable"), "1\n");
-        let _ = fs::write(self.lun.lun_dir.join("nofua"), "1\n");
+        let _ = fs::write(self.lun.lun_dir.join("nofua"), "0\n");
         let _ = fs::write(self.lun.lun_dir.join("cdrom"), "0\n");
         fs::write(self.lun.lun_dir.join("file"), backing_str)?;
         self.bind_udc_if_empty()?;

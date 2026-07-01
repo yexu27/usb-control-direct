@@ -151,7 +151,7 @@ fn configure_lun(lun_dir: &Path) -> Result<(), GadgetBootstrapError> {
     write_attr(lun_dir.join("file"), "\n")?;
     write_attr(lun_dir.join("ro"), "0\n")?;
     write_attr(lun_dir.join("removable"), "1\n")?;
-    write_attr(lun_dir.join("nofua"), "1\n")?;
+    write_attr(lun_dir.join("nofua"), "0\n")?;
     write_attr(lun_dir.join("cdrom"), "0\n")?;
     Ok(())
 }

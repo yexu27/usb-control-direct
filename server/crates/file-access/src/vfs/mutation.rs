@@ -37,6 +37,13 @@ pub enum FsMutation {
         offset: u64,
         data: Vec<u8>,
     },
+    RewriteFile {
+        virtual_path: String,
+        size: u64,
+        valid_data_len: u64,
+        chain: Option<ClusterChain>,
+        data_patches: Vec<FileDataPatch>,
+    },
     Truncate {
         virtual_path: String,
         len: u64,

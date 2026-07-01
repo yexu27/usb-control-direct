@@ -40,6 +40,10 @@ fn bootstrap_creates_business_functions_and_leaves_lun_empty() {
         "1"
     );
     assert_eq!(std::fs::read_to_string(lun.join("ro")).unwrap().trim(), "0");
+    assert_eq!(
+        std::fs::read_to_string(lun.join("nofua")).unwrap().trim(),
+        "0"
+    );
     assert!(gadget.join("functions/hid.keyboard").is_dir());
     assert!(gadget.join("functions/hid.mouse").is_dir());
     assert!(gadget.join("configs/b.1/mass_storage.usb0").exists());
