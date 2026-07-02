@@ -1,4 +1,4 @@
-use file_access::nbd::{NbdRequest, NbdCommand, NBD_REQUEST_MAGIC};
+use file_access::nbd::{NbdCommand, NbdRequest, NBD_REQUEST_MAGIC};
 
 #[test]
 fn parse_read_request() {
@@ -68,4 +68,11 @@ fn build_error_reply() {
     let reply = file_access::nbd::build_reply(99, 5);
     let error = u32::from_be_bytes(reply[4..8].try_into().unwrap());
     assert_eq!(error, 5);
+}
+
+#[test]
+fn interrupted_io_is_retryable() {
+    let err = std::io::Error::from(std::io::ErrorKind::Interrupted);
+
+    assert!(file_access::nbd::is_retryable_io_error(&err));
 }

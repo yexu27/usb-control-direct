@@ -100,6 +100,10 @@ impl<B: NbdBackend> NbdCommandHandler<B> {
         Self { backend }
     }
 
+    pub fn read_data(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
+        read_backend_data(self.backend.as_ref(), offset, len)
+    }
+
     pub fn handle_flush(&self) -> Result<(), std::io::Error> {
         self.backend.flush()
     }
@@ -107,6 +111,25 @@ impl<B: NbdBackend> NbdCommandHandler<B> {
     pub fn handle_disconnect(&self) -> Result<(), std::io::Error> {
         self.backend.shutdown()
     }
+}
+
+fn read_backend_data<B: NbdBackend>(
+    backend: &B,
+    offset: u64,
+    len: usize,
+) -> Result<Vec<u8>, std::io::Error> {
+    let data = backend.read_at(offset, len)?;
+    if data.len() != len {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            format!(
+                "NBD backend returned {} bytes for {} byte read",
+                data.len(),
+                len
+            ),
+        ));
+    }
+    Ok(data)
 }
 
 // Linux NBD ioctl 常量
@@ -391,7 +414,7 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
 /// 处理 READ 请求。
 fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let mut response_data = Vec::with_capacity(16 + req.len as usize);
-    match backend.read_at(req.from, req.len as usize) {
+    match read_backend_data(backend, req.from, req.len as usize) {
         Ok(data) => {
             let reply = build_reply(req.handle, 0);
             response_data.extend_from_slice(&reply);
@@ -437,6 +460,10 @@ fn handle_write<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let _ = write_all(user_fd, &reply);
 }
 
+pub fn is_retryable_io_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::Interrupted
+}
+
 /// 从 fd 精确读取。
 fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
     let mut pos = 0;
@@ -449,8 +476,18 @@ fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
                 buf.len() - pos,
             )
         };
-        if n <= 0 {
-            return Err(std::io::Error::last_os_error());
+        if n < 0 {
+            let err = std::io::Error::last_os_error();
+            if is_retryable_io_error(&err) {
+                continue;
+            }
+            return Err(err);
+        }
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "NBD socket closed while reading",
+            ));
         }
         pos += n as usize;
     }
@@ -469,8 +506,18 @@ fn write_all(fd: RawFd, data: &[u8]) -> Result<(), std::io::Error> {
                 data.len() - pos,
             )
         };
-        if n <= 0 {
-            return Err(std::io::Error::last_os_error());
+        if n < 0 {
+            let err = std::io::Error::last_os_error();
+            if is_retryable_io_error(&err) {
+                continue;
+            }
+            return Err(err);
+        }
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WriteZero,
+                "NBD socket wrote zero bytes",
+            ));
         }
         pos += n as usize;
     }

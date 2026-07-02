@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use file_access::nbd::{NbdBackend, NbdCommandHandler};
 
@@ -61,4 +61,29 @@ fn nbd_flush_propagates_backend_error() {
     let handler = NbdCommandHandler::new(backend);
     let err = handler.handle_flush().unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+struct ShortReadBackend;
+
+impl NbdBackend for ShortReadBackend {
+    fn read_at(&self, _offset: u64, _len: usize) -> Result<Vec<u8>, std::io::Error> {
+        Ok(vec![1, 2, 3])
+    }
+
+    fn write_at(&self, _offset: u64, _data: &[u8]) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+}
+
+#[test]
+fn read_data_must_match_requested_length() {
+    let handler = NbdCommandHandler::new(Arc::new(ShortReadBackend));
+
+    let err = handler.read_data(0, 512).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
 }
