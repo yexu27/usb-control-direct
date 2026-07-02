@@ -81,6 +81,19 @@ pub fn planned_usb_raw_unmounts(entries: &[MountEntry], mount_base: &str) -> Vec
         .collect()
 }
 
+/// 判断挂载点是否仍在 mount table 中。
+pub fn mount_target_exists_from(entries: &[MountEntry], mount_point: &str) -> bool {
+    entries.iter().any(|entry| entry.target == mount_point)
+}
+
+/// 判断挂载点当前是否仍处于挂载状态。
+pub fn mount_target_exists(mount_point: &str) -> Result<bool, UsbIdentifyError> {
+    Ok(mount_target_exists_from(
+        &current_mount_entries()?,
+        mount_point,
+    ))
+}
+
 /// 基于已解析 mount table 检查挂载目标是否可用。
 pub fn ensure_mount_available_from(
     entries: &[MountEntry],

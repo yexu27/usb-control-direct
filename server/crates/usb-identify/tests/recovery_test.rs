@@ -1,6 +1,6 @@
 use usb_identify::mount::{
-    ensure_mount_available_from, mount_entries_from, planned_usb_raw_unmounts, MountEntry,
-    MountPreflightError,
+    ensure_mount_available_from, mount_entries_from, mount_target_exists_from,
+    planned_usb_raw_unmounts, MountEntry, MountPreflightError,
 };
 use usb_identify::recovery::{
     clear_lun_backing_file, nbd_devices_for_pool, read_nbd_pid_under,
@@ -33,6 +33,17 @@ fn selects_only_usb_raw_mounts_for_recovery() {
     let targets = planned_usb_raw_unmounts(&entries, "/mnt/usb_raw");
 
     assert_eq!(targets, vec!["/mnt/usb_raw/sda2".to_string()]);
+}
+
+#[test]
+fn detects_active_mount_target_from_entries() {
+    let entries = vec![
+        MountEntry::new("/dev/sda2", "/mnt/usb_raw/sda2", "fuseblk"),
+        MountEntry::new("/dev/root", "/", "ext4"),
+    ];
+
+    assert!(mount_target_exists_from(&entries, "/mnt/usb_raw/sda2"));
+    assert!(!mount_target_exists_from(&entries, "/mnt/usb_raw/sdb1"));
 }
 
 #[test]

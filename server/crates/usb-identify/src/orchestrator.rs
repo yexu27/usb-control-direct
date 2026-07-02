@@ -190,12 +190,33 @@ impl DeviceOrchestratorCleanupHandle {
                     }
                 }
                 if let Some(mount_path) = &session.mount_path {
-                    if let Err(e) = self.mount_ops.umount(&mount_path.to_string_lossy()) {
-                        warn!(
-                            mount_point = %mount_path.display(),
-                            error = %e,
+                    let mount_path = mount_path.to_string_lossy();
+                    let should_umount = match crate::mount::mount_target_exists(&mount_path) {
+                        Ok(active) => active,
+                        Err(e) => {
+                            warn!(
+                                mount_point = %mount_path,
+                                error = %e,
+                                reason = %reason,
+                                "停服务清理: 读取挂载状态失败，继续尝试卸载"
+                            );
+                            true
+                        }
+                    };
+                    if should_umount {
+                        if let Err(e) = self.mount_ops.umount(&mount_path) {
+                            warn!(
+                                mount_point = %mount_path,
+                                error = %e,
+                                reason = %reason,
+                                "停服务清理: U 盘卸载失败"
+                            );
+                        }
+                    } else {
+                        info!(
+                            mount_point = %mount_path,
                             reason = %reason,
-                            "停服务清理: U 盘卸载失败"
+                            "停服务清理: U 盘挂载点已释放"
                         );
                     }
                 }
