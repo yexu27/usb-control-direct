@@ -2,18 +2,23 @@
 
 mod config;
 mod logging;
+mod shutdown;
 
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
 use file_access::engine::FileAccessEngine;
 use file_access::gadget::GadgetRuntime;
+use file_access::nbd::{
+    disconnect_nbd_pool, read_nbd_partition_scan_status, NbdPartitionScanStatus,
+};
 use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
@@ -33,8 +38,12 @@ use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use usb_identify::monitor::DeviceManager;
+use usb_identify::mount::RealMountOps;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
+use usb_identify::recovery::{clear_lun_backing_file, recover_raw_mounts};
 use whitelist::WhitelistManager;
+
+const NBD_POOL_SIZE: u32 = 4;
 
 fn prepare_usb_gadget_startup(config: &AppConfig) -> Result<(GadgetRuntime, HidgNodes), String> {
     let bootstrap_config = file_access::gadget_bootstrap::GadgetBootstrapConfig {
@@ -117,6 +126,23 @@ async fn main() {
         "USB gadget 启动准备完成"
     );
 
+    let lun_file = gadget_runtime.lun_dir().join("file");
+    if let Err(e) = clear_lun_backing_file(&lun_file) {
+        warn!(error = %e, lun_file = %lun_file.display(), "启动恢复: 清空 LUN backing 失败");
+    }
+    disconnect_nbd_pool(NBD_POOL_SIZE);
+    if let Err(e) = recover_raw_mounts(&RealMountOps, Path::new("/mnt/usb_raw")) {
+        warn!(error = %e, "启动恢复: 清理原始 U 盘挂载失败");
+    }
+    match read_nbd_partition_scan_status() {
+        Ok(NbdPartitionScanStatus::Disabled) => info!("NBD 本机分区扫描已关闭"),
+        Ok(NbdPartitionScanStatus::Enabled(max_part)) => warn!(
+            max_part,
+            "NBD 本机分区扫描已开启，生产镜像应配置 nbd.max_part=0，避免 nbdXpY 事件风暴"
+        ),
+        Err(e) => warn!(error = %e, "读取 NBD 分区扫描配置失败"),
+    }
+
     // ===== 实例化下游服务 =====
     let scan_service = Arc::new(ScanService::new(
         ClamScanner::new(&config.clamdscan_path),
@@ -154,6 +180,7 @@ async fn main() {
         file_access_engine,
         hidg_nodes,
     );
+    let orchestrator_cleanup = orchestrator.cleanup_handle();
 
     // 启动编排器
     tokio::spawn(async move {
@@ -206,13 +233,25 @@ async fn main() {
     let addr: SocketAddr = config.listen_addr.parse().expect("监听地址解析失败");
     let listener = TcpListener::bind(addr).await.expect("端口绑定失败");
     info!("TLS 监听: {}", addr);
+    let shutdown_signal = shutdown::wait_for_shutdown_signal();
+    tokio::pin!(shutdown_signal);
 
     loop {
-        let (tcp_stream, peer_addr) = match listener.accept().await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("接受连接失败: {}", e);
-                continue;
+        let (tcp_stream, peer_addr) = tokio::select! {
+            result = listener.accept() => {
+                match result {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("接受连接失败: {}", e);
+                        continue;
+                    }
+                }
+            }
+            _ = &mut shutdown_signal => {
+                info!("收到服务退出信号，开始清理 USB 会话");
+                let _ = shutdown_tx.send(());
+                orchestrator_cleanup.shutdown_cleanup("service_shutdown").await;
+                break;
             }
         };
 
