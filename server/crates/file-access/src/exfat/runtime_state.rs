@@ -323,9 +323,23 @@ impl ExfatRuntimeState {
                 SectorOwner::FileData {
                     node_id,
                     file_offset,
+                    valid_bytes,
                     ..
+                } => {
+                    let Some(node) = self.index.node(NodeId(node_id)) else {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "file data owner not found in VFS",
+                        ));
+                    };
+                    let write_len = (valid_bytes as usize).min(chunk.len());
+                    self.commit_mutation(FsMutation::WriteFile {
+                        virtual_path: node.virtual_path.clone(),
+                        offset: file_offset,
+                        data: chunk[..write_len].to_vec(),
+                    })?;
                 }
-                | SectorOwner::AllocatedZero {
+                SectorOwner::AllocatedZero {
                     node_id,
                     file_offset,
                 } => {
@@ -335,10 +349,16 @@ impl ExfatRuntimeState {
                             "file data owner not found in VFS",
                         ));
                     };
+                    let known_remaining = node.size.saturating_sub(file_offset) as usize;
+                    let write_len = if node.size == 0 {
+                        chunk.len()
+                    } else {
+                        known_remaining.min(chunk.len())
+                    };
                     self.commit_mutation(FsMutation::WriteFile {
                         virtual_path: node.virtual_path.clone(),
                         offset: file_offset,
-                        data: chunk.to_vec(),
+                        data: chunk[..write_len].to_vec(),
                     })?;
                 }
                 _ => {

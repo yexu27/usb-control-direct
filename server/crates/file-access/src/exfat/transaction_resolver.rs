@@ -5,7 +5,7 @@ use crate::exfat::runtime_state::ExfatRuntimeState;
 use crate::exfat::sector_owner::SectorOwner;
 use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
 use crate::exfat::layout::SECTOR_SIZE;
-use crate::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation};
+use crate::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation, NodeKind};
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Default, Clone)]
@@ -68,14 +68,32 @@ impl TransactionResolver {
                 .cloned()
                 .collect::<Vec<_>>();
 
-            if missing_children.len() == 1 && new_entries.len() == 1 {
+            if missing_children.len() == 1
+                && new_entries.len() == 1
+                && is_rename_candidate(state, &missing_children[0], &new_entries[0])
+            {
                 let (_, from, kind) = &missing_children[0];
                 let to = join_virtual_path(&parent, &new_entries[0].name);
                 mutations.push(FsMutation::Rename {
                     from: from.clone(),
-                    to,
+                    to: to.clone(),
                     kind: *kind,
                 });
+                if !new_entries[0].is_dir {
+                    let chain = entry_chain(new_entries[0].first_cluster);
+                    mutations.push(FsMutation::RewriteFile {
+                        virtual_path: to,
+                        size: new_entries[0].data_length,
+                        valid_data_len: new_entries[0].valid_data_length,
+                        chain,
+                        data_patches: collect_data_patches(
+                            tx,
+                            &join_virtual_path(&parent, &new_entries[0].name),
+                            new_entries[0].first_cluster,
+                            new_entries[0].data_length,
+                        ),
+                    });
+                }
                 continue;
             }
 
@@ -115,20 +133,21 @@ impl TransactionResolver {
                     }
                     continue;
                 }
-                let chain = if entry.first_cluster == 0 {
-                    None
-                } else {
-                    Some(ClusterChain {
-                        first_cluster: entry.first_cluster,
-                        clusters: vec![entry.first_cluster],
-                    })
-                };
+                let chain = entry_chain(entry.first_cluster);
                 if entry.is_dir {
                     mutations.push(FsMutation::CreateDir {
                         parent: parent.clone(),
-                        name: entry.name,
-                        chain,
+                        name: entry.name.clone(),
+                        chain: chain.clone(),
                     });
+                    if let Some(data) = free_cluster_data(tx, entry.first_cluster) {
+                        resolve_new_directory_entries(
+                            &virtual_path,
+                            &data,
+                            tx,
+                            &mut mutations,
+                        )?;
+                    }
                 } else {
                     let data_patches = collect_data_patches(
                         tx,
@@ -149,6 +168,105 @@ impl TransactionResolver {
         }
         Ok(mutations)
     }
+}
+
+fn resolve_new_directory_entries(
+    parent: &str,
+    data: &[u8],
+    tx: &PendingTransaction,
+    mutations: &mut Vec<FsMutation>,
+) -> Result<(), std::io::Error> {
+    for entry in parse_entry_sets(data)? {
+        let chain = entry_chain(entry.first_cluster);
+        let virtual_path = join_virtual_path(parent, &entry.name);
+        if entry.is_dir {
+            mutations.push(FsMutation::CreateDir {
+                parent: parent.to_string(),
+                name: entry.name.clone(),
+                chain: chain.clone(),
+            });
+            if let Some(data) = free_cluster_data(tx, entry.first_cluster) {
+                resolve_new_directory_entries(&virtual_path, &data, tx, mutations)?;
+            }
+        } else {
+            let data_patches =
+                collect_data_patches(tx, &virtual_path, entry.first_cluster, entry.data_length);
+            mutations.push(FsMutation::CreateFile {
+                parent: parent.to_string(),
+                name: entry.name,
+                size: entry.data_length,
+                valid_data_len: entry.valid_data_length,
+                chain,
+                data_patches,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn is_rename_candidate(
+    state: &ExfatRuntimeState,
+    missing: &(String, String, NodeKind),
+    new_entry: &crate::exfat::directory_parser::ParsedDirectoryEntry,
+) -> bool {
+    let (_, from, kind) = missing;
+    if *kind != entry_kind(new_entry) {
+        return false;
+    }
+    let Some(node) = state.lookup_path(from) else {
+        return false;
+    };
+    node.first_cluster == entry_first_cluster(new_entry.first_cluster)
+}
+
+fn entry_kind(entry: &crate::exfat::directory_parser::ParsedDirectoryEntry) -> NodeKind {
+    if entry.is_dir {
+        NodeKind::Directory
+    } else {
+        NodeKind::File
+    }
+}
+
+fn entry_first_cluster(first_cluster: u32) -> Option<u32> {
+    if first_cluster == 0 {
+        None
+    } else {
+        Some(first_cluster)
+    }
+}
+
+fn entry_chain(first_cluster: u32) -> Option<ClusterChain> {
+    entry_first_cluster(first_cluster).map(|first_cluster| ClusterChain {
+        first_cluster,
+        clusters: vec![first_cluster],
+    })
+}
+
+fn free_cluster_data(tx: &PendingTransaction, cluster: u32) -> Option<Vec<u8>> {
+    if cluster == 0 {
+        return None;
+    }
+    let mut sectors = BTreeMap::<u64, Vec<u8>>::new();
+    for write in tx.writes() {
+        if let TransactionWrite::FreeCluster {
+            sector,
+            owner: SectorOwner::FreeCluster { cluster: write_cluster },
+            data,
+        } = write
+        {
+            if *write_cluster == cluster {
+                sectors.insert(*sector, data.clone());
+            }
+        }
+    }
+    if sectors.is_empty() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for data in sectors.values() {
+        out.extend_from_slice(data);
+    }
+    Some(out)
 }
 
 fn collect_data_patches(
