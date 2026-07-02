@@ -27,6 +27,8 @@ pub enum GadgetError {
     UdcNotFound(String),
     #[error("真实 U 盘分区不能直接绑定到 LUN: {0}")]
     RealBlockDeviceForbidden(String),
+    #[error("不能绑定 NBD 分区到 LUN，必须绑定整盘 /dev/nbdX: {0}")]
+    NbdPartitionForbidden(String),
 }
 
 #[derive(Debug, Clone)]
@@ -298,8 +300,13 @@ fn reject_direct_block_device(backing: &Path) -> Result<(), GadgetError> {
         ));
     };
 
-    if name.starts_with("nbd") {
-        return Ok(());
+    if let Some(rest) = name.strip_prefix("nbd") {
+        if !rest.is_empty() && rest.chars().all(|ch| ch.is_ascii_digit()) {
+            return Ok(());
+        }
+        return Err(GadgetError::NbdPartitionForbidden(
+            backing.display().to_string(),
+        ));
     }
 
     Err(GadgetError::RealBlockDeviceForbidden(

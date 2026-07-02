@@ -120,6 +120,22 @@ fn attach_mass_storage_rejects_real_sd_partition() {
 
 #[cfg(unix)]
 #[test]
+fn attach_mass_storage_rejects_nbd_partition() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let lun = make_lun(root, "mass_storage.usb0", true);
+
+    let runtime = GadgetRuntime::discover_under(root).unwrap();
+    let err = runtime
+        .attach_mass_storage(Path::new("/dev/nbd3p1"), false)
+        .unwrap_err();
+
+    assert!(err.to_string().contains("不能绑定 NBD 分区"));
+    assert_eq!(fs::read_to_string(lun.join("file")).unwrap().trim(), "");
+}
+
+#[cfg(unix)]
+#[test]
 fn detach_clears_backing_file() {
     let dir = tempdir().unwrap();
     let root = dir.path();
