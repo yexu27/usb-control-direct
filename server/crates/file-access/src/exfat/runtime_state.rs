@@ -16,8 +16,10 @@ use crate::exfat::transaction::PendingTransaction;
 use crate::exfat::transaction_resolver::TransactionResolver;
 use crate::exfat::volume::{FileDataSectorInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
-use crate::types::{ControlledEntry, PolicySnapshot};
+use crate::policy::evaluate_access;
+use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
 use crate::vfs::committer::RealFsCommitter;
+use crate::vfs::index::node_to_controlled_entry;
 use crate::vfs::mutation::{FsMutation, NodeKind};
 use crate::vfs::operation_guard::{FsOperation, OperationGuard};
 use crate::vfs::VfsNodeKind;
@@ -198,11 +200,10 @@ impl ExfatRuntimeState {
         let node = self.index.node(node_id).ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::NotFound, "virtual node not found")
         })?;
-        if node.is_virus {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "病毒文件禁止访问",
-            ));
+        if let AccessDecision::Deny(reason) =
+            evaluate_access(&node_to_controlled_entry(node), &self.snapshot)
+        {
+            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason));
         }
         let mut file = std::fs::OpenOptions::new().read(true).open(&node.real_path)?;
         file.seek(SeekFrom::Start(offset))?;
