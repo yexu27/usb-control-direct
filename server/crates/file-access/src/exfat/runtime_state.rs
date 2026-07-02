@@ -670,7 +670,47 @@ impl ExfatRuntimeState {
                     }
                 }
             }
+            FsMutation::Rename { from, to, .. } => {
+                self.directory_store.rename_subtree(from, to);
+            }
+            FsMutation::Delete { virtual_path, .. } => {
+                let removed_clusters = self.directory_store.remove_subtree(virtual_path);
+                for cluster in removed_clusters {
+                    self.bitmap.mark_free(cluster)?;
+                    self.sector_owners.mark_range(
+                        self.volume.layout().cluster_to_sector(cluster),
+                        SECTORS_PER_CLUSTER as u64,
+                        SectorOwner::FreeCluster { cluster },
+                    )?;
+                }
+                self.clear_stale_node_owners()?;
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn clear_stale_node_owners(&mut self) -> Result<(), std::io::Error> {
+        for sector in 0..self.total_sectors() {
+            let owner = self.sector_owner(sector);
+            let stale_node = match owner {
+                SectorOwner::DirectoryData { node_id }
+                | SectorOwner::FileData { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => {
+                    self.index.node(NodeId(node_id)).is_none()
+                }
+                _ => false,
+            };
+            if !stale_node {
+                continue;
+            }
+            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
+                self.bitmap.mark_free(cluster)?;
+                SectorOwner::FreeCluster { cluster }
+            } else {
+                SectorOwner::Reserved
+            };
+            self.sector_owners.mark_range(sector, 1, replacement)?;
         }
         Ok(())
     }

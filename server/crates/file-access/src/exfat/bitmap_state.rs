@@ -24,6 +24,12 @@ impl BitmapState {
         Ok(())
     }
 
+    pub fn mark_free(&mut self, cluster: u32) -> Result<(), std::io::Error> {
+        self.validate_cluster(cluster)?;
+        self.allocated.remove(&cluster);
+        Ok(())
+    }
+
     pub fn is_allocated(&self, cluster: u32) -> bool {
         self.allocated.contains(&cluster)
     }
