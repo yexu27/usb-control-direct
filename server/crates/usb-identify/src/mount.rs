@@ -12,6 +12,104 @@ use crate::error::UsbIdentifyError;
 /// USB 挂载目录前缀。
 const MOUNT_BASE: &str = "/mnt/usb_raw";
 
+/// `/proc/mounts` 中的一条挂载记录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MountEntry {
+    pub source: String,
+    pub target: String,
+    pub fs_type: String,
+}
+
+impl MountEntry {
+    pub fn new(
+        source: impl Into<String>,
+        target: impl Into<String>,
+        fs_type: impl Into<String>,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            target: target.into(),
+            fs_type: fs_type.into(),
+        }
+    }
+}
+
+/// 挂载前置检查错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MountPreflightError {
+    SourceAlreadyMounted { source: String, target: String },
+    MountPointOccupied { source: String, target: String },
+}
+
+impl std::fmt::Display for MountPreflightError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MountPreflightError::SourceAlreadyMounted { source, target } => {
+                write!(f, "设备已挂载: {source} -> {target}")
+            }
+            MountPreflightError::MountPointOccupied { source, target } => {
+                write!(f, "挂载点已占用: {source} -> {target}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MountPreflightError {}
+
+/// 解析 `/proc/mounts` 内容。
+pub fn mount_entries_from(contents: &str) -> Vec<MountEntry> {
+    contents
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let source = parts.next()?;
+            let target = parts.next()?;
+            let fs_type = parts.next()?;
+            Some(MountEntry::new(source, target, fs_type))
+        })
+        .collect()
+}
+
+/// 选择本服务原始 U 盘挂载目录下的残留挂载点。
+pub fn planned_usb_raw_unmounts(entries: &[MountEntry], mount_base: &str) -> Vec<String> {
+    let normalized = mount_base.trim_end_matches('/');
+    let prefix = format!("{normalized}/");
+    entries
+        .iter()
+        .filter(|entry| entry.target == normalized || entry.target.starts_with(&prefix))
+        .map(|entry| entry.target.clone())
+        .collect()
+}
+
+/// 基于已解析 mount table 检查挂载目标是否可用。
+pub fn ensure_mount_available_from(
+    entries: &[MountEntry],
+    dev_path: &str,
+    mount_point: &str,
+) -> Result<(), MountPreflightError> {
+    if let Some(entry) = entries.iter().find(|entry| entry.source == dev_path) {
+        return Err(MountPreflightError::SourceAlreadyMounted {
+            source: entry.source.clone(),
+            target: entry.target.clone(),
+        });
+    }
+
+    if let Some(entry) = entries.iter().find(|entry| entry.target == mount_point) {
+        return Err(MountPreflightError::MountPointOccupied {
+            source: entry.source.clone(),
+            target: entry.target.clone(),
+        });
+    }
+
+    Ok(())
+}
+
+fn current_mount_entries() -> Result<Vec<MountEntry>, UsbIdentifyError> {
+    let mounts = std::fs::read_to_string("/proc/mounts")
+        .map_err(|e| UsbIdentifyError::Internal(format!("读取 /proc/mounts 失败: {}", e)))?;
+    Ok(mount_entries_from(&mounts))
+}
+
 /// mount 操作 trait，便于测试时 mock。
 pub trait MountOperations: Send + Sync {
     /// 检查设备是否已挂载。
@@ -154,6 +252,10 @@ pub fn mount_partition(
     std::fs::create_dir_all(mount_point).map_err(|e| {
         UsbIdentifyError::MountFailed(format!("创建挂载点 {} 失败: {}", mount_point, e))
     })?;
+
+    let entries = current_mount_entries()?;
+    ensure_mount_available_from(&entries, dev_path, mount_point)
+        .map_err(|e| UsbIdentifyError::MountFailed(format!("挂载前检查失败: {}", e)))?;
 
     let flags = if read_only {
         nix::mount::MsFlags::MS_RDONLY | nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID
