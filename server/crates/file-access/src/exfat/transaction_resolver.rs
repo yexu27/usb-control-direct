@@ -6,7 +6,7 @@ use crate::exfat::sector_owner::SectorOwner;
 use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Default, Clone)]
 pub struct TransactionResolver;
@@ -22,14 +22,33 @@ impl TransactionResolver {
         state: &ExfatRuntimeState,
     ) -> Result<Vec<FsMutation>, std::io::Error> {
         let mut mutations = Vec::new();
+        let mut directory_writes = BTreeMap::<String, BTreeMap<u64, Vec<u8>>>::new();
         for write in tx.writes() {
-            let TransactionWrite::Directory { owner, data, .. } = write else {
+            if let TransactionWrite::Directory {
+                sector,
+                owner,
+                data,
+            } = write
+            {
+                let Some(parent) = state.parent_path_for_directory_owner(owner) else {
+                    continue;
+                };
+                directory_writes
+                    .entry(parent)
+                    .or_default()
+                    .insert(*sector, data.clone());
+            }
+        }
+
+        for (parent, sectors) in directory_writes {
+            let mut data = Vec::new();
+            for sector_data in sectors.values() {
+                data.extend_from_slice(sector_data);
+            }
+            if data.is_empty() {
                 continue;
-            };
-            let Some(parent) = state.parent_path_for_directory_owner(owner) else {
-                continue;
-            };
-            let parsed_entries = parse_entry_sets(data)?;
+            }
+            let parsed_entries = parse_entry_sets(&data)?;
             let parsed_names = parsed_entries
                 .iter()
                 .map(|entry| entry.name.clone())
