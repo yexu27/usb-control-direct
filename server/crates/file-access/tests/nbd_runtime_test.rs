@@ -36,3 +36,28 @@ fn wait_ready_under_times_out_when_size_does_not_match() {
 
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
 }
+
+#[test]
+fn wait_disconnected_under_accepts_empty_pid() {
+    let dir = tempdir().unwrap();
+    make_nbd_sysfs(dir.path(), "nbd3", "\n", "0\n");
+
+    let server = NbdServer::new(Path::new("/dev/nbd3"));
+
+    server
+        .wait_disconnected_under(dir.path(), Duration::from_millis(50))
+        .unwrap();
+}
+
+#[test]
+fn wait_disconnected_under_times_out_when_pid_remains() {
+    let dir = tempdir().unwrap();
+    make_nbd_sysfs(dir.path(), "nbd3", "2267\n", "32768\n");
+
+    let server = NbdServer::new(Path::new("/dev/nbd3"));
+    let err = server
+        .wait_disconnected_under(dir.path(), Duration::from_millis(20))
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+}

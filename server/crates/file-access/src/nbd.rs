@@ -160,6 +160,8 @@ pub struct NbdServer {
     user_fd: Option<RawFd>,
     /// 内核侧 socket fd（由 NBD_DO_IT 线程使用）。
     kernel_fd: Option<RawFd>,
+    /// NBD 请求处理任务。
+    request_loop_handle: Option<tokio::task::JoinHandle<()>>,
     /// NBD_DO_IT 线程完成通知。
     do_it_complete: Option<oneshot::Receiver<()>>,
 }
@@ -175,6 +177,7 @@ impl NbdServer {
             nbd_fd: None,
             user_fd: None,
             kernel_fd: None,
+            request_loop_handle: None,
             do_it_complete: None,
         }
     }
@@ -251,6 +254,10 @@ impl NbdServer {
         Ok(user_fd)
     }
 
+    pub fn set_request_loop_handle(&mut self, handle: tokio::task::JoinHandle<()>) {
+        self.request_loop_handle = Some(handle);
+    }
+
     pub fn wait_ready(
         &self,
         expected_sectors: u64,
@@ -318,15 +325,58 @@ impl NbdServer {
         }
     }
 
-    /// 停止 NBD 服务。
-    pub fn stop(&mut self) {
-        if let Some(nbd_fd) = self.nbd_fd.take() {
+    pub fn wait_disconnected(&self, timeout: Duration) -> Result<(), std::io::Error> {
+        self.wait_disconnected_under(Path::new("/sys/block"), timeout)
+    }
+
+    pub fn wait_disconnected_under(
+        &self,
+        sys_block_root: &Path,
+        timeout: Duration,
+    ) -> Result<(), std::io::Error> {
+        let name = self
+            .nbd_device_path
+            .file_name()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("invalid NBD path: {}", self.nbd_device_path.display()),
+                )
+            })?
+            .to_string_lossy()
+            .to_string();
+
+        let nbd_sys = sys_block_root.join(&name);
+        let deadline = Instant::now() + timeout;
+
+        loop {
+            let pid_connected = std::fs::read_to_string(nbd_sys.join("pid"))
+                .map(|value| {
+                    let value = value.trim();
+                    !value.is_empty() && value != "0"
+                })
+                .unwrap_or(false);
+
+            if !pid_connected {
+                return Ok(());
+            }
+
+            if Instant::now() >= deadline {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("NBD device {} still connected", self.nbd_device_path.display()),
+                ));
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn disconnect_for_stop(&mut self) {
+        if let Some(nbd_fd) = self.nbd_fd {
             // 安全性: nbd_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
             unsafe {
                 let _ = nbd_ioctl(nbd_fd, NBD_DISCONNECT, 0);
-                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_SOCK, 0);
-                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_QUE, 0);
-                libc::close(nbd_fd);
             }
         }
         if let Some(user_fd) = self.user_fd.take() {
@@ -341,6 +391,47 @@ impl NbdServer {
                 libc::close(kernel_fd);
             }
         }
+    }
+
+    fn clear_and_close_nbd_fd(&mut self) {
+        if let Some(nbd_fd) = self.nbd_fd.take() {
+            // 安全性: nbd_fd 来自 start() 中 mem::forget 保持的有效文件描述符。
+            unsafe {
+                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_SOCK, 0);
+                let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_QUE, 0);
+                libc::close(nbd_fd);
+            }
+        }
+    }
+
+    pub async fn stop_async(&mut self) {
+        self.disconnect_for_stop();
+
+        if let Some(handle) = self.request_loop_handle.take() {
+            if let Err(e) = handle.await {
+                warn!(error = %e, "NBD request loop join 失败");
+            }
+        }
+
+        if let Some(done) = self.do_it_complete.take() {
+            match tokio::time::timeout(Duration::from_secs(2), done).await {
+                Ok(Ok(())) => debug!("NBD_DO_IT 已退出"),
+                Ok(Err(_)) => warn!("NBD_DO_IT 完成通知已关闭"),
+                Err(_) => warn!("等待 NBD_DO_IT 退出超时"),
+            }
+        }
+
+        if let Err(e) = self.wait_disconnected(Duration::from_secs(2)) {
+            warn!(error = %e, "NBD 断开状态确认失败");
+        }
+
+        self.clear_and_close_nbd_fd();
+    }
+
+    /// 停止 NBD 服务。
+    pub fn stop(&mut self) {
+        self.disconnect_for_stop();
+        self.clear_and_close_nbd_fd();
     }
 
     /// NBD 设备路径。

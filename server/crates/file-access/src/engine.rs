@@ -121,12 +121,13 @@ impl DeviceMapper for FileAccessEngine {
 
             // 6. 启动请求处理循环（spawn_blocking 避免阻塞异步运行时）
             let fs_clone = Arc::clone(&fs);
-            tokio::task::spawn_blocking(move || {
+            let request_loop_handle = tokio::task::spawn_blocking(move || {
                 run_request_loop(user_fd, fs_clone);
             });
+            nbd_server.set_request_loop_handle(request_loop_handle);
 
             if let Err(e) = nbd_server.wait_ready(total_sectors, Duration::from_millis(500)) {
-                nbd_server.stop();
+                nbd_server.stop_async().await;
                 return Err(MapError::NbdFailed(format!("NBD backing 未就绪: {}", e)));
             }
             debug!(
@@ -138,7 +139,7 @@ impl DeviceMapper for FileAccessEngine {
             // 7. 启用 OTG Gadget
             let gadget = self.gadget.clone();
             if let Err(e) = gadget.attach_mass_storage(&nbd_device_path, readonly) {
-                nbd_server.stop();
+                nbd_server.stop_async().await;
                 return Err(MapError::GadgetFailed(e.to_string()));
             }
 
@@ -177,7 +178,7 @@ impl DeviceMapper for FileAccessEngine {
                 if let Err(e) = mapping.fs.shutdown() {
                     error!("S04 flush/shutdown 失败: {}", e);
                 }
-                mapping.nbd_server.stop();
+                mapping.nbd_server.stop_async().await;
                 info!("S04 映射已清理: session={}", session.id);
             }
 
