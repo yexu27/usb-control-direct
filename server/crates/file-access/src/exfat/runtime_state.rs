@@ -656,29 +656,7 @@ impl ExfatRuntimeState {
                     std::io::Error::new(std::io::ErrorKind::NotFound, "created file not in VFS")
                 })?;
                 if let Some(chain) = chain {
-                    self.fat.set_chain(&chain.clusters)?;
-                    let mut remaining = *size;
-                    let mut offset = 0_u64;
-                    for cluster in &chain.clusters {
-                        self.bitmap.mark_allocated(*cluster)?;
-                        for i in 0..SECTORS_PER_CLUSTER as u64 {
-                            if remaining == 0 {
-                                break;
-                            }
-                            let valid_bytes = remaining.min(crate::exfat::layout::SECTOR_SIZE as u64);
-                            self.sector_owners.mark_range(
-                                self.volume.layout().cluster_to_sector(*cluster) + i,
-                                1,
-                                SectorOwner::FileData {
-                                    node_id: id.0,
-                                    file_offset: offset,
-                                    valid_bytes: valid_bytes as u32,
-                                },
-                            )?;
-                            remaining = remaining.saturating_sub(valid_bytes);
-                            offset += valid_bytes;
-                        }
-                    }
+                    self.mark_file_chain(id, chain, *size)?;
                 }
             }
             FsMutation::Rename { from, to, .. } => {
@@ -696,7 +674,55 @@ impl ExfatRuntimeState {
                 }
                 self.clear_stale_node_owners()?;
             }
+            FsMutation::RewriteFile {
+                virtual_path,
+                chain,
+                size,
+                ..
+            } => {
+                let id = self.index.lookup_path(virtual_path).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "rewritten file not in VFS")
+                })?;
+                self.clear_file_node_owners(id)?;
+                if let Some(chain) = chain {
+                    self.mark_file_chain(id, chain, *size)?;
+                }
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn mark_file_chain(
+        &mut self,
+        id: NodeId,
+        chain: &crate::vfs::mutation::ClusterChain,
+        size: u64,
+    ) -> Result<(), std::io::Error> {
+        self.fat.set_chain(&chain.clusters)?;
+        let mut remaining = size;
+        let mut offset = 0_u64;
+        for cluster in &chain.clusters {
+            self.bitmap.mark_allocated(*cluster)?;
+            for i in 0..SECTORS_PER_CLUSTER as u64 {
+                let sector = self.volume.layout().cluster_to_sector(*cluster) + i;
+                let owner = if remaining == 0 {
+                    SectorOwner::AllocatedZero {
+                        node_id: id.0,
+                        file_offset: offset,
+                    }
+                } else {
+                    let valid_bytes = remaining.min(crate::exfat::layout::SECTOR_SIZE as u64);
+                    remaining = remaining.saturating_sub(valid_bytes);
+                    SectorOwner::FileData {
+                        node_id: id.0,
+                        file_offset: offset,
+                        valid_bytes: valid_bytes as u32,
+                    }
+                };
+                self.sector_owners.mark_range(sector, 1, owner)?;
+                offset += crate::exfat::layout::SECTOR_SIZE as u64;
+            }
         }
         Ok(())
     }
@@ -713,6 +739,28 @@ impl ExfatRuntimeState {
                 _ => false,
             };
             if !stale_node {
+                continue;
+            }
+            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
+                self.bitmap.mark_free(cluster)?;
+                SectorOwner::FreeCluster { cluster }
+            } else {
+                SectorOwner::Reserved
+            };
+            self.sector_owners.mark_range(sector, 1, replacement)?;
+        }
+        Ok(())
+    }
+
+    fn clear_file_node_owners(&mut self, id: NodeId) -> Result<(), std::io::Error> {
+        for sector in 0..self.total_sectors() {
+            let owner = self.sector_owner(sector);
+            let owned_by_file = match owner {
+                SectorOwner::FileData { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => node_id == id.0,
+                _ => false,
+            };
+            if !owned_by_file {
                 continue;
             }
             let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {

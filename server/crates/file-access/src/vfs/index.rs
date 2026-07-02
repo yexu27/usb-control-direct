@@ -103,12 +103,17 @@ impl VfsIndex {
                 Ok(())
             }
             FsMutation::RewriteFile {
-                virtual_path, size, ..
+                virtual_path,
+                size,
+                chain,
+                ..
             } => {
                 let id = self.lookup_path(virtual_path).ok_or_else(|| {
                     std::io::Error::new(std::io::ErrorKind::NotFound, "node not found")
                 })?;
-                self.nodes.get_mut(&id).unwrap().size = *size;
+                let node = self.nodes.get_mut(&id).unwrap();
+                node.size = *size;
+                node.first_cluster = chain.as_ref().map(|c| c.first_cluster);
                 Ok(())
             }
             FsMutation::WriteFile { .. } => Ok(()),

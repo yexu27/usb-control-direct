@@ -85,11 +85,33 @@ impl TransactionResolver {
             for entry in parsed_entries {
                 let virtual_path = join_virtual_path(&parent, &entry.name);
                 if let Some(node) = state.lookup_path(&virtual_path) {
-                    if !entry.is_dir && entry.data_length != node.size {
-                        mutations.push(FsMutation::Truncate {
-                            virtual_path,
-                            len: entry.data_length,
-                        });
+                    if !entry.is_dir {
+                        let entry_first_cluster = if entry.first_cluster == 0 {
+                            None
+                        } else {
+                            Some(entry.first_cluster)
+                        };
+                        if entry.data_length != node.size
+                            || entry_first_cluster != node.first_cluster
+                        {
+                            let chain = entry_first_cluster.map(|first_cluster| ClusterChain {
+                                first_cluster,
+                                clusters: vec![first_cluster],
+                            });
+                            let data_patches = collect_data_patches(
+                                tx,
+                                &virtual_path,
+                                entry.first_cluster,
+                                entry.data_length,
+                            );
+                            mutations.push(FsMutation::RewriteFile {
+                                virtual_path,
+                                size: entry.data_length,
+                                valid_data_len: entry.valid_data_length,
+                                chain,
+                                data_patches,
+                            });
+                        }
                     }
                     continue;
                 }
