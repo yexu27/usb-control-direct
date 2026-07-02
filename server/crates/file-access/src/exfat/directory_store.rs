@@ -31,4 +31,8 @@ impl DirectoryStore {
     pub fn directory_clusters(&self, path: &str) -> Option<&[u32]> {
         self.by_path.get(path).map(|record| record.clusters.as_slice())
     }
+
+    pub fn records(&self) -> impl Iterator<Item = &DirectoryRecord> {
+        self.by_path.values()
+    }
 }

@@ -27,10 +27,6 @@ impl WriteInterpreter {
                 std::io::ErrorKind::PermissionDenied,
                 "禁止修改 exFAT 关键区域",
             )),
-            SectorOwner::Unknown => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "无法解释未知 sector owner 的写入",
-            )),
             SectorOwner::Fat => {
                 tx.record_write(TransactionWrite::Fat {
                     sector,

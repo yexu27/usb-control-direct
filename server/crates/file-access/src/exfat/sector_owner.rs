@@ -2,7 +2,6 @@
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SectorOwner {
-    Unknown,
     OutOfRange,
     Mbr,
     BootRegion,

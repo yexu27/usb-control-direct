@@ -146,12 +146,7 @@ fn runtime_initial_state_contains_complete_tree_and_explicit_sector_owners() {
     }
     assert!(saw_free_cluster, "virtual volume should expose explicit free clusters");
 
-    for sector in [0, PARTITION_OFFSET_SECTORS, root_sector, deep_dir_sector] {
-        assert!(
-            !matches!(state.sector_owner(sector), SectorOwner::Unknown),
-            "sector {sector} must have explicit owner"
-        );
-    }
+    state.validate_consistency().unwrap();
     assert!(matches!(
         state.sector_owner(state.total_sectors() + 1),
         SectorOwner::OutOfRange

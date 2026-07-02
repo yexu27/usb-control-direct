@@ -28,6 +28,10 @@ impl BitmapState {
         self.allocated.contains(&cluster)
     }
 
+    pub fn allocated_clusters(&self) -> impl Iterator<Item = u32> + '_ {
+        self.allocated.iter().copied()
+    }
+
     fn validate_cluster(&self, cluster: u32) -> Result<(), std::io::Error> {
         if cluster < FIRST_CLUSTER || cluster >= FIRST_CLUSTER + self.cluster_count {
             return Err(std::io::Error::new(

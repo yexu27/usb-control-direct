@@ -145,7 +145,7 @@ impl ExfatRuntimeState {
             }
         }
 
-        Ok(Self {
+        let state = Self {
             index,
             volume,
             directory_store,
@@ -156,7 +156,9 @@ impl ExfatRuntimeState {
             committer: RealFsCommitter::new(mount_root.to_path_buf()),
             pending_tx: PendingTransaction::new(1),
             next_tx_id: 2,
-        })
+        };
+        state.validate_consistency()?;
+        Ok(state)
     }
 
     pub fn lookup_path(&self, path: &str) -> Option<&VfsNode> {
@@ -366,6 +368,74 @@ impl ExfatRuntimeState {
         self.flush()
     }
 
+    pub fn validate_consistency(&self) -> Result<(), std::io::Error> {
+        for sector in 0..self.total_sectors() {
+            if matches!(self.sector_owner(sector), SectorOwner::OutOfRange) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "in-range sector has out-of-range owner",
+                ));
+            }
+        }
+
+        for record in self.directory_store.records() {
+            if self.index.node(record.node_id).is_none() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("directory {} points to missing VFS node", record.virtual_path),
+                ));
+            }
+            for cluster in &record.clusters {
+                if !self.bitmap.is_allocated(*cluster) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("directory {} cluster {} is not allocated", record.virtual_path, cluster),
+                    ));
+                }
+                let owner = self.sector_owner(self.cluster_to_sector(*cluster));
+                let valid_owner = if record.virtual_path == "/" {
+                    matches!(owner, SectorOwner::RootDirectory)
+                } else {
+                    matches!(owner, SectorOwner::DirectoryData { node_id } if node_id == record.node_id.0)
+                };
+                if !valid_owner {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("directory {} cluster {} has invalid owner", record.virtual_path, cluster),
+                    ));
+                }
+            }
+        }
+
+        for cluster in self.bitmap.allocated_clusters() {
+            let owner = self.sector_owner(self.cluster_to_sector(cluster));
+            if matches!(owner, SectorOwner::FreeCluster { .. }) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("allocated cluster {} still marked free", cluster),
+                ));
+            }
+        }
+
+        for sector in 0..self.total_sectors() {
+            match self.sector_owner(sector) {
+                SectorOwner::DirectoryData { node_id }
+                | SectorOwner::FileData { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => {
+                    if self.index.node(NodeId(node_id)).is_none() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("sector {sector} references missing node {node_id}"),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn record_write(
         &self,
         tx: &mut PendingTransaction,
@@ -441,6 +511,7 @@ impl ExfatRuntimeState {
         }
         self.index.apply_mutation(&mutation)?;
         self.refresh_runtime_metadata_after_mutation(&mutation)?;
+        self.validate_consistency()?;
         Ok(())
     }
 
