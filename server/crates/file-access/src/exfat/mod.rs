@@ -13,7 +13,6 @@ pub mod allocator;
 pub mod directory_store;
 pub mod directory_parser;
 pub mod dir_snapshot;
-pub mod diff;
 pub mod fs;
 pub mod runtime_state;
 pub mod sector_owner;

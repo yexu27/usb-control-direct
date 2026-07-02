@@ -1,13 +1,15 @@
 //! Runtime exFAT state built from the controlled USB tree.
 
 use std::collections::HashMap;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use crate::exfat::bitmap_state::BitmapState;
 use crate::exfat::directory_store::DirectoryStore;
 use crate::exfat::fat_state::FatState;
 use crate::exfat::layout::{
-    BOOT_REGION_SECTORS, FIRST_CLUSTER, PARTITION_OFFSET_SECTORS, SECTORS_PER_CLUSTER,
+    BOOT_REGION_SECTORS, FIRST_CLUSTER, PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
+    SECTORS_PER_CLUSTER,
 };
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
 use crate::exfat::transaction::PendingTransaction;
@@ -18,8 +20,8 @@ use crate::types::{ControlledEntry, PolicySnapshot};
 use crate::vfs::committer::RealFsCommitter;
 use crate::vfs::mutation::{FsMutation, NodeKind};
 use crate::vfs::operation_guard::{FsOperation, OperationGuard};
-use crate::vfs::{VfsIndex, VfsNode};
 use crate::vfs::VfsNodeKind;
+use crate::vfs::{NodeId, VfsIndex, VfsNode};
 
 #[derive(Debug, Clone)]
 pub struct ExfatRuntimeState {
@@ -31,6 +33,8 @@ pub struct ExfatRuntimeState {
     sector_owners: SectorOwnerMap,
     snapshot: PolicySnapshot,
     committer: RealFsCommitter,
+    pending_tx: PendingTransaction,
+    next_tx_id: u64,
 }
 
 impl ExfatRuntimeState {
@@ -150,11 +154,21 @@ impl ExfatRuntimeState {
             sector_owners,
             snapshot,
             committer: RealFsCommitter::new(mount_root.to_path_buf()),
+            pending_tx: PendingTransaction::new(1),
+            next_tx_id: 2,
         })
     }
 
     pub fn lookup_path(&self, path: &str) -> Option<&VfsNode> {
         self.index.lookup_path(path).and_then(|id| self.index.node(id))
+    }
+
+    pub fn lookup_node_id(&self, path: &str) -> Option<NodeId> {
+        self.index.lookup_path(path)
+    }
+
+    pub fn node(&self, node_id: NodeId) -> Option<&VfsNode> {
+        self.index.node(node_id)
     }
 
     pub fn directory_store(&self) -> &DirectoryStore {
@@ -171,6 +185,185 @@ impl ExfatRuntimeState {
 
     pub fn cluster_to_sector(&self, cluster: u32) -> u64 {
         self.volume.layout().cluster_to_sector(cluster)
+    }
+
+    pub fn read_file(
+        &self,
+        node_id: NodeId,
+        offset: u64,
+        len: usize,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let node = self.index.node(node_id).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "virtual node not found")
+        })?;
+        if node.is_virus {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "病毒文件禁止访问",
+            ));
+        }
+        let mut file = std::fs::OpenOptions::new().read(true).open(&node.real_path)?;
+        file.seek(SeekFrom::Start(offset))?;
+        let mut buf = vec![0u8; len];
+        let read_len = file.read(&mut buf)?;
+        buf.truncate(read_len);
+        Ok(buf)
+    }
+
+    pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
+        let mut out = Vec::with_capacity(len);
+        let mut current = offset;
+        while out.len() < len {
+            let sector = current / SECTOR_SIZE as u64;
+            let sector_offset = (current % SECTOR_SIZE as u64) as usize;
+            let take = (SECTOR_SIZE as usize - sector_offset).min(len - out.len());
+            match self.sector_owner(sector) {
+                SectorOwner::FileData {
+                    node_id,
+                    file_offset,
+                    valid_bytes,
+                } => {
+                    let available = valid_bytes.saturating_sub(sector_offset as u32) as usize;
+                    let read_len = take.min(available);
+                    if read_len == 0 {
+                        out.resize(out.len() + take, 0);
+                    } else if let Some(node) = self.index.node(NodeId(node_id)) {
+                        let mut file = std::fs::File::open(&node.real_path)?;
+                        file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
+                        let mut data = vec![0u8; read_len];
+                        let actual = file.read(&mut data)?;
+                        out.extend_from_slice(&data[..actual]);
+                        if actual < take {
+                            out.resize(out.len() + take - actual, 0);
+                        }
+                    } else {
+                        out.resize(out.len() + take, 0);
+                    }
+                }
+                SectorOwner::AllocatedZero {
+                    node_id,
+                    file_offset,
+                } => {
+                    if let Some(node) = self.index.node(NodeId(node_id)) {
+                        let mut file = std::fs::File::open(&node.real_path)?;
+                        file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
+                        let mut data = vec![0u8; take];
+                        let actual = file.read(&mut data)?;
+                        out.extend_from_slice(&data[..actual]);
+                        if actual < take {
+                            out.resize(out.len() + take - actual, 0);
+                        }
+                    } else {
+                        out.resize(out.len() + take, 0);
+                    }
+                }
+                SectorOwner::OutOfRange => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "read out of virtual exFAT range",
+                    ));
+                }
+                _ => match self.volume.read_sector(sector) {
+                    crate::types::SectorContent::Metadata(data) => {
+                        out.extend_from_slice(&data[sector_offset..sector_offset + take]);
+                    }
+                    crate::types::SectorContent::FileData {
+                        real_path,
+                        offset,
+                        valid_bytes,
+                        blocked,
+                    } => {
+                        if blocked {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::PermissionDenied,
+                                "文件被策略阻断，禁止读取",
+                            ));
+                        }
+                        let available = valid_bytes.saturating_sub(sector_offset as u32) as usize;
+                        let read_len = take.min(available);
+                        let mut file = std::fs::File::open(real_path)?;
+                        file.seek(SeekFrom::Start(offset + sector_offset as u64))?;
+                        let mut data = vec![0u8; read_len];
+                        let actual = file.read(&mut data)?;
+                        out.extend_from_slice(&data[..actual]);
+                        if actual < take {
+                            out.resize(out.len() + take - actual, 0);
+                        }
+                    }
+                    crate::types::SectorContent::Zero => out.resize(out.len() + take, 0),
+                },
+            }
+            current += take as u64;
+        }
+        Ok(out)
+    }
+
+    pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+        if offset % SECTOR_SIZE as u64 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "NBD write offset is not sector aligned",
+            ));
+        }
+        let start_sector = offset / SECTOR_SIZE as u64;
+        for (i, chunk) in data.chunks(SECTOR_SIZE as usize).enumerate() {
+            let sector = start_sector + i as u64;
+            let owner = self.sector_owner(sector);
+            match owner.clone() {
+                SectorOwner::FileData {
+                    node_id,
+                    file_offset,
+                    ..
+                }
+                | SectorOwner::AllocatedZero {
+                    node_id,
+                    file_offset,
+                } => {
+                    let Some(node) = self.index.node(NodeId(node_id)) else {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "file data owner not found in VFS",
+                        ));
+                    };
+                    self.commit_mutation(FsMutation::WriteFile {
+                        virtual_path: node.virtual_path.clone(),
+                        offset: file_offset,
+                        data: chunk.to_vec(),
+                    })?;
+                }
+                _ => {
+                    WriteInterpreter::new().record_sector_write(
+                        &mut self.pending_tx,
+                        sector,
+                        owner,
+                        chunk,
+                    )?;
+                    let tx = self.pending_tx.clone();
+                    let mutations = self.try_commit_closed_transaction(&tx)?;
+                    if !mutations.is_empty() {
+                        self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                        self.next_tx_id += 1;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> Result<(), std::io::Error> {
+        if !self.pending_tx.writes().is_empty() {
+            let tx = self.pending_tx.clone();
+            let mutations = self.try_commit_closed_transaction(&tx)?;
+            if !mutations.is_empty() {
+                self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                self.next_tx_id += 1;
+            }
+        }
+        self.committer.sync_mount_root()
+    }
+
+    pub fn shutdown(&mut self) -> Result<(), std::io::Error> {
+        self.flush()
     }
 
     pub fn record_write(
