@@ -209,6 +209,33 @@ pub fn disconnect_nbd_pool(pool_size: u32) {
     }
 }
 
+/// NBD 本机分区扫描状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NbdPartitionScanStatus {
+    Disabled,
+    Enabled(u32),
+}
+
+pub fn parse_nbd_max_part(value: &str) -> Result<NbdPartitionScanStatus, std::io::Error> {
+    let parsed = value.trim().parse::<u32>().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid nbd max_part value: {}", e),
+        )
+    })?;
+
+    if parsed == 0 {
+        Ok(NbdPartitionScanStatus::Disabled)
+    } else {
+        Ok(NbdPartitionScanStatus::Enabled(parsed))
+    }
+}
+
+pub fn read_nbd_partition_scan_status() -> Result<NbdPartitionScanStatus, std::io::Error> {
+    let value = std::fs::read_to_string("/sys/module/nbd/parameters/max_part")?;
+    parse_nbd_max_part(&value)
+}
+
 /// NBD 服务器。
 pub struct NbdServer {
     /// /dev/nbdX 路径。

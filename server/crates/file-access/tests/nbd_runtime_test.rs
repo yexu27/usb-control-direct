@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use file_access::nbd::{nbd_name_from_device_path, NbdServer};
+use file_access::nbd::{
+    nbd_name_from_device_path, parse_nbd_max_part, NbdPartitionScanStatus, NbdServer,
+};
 use tempfile::tempdir;
 
 fn make_nbd_sysfs(root: &Path, name: &str, pid: &str, size: &str) {
@@ -75,4 +77,20 @@ fn nbd_name_from_device_path_rejects_partition() {
     let err = nbd_name_from_device_path(Path::new("/dev/nbd3p1")).unwrap_err();
 
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+}
+
+#[test]
+fn parse_zero_max_part_as_disabled() {
+    assert_eq!(
+        parse_nbd_max_part("0\n").unwrap(),
+        NbdPartitionScanStatus::Disabled
+    );
+}
+
+#[test]
+fn parse_nonzero_max_part_as_enabled() {
+    assert_eq!(
+        parse_nbd_max_part("31\n").unwrap(),
+        NbdPartitionScanStatus::Enabled(31)
+    );
 }
