@@ -82,4 +82,11 @@ impl SectorOwnerMap {
         }
         SectorOwner::Reserved
     }
+
+    pub fn explicit_ranges(&self) -> Vec<(u64, u64, SectorOwner)> {
+        self.ranges
+            .iter()
+            .map(|range| (range.start, range.len, range.owner.clone()))
+            .collect()
+    }
 }

@@ -400,15 +400,6 @@ impl ExfatRuntimeState {
     }
 
     pub fn validate_consistency(&self) -> Result<(), std::io::Error> {
-        for sector in 0..self.total_sectors() {
-            if matches!(self.sector_owner(sector), SectorOwner::OutOfRange) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "in-range sector has out-of-range owner",
-                ));
-            }
-        }
-
         for record in self.directory_store.records() {
             if self.index.node(record.node_id).is_none() {
                 return Err(std::io::Error::new(
@@ -448,19 +439,21 @@ impl ExfatRuntimeState {
             }
         }
 
-        for sector in 0..self.total_sectors() {
-            match self.sector_owner(sector) {
-                SectorOwner::DirectoryData { node_id }
-                | SectorOwner::FileData { node_id, .. }
-                | SectorOwner::AllocatedZero { node_id, .. } => {
-                    if self.index.node(NodeId(node_id)).is_none() {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("sector {sector} references missing node {node_id}"),
-                        ));
+        for (start, len, _) in self.sector_owners.explicit_ranges() {
+            for sector in start..start + len {
+                match self.sector_owner(sector) {
+                    SectorOwner::DirectoryData { node_id }
+                    | SectorOwner::FileData { node_id, .. }
+                    | SectorOwner::AllocatedZero { node_id, .. } => {
+                        if self.index.node(NodeId(node_id)).is_none() {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("sector {sector} references missing node {node_id}"),
+                            ));
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -748,48 +741,54 @@ impl ExfatRuntimeState {
     }
 
     fn clear_stale_node_owners(&mut self) -> Result<(), std::io::Error> {
-        for sector in 0..self.total_sectors() {
-            let owner = self.sector_owner(sector);
-            let stale_node = match owner {
-                SectorOwner::DirectoryData { node_id }
-                | SectorOwner::FileData { node_id, .. }
-                | SectorOwner::AllocatedZero { node_id, .. } => {
-                    self.index.node(NodeId(node_id)).is_none()
+        for (start, len, _) in self.sector_owners.explicit_ranges() {
+            for sector in start..start + len {
+                let owner = self.sector_owner(sector);
+                let stale_node = match owner {
+                    SectorOwner::DirectoryData { node_id }
+                    | SectorOwner::FileData { node_id, .. }
+                    | SectorOwner::AllocatedZero { node_id, .. } => {
+                        self.index.node(NodeId(node_id)).is_none()
+                    }
+                    _ => false,
+                };
+                if !stale_node {
+                    continue;
                 }
-                _ => false,
-            };
-            if !stale_node {
-                continue;
+                let replacement =
+                    if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
+                        self.bitmap.mark_free(cluster)?;
+                        SectorOwner::FreeCluster { cluster }
+                    } else {
+                        SectorOwner::Reserved
+                };
+                self.sector_owners.mark_range(sector, 1, replacement)?;
             }
-            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
-                self.bitmap.mark_free(cluster)?;
-                SectorOwner::FreeCluster { cluster }
-            } else {
-                SectorOwner::Reserved
-            };
-            self.sector_owners.mark_range(sector, 1, replacement)?;
         }
         Ok(())
     }
 
     fn clear_file_node_owners(&mut self, id: NodeId) -> Result<(), std::io::Error> {
-        for sector in 0..self.total_sectors() {
-            let owner = self.sector_owner(sector);
-            let owned_by_file = match owner {
-                SectorOwner::FileData { node_id, .. }
-                | SectorOwner::AllocatedZero { node_id, .. } => node_id == id.0,
-                _ => false,
-            };
-            if !owned_by_file {
-                continue;
+        for (start, len, _) in self.sector_owners.explicit_ranges() {
+            for sector in start..start + len {
+                let owner = self.sector_owner(sector);
+                let owned_by_file = match owner {
+                    SectorOwner::FileData { node_id, .. }
+                    | SectorOwner::AllocatedZero { node_id, .. } => node_id == id.0,
+                    _ => false,
+                };
+                if !owned_by_file {
+                    continue;
+                }
+                let replacement =
+                    if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
+                        self.bitmap.mark_free(cluster)?;
+                        SectorOwner::FreeCluster { cluster }
+                    } else {
+                        SectorOwner::Reserved
+                    };
+                self.sector_owners.mark_range(sector, 1, replacement)?;
             }
-            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
-                self.bitmap.mark_free(cluster)?;
-                SectorOwner::FreeCluster { cluster }
-            } else {
-                SectorOwner::Reserved
-            };
-            self.sector_owners.mark_range(sector, 1, replacement)?;
         }
         Ok(())
     }
