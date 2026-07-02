@@ -308,6 +308,7 @@ impl ExfatRuntimeState {
             ));
         }
         let start_sector = offset / SECTOR_SIZE as u64;
+        let mut recorded_transaction_write = false;
         for (i, chunk) in data.chunks(SECTOR_SIZE as usize).enumerate() {
             let sector = start_sector + i as u64;
             let owner = self.sector_owner(sector);
@@ -340,13 +341,16 @@ impl ExfatRuntimeState {
                         owner,
                         chunk,
                     )?;
-                    let tx = self.pending_tx.clone();
-                    let mutations = self.try_commit_closed_transaction(&tx)?;
-                    if !mutations.is_empty() {
-                        self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                        self.next_tx_id += 1;
-                    }
+                    recorded_transaction_write = true;
                 }
+            }
+        }
+        if recorded_transaction_write {
+            let tx = self.pending_tx.clone();
+            let mutations = self.try_commit_closed_transaction(&tx)?;
+            if !mutations.is_empty() {
+                self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                self.next_tx_id += 1;
             }
         }
         Ok(())
