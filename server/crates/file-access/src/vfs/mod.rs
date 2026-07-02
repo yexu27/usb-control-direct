@@ -2,7 +2,6 @@
 
 pub mod committer;
 pub mod index;
-pub mod journal;
 pub mod mutation;
 pub mod node;
 pub mod operation_guard;
