@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use file_access::exfat::dir_entry::build_file_entry_set;
+use file_access::exfat::directory_parser::parse_entry_sets;
+use file_access::exfat::fs::VirtualExfatFs;
 use file_access::exfat::layout::SECTOR_SIZE;
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::sector_owner::SectorOwner;
@@ -88,6 +90,27 @@ fn write_entries(
         cursor += entry.len();
     }
     state.record_write(tx, sector, &data).unwrap();
+}
+
+fn root_entry_cluster_for_fs(fs: &VirtualExfatFs, name: &str) -> u32 {
+    let data = fs.read_at(fs.root_dir_offset_for_test(), 4096).unwrap();
+    parse_entry_sets(&data)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .unwrap()
+        .first_cluster
+}
+
+fn write_facade_dir_entries(fs: &VirtualExfatFs, dir_cluster: u32, entries: Vec<Vec<u8>>) {
+    let mut data = vec![0u8; 4096];
+    let mut cursor = 0usize;
+    for entry in entries {
+        data[cursor..cursor + entry.len()].copy_from_slice(&entry);
+        cursor += entry.len();
+    }
+    fs.write_at(fs.cluster_offset_for_test(dir_cluster), &data)
+        .unwrap();
 }
 
 #[test]
@@ -201,4 +224,47 @@ fn runtime_matrix_initial_mapping_preserves_nested_empty_objects() {
         .directory_store()
         .directory_clusters("/1/2/empty")
         .is_some());
+}
+
+#[test]
+fn facade_write_at_commits_outer_directory_tree_delete() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("codex_baseline_matrix/a/b")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("codex_baseline_matrix/empty")).unwrap();
+    std::fs::write(
+        tmp.path().join("codex_baseline_matrix/a/b/c.txt"),
+        b"delete-tree",
+    )
+    .unwrap();
+    let tree = vec![dir(
+        tmp.path().join("codex_baseline_matrix"),
+        "codex_baseline_matrix",
+        vec![
+            dir(
+                tmp.path().join("codex_baseline_matrix/a"),
+                "a",
+                vec![dir(
+                    tmp.path().join("codex_baseline_matrix/a/b"),
+                    "b",
+                    vec![file(
+                        tmp.path().join("codex_baseline_matrix/a/b/c.txt"),
+                        "c.txt",
+                        11,
+                    )],
+                )],
+            ),
+            dir(
+                tmp.path().join("codex_baseline_matrix/empty"),
+                "empty",
+                vec![],
+            ),
+        ],
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(1), 16 * 1024 * 1024).unwrap();
+    assert!(root_entry_cluster_for_fs(&fs, "codex_baseline_matrix") > 0);
+
+    write_facade_dir_entries(&fs, 2, Vec::new());
+
+    assert!(!tmp.path().join("codex_baseline_matrix").exists());
+    assert!(fs.lookup_path("/codex_baseline_matrix").is_none());
 }
