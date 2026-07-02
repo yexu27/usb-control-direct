@@ -33,6 +33,7 @@ pub struct ExfatRuntimeState {
     fat: FatState,
     bitmap: BitmapState,
     sector_owners: SectorOwnerMap,
+    metadata_overlays: HashMap<u64, Vec<u8>>,
     snapshot: PolicySnapshot,
     committer: RealFsCommitter,
     pending_tx: PendingTransaction,
@@ -146,6 +147,7 @@ impl ExfatRuntimeState {
             fat,
             bitmap,
             sector_owners,
+            metadata_overlays: HashMap::new(),
             snapshot,
             committer: RealFsCommitter::new(mount_root.to_path_buf()),
             pending_tx: PendingTransaction::new(1),
@@ -212,6 +214,11 @@ impl ExfatRuntimeState {
             let sector = current / SECTOR_SIZE as u64;
             let sector_offset = (current % SECTOR_SIZE as u64) as usize;
             let take = (SECTOR_SIZE as usize - sector_offset).min(len - out.len());
+            if let Some(data) = self.metadata_overlays.get(&sector) {
+                out.extend_from_slice(&data[sector_offset..sector_offset + take]);
+                current += take as u64;
+                continue;
+            }
             match self.sector_owner(sector) {
                 SectorOwner::FileData {
                     node_id,
@@ -293,6 +300,39 @@ impl ExfatRuntimeState {
         Ok(out)
     }
 
+    pub(crate) fn directory_image(
+        &self,
+        path: &str,
+    ) -> Result<Option<(u64, Vec<u8>)>, std::io::Error> {
+        let Some(clusters) = self.directory_store.directory_clusters(path) else {
+            return Ok(None);
+        };
+        let Some(first_cluster) = clusters.first() else {
+            return Ok(None);
+        };
+        let first_sector = self.volume.layout().cluster_to_sector(*first_cluster);
+        let mut data = Vec::with_capacity(
+            clusters.len() * SECTORS_PER_CLUSTER as usize * SECTOR_SIZE as usize,
+        );
+        for cluster in clusters {
+            let cluster_sector = self.volume.layout().cluster_to_sector(*cluster);
+            for sector_offset in 0..SECTORS_PER_CLUSTER as u64 {
+                let sector = cluster_sector + sector_offset;
+                if let Some(overlay) = self.metadata_overlays.get(&sector) {
+                    data.extend_from_slice(overlay);
+                    continue;
+                }
+                match self.volume.read_sector(sector) {
+                    crate::types::SectorContent::Metadata(sector_data) => {
+                        data.extend_from_slice(&sector_data);
+                    }
+                    _ => data.resize(data.len() + SECTOR_SIZE as usize, 0),
+                }
+            }
+        }
+        Ok(Some((first_sector, data)))
+    }
+
     pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
         if !data.is_empty() && self.snapshot.permission == 0 {
             return Err(std::io::Error::new(
@@ -308,10 +348,15 @@ impl ExfatRuntimeState {
         }
         let start_sector = offset / SECTOR_SIZE as u64;
         let mut recorded_transaction_write = false;
+        let mut pending_metadata_overlays = Vec::<(u64, Vec<u8>)>::new();
         for (i, chunk) in data.chunks(SECTOR_SIZE as usize).enumerate() {
             let sector = start_sector + i as u64;
             let owner = self.sector_owner(sector);
             match owner.clone() {
+                SectorOwner::BootRegion | SectorOwner::BackupBootRegion => {
+                    self.metadata_overlays
+                        .insert(sector, padded_sector(chunk));
+                }
                 SectorOwner::FileData {
                     node_id,
                     file_offset,
@@ -354,6 +399,15 @@ impl ExfatRuntimeState {
                     })?;
                 }
                 _ => {
+                    if matches!(
+                        owner,
+                        SectorOwner::Fat
+                            | SectorOwner::AllocationBitmap
+                            | SectorOwner::RootDirectory
+                            | SectorOwner::DirectoryData { .. }
+                    ) {
+                        pending_metadata_overlays.push((sector, padded_sector(chunk)));
+                    }
                     WriteInterpreter::new().record_sector_write(
                         &mut self.pending_tx,
                         sector,
@@ -367,6 +421,9 @@ impl ExfatRuntimeState {
         if recorded_transaction_write {
             let tx = self.pending_tx.clone();
             let mutations = self.try_commit_closed_transaction(&tx)?;
+            for (sector, data) in pending_metadata_overlays {
+                self.metadata_overlays.insert(sector, data);
+            }
             if !mutations.is_empty() {
                 self.pending_tx = PendingTransaction::new(self.next_tx_id);
                 self.next_tx_id += 1;
@@ -581,6 +638,13 @@ fn mark_file_range(
 
 fn normalize_path(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+fn padded_sector(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; SECTOR_SIZE as usize];
+    let copy_len = data.len().min(SECTOR_SIZE as usize);
+    out[..copy_len].copy_from_slice(&data[..copy_len]);
+    out
 }
 
 impl ExfatRuntimeState {

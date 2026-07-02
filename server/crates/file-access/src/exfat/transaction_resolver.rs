@@ -41,9 +41,19 @@ impl TransactionResolver {
         }
 
         for (parent, sectors) in directory_writes {
-            let mut data = Vec::new();
-            for sector_data in sectors.values() {
-                data.extend_from_slice(sector_data);
+            let Some((first_sector, mut data)) = state.directory_image(&parent)? else {
+                continue;
+            };
+            for (sector, sector_data) in sectors {
+                if sector < first_sector {
+                    continue;
+                }
+                let offset = (sector - first_sector) as usize * SECTOR_SIZE as usize;
+                if offset >= data.len() {
+                    continue;
+                }
+                let end = (offset + SECTOR_SIZE as usize).min(data.len());
+                data[offset..end].copy_from_slice(&sector_data[..end - offset]);
             }
             if data.is_empty() {
                 continue;
