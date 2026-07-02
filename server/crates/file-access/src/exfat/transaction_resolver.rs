@@ -109,9 +109,13 @@ impl TransactionResolver {
                         } else {
                             Some(entry.first_cluster)
                         };
-                        if entry.data_length != node.size
-                            || entry_first_cluster != node.first_cluster
+                        if entry_first_cluster == node.first_cluster && entry.data_length != node.size
                         {
+                            mutations.push(FsMutation::Truncate {
+                                virtual_path,
+                                len: entry.data_length,
+                            });
+                        } else if entry_first_cluster != node.first_cluster {
                             let chain = entry_first_cluster.map(|first_cluster| ClusterChain {
                                 first_cluster,
                                 clusters: vec![first_cluster],

@@ -337,7 +337,7 @@ fn write_at_sequence_renames_file_from_directory_entry_change() {
         &state,
         &mut tx,
         root_sector,
-        build_file_entry_set("renamed.txt", false, 900, 8, false),
+        build_file_entry_set("renamed.txt", false, 0, 8, false),
     );
     let mutations = state.try_commit_closed_transaction(&tx).unwrap();
 
@@ -377,7 +377,7 @@ fn write_at_sequence_truncates_existing_file_from_directory_entry_length() {
         &state,
         &mut tx,
         root_sector,
-        build_file_entry_set("data.txt", false, 901, 2, false),
+        build_file_entry_set("data.txt", false, 0, 2, false),
     );
     let mutations = state.try_commit_closed_transaction(&tx).unwrap();
 
