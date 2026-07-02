@@ -14,7 +14,7 @@ use crate::exfat::layout::{
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
 use crate::exfat::transaction::PendingTransaction;
 use crate::exfat::transaction_resolver::TransactionResolver;
-use crate::exfat::volume::{FileDataSectorInfo, VirtualVolume};
+use crate::exfat::volume::{FileDataRangeInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
 use crate::policy::evaluate_access;
 use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
@@ -54,13 +54,12 @@ impl ExfatRuntimeState {
         let mut bitmap = BitmapState::new(layout.cluster_count);
         let mut sector_owners = SectorOwnerMap::new(layout.total_sectors);
 
-        for cluster in FIRST_CLUSTER..FIRST_CLUSTER + layout.cluster_count {
-            sector_owners.register_cluster(
-                cluster,
-                layout.cluster_to_sector(cluster),
-                SECTORS_PER_CLUSTER as u64,
-            );
-        }
+        sector_owners.register_cluster_range(
+            FIRST_CLUSTER,
+            layout.cluster_to_sector(FIRST_CLUSTER),
+            layout.cluster_count,
+            SECTORS_PER_CLUSTER as u64,
+        );
 
         sector_owners.mark_range(0, 1, SectorOwner::Mbr)?;
         sector_owners.mark_range(
@@ -134,16 +133,9 @@ impl ExfatRuntimeState {
             }
         }
 
-        for info in volume.file_data_sector_entries() {
+        for info in volume.file_data_range_entries() {
             if let Some(node) = real_to_node.get(&normalize_path(&info.real_path)) {
-                mark_file_sector(
-                    &mut fat,
-                    &mut bitmap,
-                    &mut sector_owners,
-                    &layout,
-                    info,
-                    node.id.0,
-                )?;
+                mark_file_range(&mut sector_owners, info, node.id.0)?;
             }
         }
 
@@ -439,21 +431,19 @@ impl ExfatRuntimeState {
             }
         }
 
-        for (start, len, _) in self.sector_owners.explicit_ranges() {
-            for sector in start..start + len {
-                match self.sector_owner(sector) {
-                    SectorOwner::DirectoryData { node_id }
-                    | SectorOwner::FileData { node_id, .. }
-                    | SectorOwner::AllocatedZero { node_id, .. } => {
-                        if self.index.node(NodeId(node_id)).is_none() {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                format!("sector {sector} references missing node {node_id}"),
-                            ));
-                        }
+        for (start, _, _) in self.sector_owners.explicit_ranges() {
+            match self.sector_owner(start) {
+                SectorOwner::DirectoryData { node_id }
+                | SectorOwner::FileData { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => {
+                    if self.index.node(NodeId(node_id)).is_none() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("sector {start} references missing node {node_id}"),
+                        ));
                     }
-                    _ => {}
                 }
+                _ => {}
             }
         }
 
@@ -573,27 +563,18 @@ impl ExfatRuntimeState {
     }
 }
 
-fn mark_file_sector(
-    fat: &mut FatState,
-    bitmap: &mut BitmapState,
+fn mark_file_range(
     sector_owners: &mut SectorOwnerMap,
-    layout: &crate::exfat::layout::DiskLayout,
-    info: FileDataSectorInfo,
+    info: FileDataRangeInfo,
     node_id: u64,
 ) -> Result<(), std::io::Error> {
-    if let Some(cluster) = layout.sector_to_cluster(info.sector) {
-        if !bitmap.is_allocated(cluster) {
-            bitmap.mark_allocated(cluster)?;
-            fat.set_chain(&[cluster])?;
-        }
-    }
     sector_owners.mark_range(
-        info.sector,
-        1,
-        SectorOwner::FileData {
+        info.start_sector,
+        info.sector_count,
+        SectorOwner::FileDataRange {
             node_id,
             file_offset: info.offset,
-            valid_bytes: info.valid_bytes,
+            byte_len: info.byte_len,
         },
     )
 }
@@ -741,53 +722,70 @@ impl ExfatRuntimeState {
     }
 
     fn clear_stale_node_owners(&mut self) -> Result<(), std::io::Error> {
-        for (start, len, _) in self.sector_owners.explicit_ranges() {
-            for sector in start..start + len {
-                let owner = self.sector_owner(sector);
-                let stale_node = match owner {
-                    SectorOwner::DirectoryData { node_id }
-                    | SectorOwner::FileData { node_id, .. }
-                    | SectorOwner::AllocatedZero { node_id, .. } => {
-                        self.index.node(NodeId(node_id)).is_none()
-                    }
-                    _ => false,
-                };
-                if !stale_node {
-                    continue;
+        for (start, len, owner) in self.sector_owners.explicit_ranges() {
+            let stale_node = match owner {
+                SectorOwner::DirectoryData { node_id }
+                | SectorOwner::FileData { node_id, .. }
+                | SectorOwner::FileDataRange { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => {
+                    self.index.node(NodeId(node_id)).is_none()
                 }
-                let replacement =
-                    if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
-                        self.bitmap.mark_free(cluster)?;
-                        SectorOwner::FreeCluster { cluster }
-                    } else {
-                        SectorOwner::Reserved
-                };
-                self.sector_owners.mark_range(sector, 1, replacement)?;
+                _ => false,
+            };
+            if !stale_node {
+                continue;
             }
+            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(start) {
+                self.free_allocated_clusters_for_range(start, len)?;
+                SectorOwner::FreeClusterRange {
+                    first_cluster: cluster,
+                    first_sector: start,
+                    sectors_per_cluster: SECTORS_PER_CLUSTER as u64,
+                }
+            } else {
+                SectorOwner::Reserved
+            };
+            self.sector_owners.mark_range(start, len, replacement)?;
         }
         Ok(())
     }
 
     fn clear_file_node_owners(&mut self, id: NodeId) -> Result<(), std::io::Error> {
-        for (start, len, _) in self.sector_owners.explicit_ranges() {
-            for sector in start..start + len {
-                let owner = self.sector_owner(sector);
-                let owned_by_file = match owner {
-                    SectorOwner::FileData { node_id, .. }
-                    | SectorOwner::AllocatedZero { node_id, .. } => node_id == id.0,
-                    _ => false,
-                };
-                if !owned_by_file {
-                    continue;
+        for (start, len, owner) in self.sector_owners.explicit_ranges() {
+            let owned_by_file = match owner {
+                SectorOwner::FileData { node_id, .. }
+                | SectorOwner::FileDataRange { node_id, .. }
+                | SectorOwner::AllocatedZero { node_id, .. } => node_id == id.0,
+                _ => false,
+            };
+            if !owned_by_file {
+                continue;
+            }
+            let replacement = if let Some(cluster) = self.volume.layout().sector_to_cluster(start) {
+                self.free_allocated_clusters_for_range(start, len)?;
+                SectorOwner::FreeClusterRange {
+                    first_cluster: cluster,
+                    first_sector: start,
+                    sectors_per_cluster: SECTORS_PER_CLUSTER as u64,
                 }
-                let replacement =
-                    if let Some(cluster) = self.volume.layout().sector_to_cluster(sector) {
-                        self.bitmap.mark_free(cluster)?;
-                        SectorOwner::FreeCluster { cluster }
-                    } else {
-                        SectorOwner::Reserved
-                    };
-                self.sector_owners.mark_range(sector, 1, replacement)?;
+            } else {
+                SectorOwner::Reserved
+            };
+            self.sector_owners.mark_range(start, len, replacement)?;
+        }
+        Ok(())
+    }
+
+    fn free_allocated_clusters_for_range(
+        &mut self,
+        start: u64,
+        len: u64,
+    ) -> Result<(), std::io::Error> {
+        for sector_offset in (0..len).step_by(SECTORS_PER_CLUSTER as usize) {
+            if let Some(cluster) = self.volume.layout().sector_to_cluster(start + sector_offset) {
+                if self.bitmap.is_allocated(cluster) {
+                    self.bitmap.mark_free(cluster)?;
+                }
             }
         }
         Ok(())

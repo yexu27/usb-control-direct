@@ -49,7 +49,9 @@ impl WriteInterpreter {
                 });
                 Ok(())
             }
-            SectorOwner::FileData { .. } | SectorOwner::AllocatedZero { .. } => {
+            SectorOwner::FileData { .. }
+            | SectorOwner::FileDataRange { .. }
+            | SectorOwner::AllocatedZero { .. } => {
                 tx.record_write(TransactionWrite::FileData {
                     sector,
                     owner,
@@ -57,7 +59,7 @@ impl WriteInterpreter {
                 });
                 Ok(())
             }
-            SectorOwner::FreeCluster { .. } => {
+            SectorOwner::FreeCluster { .. } | SectorOwner::FreeClusterRange { .. } => {
                 tx.record_write(TransactionWrite::FreeCluster {
                     sector,
                     owner,

@@ -20,8 +20,8 @@ use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot, SectorConten
 pub struct VirtualVolume {
     /// 预生成的元数据扇区（扇区号 → 数据）。
     metadata_sectors: HashMap<u64, Vec<u8>>,
-    /// 文件数据扇区映射（扇区号 → FileData 信息）。
-    file_data_sectors: HashMap<u64, FileDataMapping>,
+    /// 文件数据范围映射。
+    file_data_ranges: Vec<FileDataMapping>,
     /// 磁盘布局。
     layout: DiskLayout,
     /// 文件名到其数据扇区范围的映射（用于测试辅助）。
@@ -35,9 +35,11 @@ pub struct VirtualVolume {
 /// 文件数据映射。
 #[derive(Debug, Clone)]
 struct FileDataMapping {
+    start_sector: u64,
+    sector_count: u64,
     real_path: PathBuf,
     offset: u64,
-    valid_bytes: u32,
+    byte_len: u64,
     blocked: bool,
 }
 
@@ -47,6 +49,16 @@ pub struct FileDataSectorInfo {
     pub real_path: PathBuf,
     pub offset: u64,
     pub valid_bytes: u32,
+    pub blocked: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileDataRangeInfo {
+    pub start_sector: u64,
+    pub sector_count: u64,
+    pub real_path: PathBuf,
+    pub offset: u64,
+    pub byte_len: u64,
     pub blocked: bool,
 }
 
@@ -82,11 +94,17 @@ impl VirtualVolume {
             return SectorContent::Metadata(data.clone());
         }
 
-        if let Some(mapping) = self.file_data_sectors.get(&sector) {
+        if let Some(mapping) = self.file_data_ranges.iter().find(|mapping| {
+            sector >= mapping.start_sector && sector < mapping.start_sector + mapping.sector_count
+        }) {
+            let sector_delta = sector - mapping.start_sector;
+            let offset = mapping.offset + sector_delta * SECTOR_SIZE as u64;
+            let remaining = mapping.byte_len.saturating_sub(sector_delta * SECTOR_SIZE as u64);
+            let valid_bytes = remaining.min(SECTOR_SIZE as u64) as u32;
             return SectorContent::FileData {
                 real_path: mapping.real_path.clone(),
-                offset: mapping.offset,
-                valid_bytes: mapping.valid_bytes,
+                offset,
+                valid_bytes,
                 blocked: mapping.blocked,
             };
         }
@@ -138,11 +156,30 @@ impl VirtualVolume {
     }
 
     pub fn file_data_sector_entries(&self) -> impl Iterator<Item = FileDataSectorInfo> + '_ {
-        self.file_data_sectors.iter().map(|(sector, mapping)| FileDataSectorInfo {
-            sector: *sector,
+        self.file_data_ranges.iter().flat_map(|mapping| {
+            (0..mapping.sector_count).map(move |sector_delta| {
+                let offset = mapping.offset + sector_delta * SECTOR_SIZE as u64;
+                let remaining = mapping
+                    .byte_len
+                    .saturating_sub(sector_delta * SECTOR_SIZE as u64);
+                FileDataSectorInfo {
+                    sector: mapping.start_sector + sector_delta,
+                    real_path: mapping.real_path.clone(),
+                    offset,
+                    valid_bytes: remaining.min(SECTOR_SIZE as u64) as u32,
+                    blocked: mapping.blocked,
+                }
+            })
+        })
+    }
+
+    pub fn file_data_range_entries(&self) -> impl Iterator<Item = FileDataRangeInfo> + '_ {
+        self.file_data_ranges.iter().map(|mapping| FileDataRangeInfo {
+            start_sector: mapping.start_sector,
+            sector_count: mapping.sector_count,
             real_path: mapping.real_path.clone(),
             offset: mapping.offset,
-            valid_bytes: mapping.valid_bytes,
+            byte_len: mapping.byte_len,
             blocked: mapping.blocked,
         })
     }
@@ -385,7 +422,7 @@ impl<'a> VolumeBuilder<'a> {
         let total_clusters = layout.cluster_count;
 
         let mut metadata_sectors = HashMap::new();
-        let mut file_data_sectors = HashMap::new();
+        let mut file_data_ranges = Vec::new();
         let mut directory_sector_paths = HashMap::new();
         let mut directory_path_clusters = HashMap::new();
 
@@ -558,36 +595,27 @@ impl<'a> VolumeBuilder<'a> {
         for mapping in &self.file_mappings {
             let cluster_start_sector = layout.cluster_to_sector(mapping.start_cluster);
             let total_data_sectors = mapping.file_size.div_ceil(SECTOR_SIZE as u64);
-            let mut sectors = Vec::new();
 
-            for i in 0..total_data_sectors {
-                let sector = cluster_start_sector + i;
-                let offset = i * SECTOR_SIZE as u64;
-                let remaining = mapping.file_size - offset;
-                let valid_bytes = if remaining >= SECTOR_SIZE as u64 {
-                    SECTOR_SIZE
-                } else {
-                    remaining as u32
-                };
-
-                file_data_sectors.insert(
-                    sector,
-                    FileDataMapping {
-                        real_path: mapping.real_path.clone(),
-                        offset,
-                        valid_bytes,
-                        blocked: mapping.blocked,
-                    },
-                );
-                sectors.push(sector);
+            if total_data_sectors > 0 {
+                file_data_ranges.push(FileDataMapping {
+                    start_sector: cluster_start_sector,
+                    sector_count: total_data_sectors,
+                    real_path: mapping.real_path.clone(),
+                    offset: 0,
+                    byte_len: mapping.file_size,
+                    blocked: mapping.blocked,
+                });
             }
 
+            let sectors = (0..total_data_sectors.min(4096))
+                .map(|i| cluster_start_sector + i)
+                .collect();
             file_sector_map.insert(mapping.name.clone(), sectors);
         }
 
         VirtualVolume {
             metadata_sectors,
-            file_data_sectors,
+            file_data_ranges,
             layout,
             file_sector_map,
             directory_sector_paths,
