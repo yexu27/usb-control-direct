@@ -302,6 +302,12 @@ impl ExfatRuntimeState {
     }
 
     pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+        if !data.is_empty() && self.snapshot.permission == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "只读权限禁止写入",
+            ));
+        }
         if offset % SECTOR_SIZE as u64 != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
