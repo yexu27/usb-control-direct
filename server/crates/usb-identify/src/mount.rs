@@ -131,6 +131,7 @@ pub trait MountOperations: Send + Sync {
 }
 
 /// 真实的 mount 操作实现（需要 root 权限）。
+#[derive(Debug, Clone, Copy, Default)]
 pub struct RealMountOps;
 
 impl MountOperations for RealMountOps {

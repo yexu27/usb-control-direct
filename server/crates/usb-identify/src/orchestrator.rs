@@ -165,6 +165,53 @@ pub struct DeviceOrchestrator {
     active_sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
 }
 
+#[derive(Clone)]
+pub struct DeviceOrchestratorCleanupHandle {
+    file_access_engine: Arc<dyn crate::traits::DeviceMapper>,
+    mount_ops: RealMountOps,
+    nbd_pool: Arc<Mutex<NbdPool>>,
+    active_sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
+}
+
+impl DeviceOrchestratorCleanupHandle {
+    /// 清理当前所有活动会话，用于服务停止。
+    pub async fn shutdown_cleanup(&self, reason: &str) {
+        let sessions = {
+            let mut active = self.active_sessions.lock().await;
+            active.drain().map(|(_, session)| session).collect::<Vec<_>>()
+        };
+
+        for mut session in sessions {
+            let _ = session.cancel_tx.send(true);
+            if session.kind == SessionKind::Storage {
+                if let Some(mapped_session) = session.mapped_session.take() {
+                    if let Err(e) = self.file_access_engine.unmap_device(mapped_session).await {
+                        warn!(error = %e, reason = %reason, "停服务清理: S04 映射清理失败");
+                    }
+                }
+                if let Some(mount_path) = &session.mount_path {
+                    if let Err(e) = self.mount_ops.umount(&mount_path.to_string_lossy()) {
+                        warn!(
+                            mount_point = %mount_path.display(),
+                            error = %e,
+                            reason = %reason,
+                            "停服务清理: U 盘卸载失败"
+                        );
+                    }
+                }
+                if let Some(idx) = session.nbd_index {
+                    self.nbd_pool.lock().await.release(idx);
+                }
+            }
+            info!(
+                kind = ?session.kind,
+                reason = %reason,
+                "停服务清理: 会话清理完成"
+            );
+        }
+    }
+}
+
 impl DeviceOrchestrator {
     /// 创建编排器。
     pub fn new(
@@ -188,6 +235,55 @@ impl DeviceOrchestrator {
             hidg_nodes,
             active_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    pub fn cleanup_handle(&self) -> DeviceOrchestratorCleanupHandle {
+        DeviceOrchestratorCleanupHandle {
+            file_access_engine: Arc::clone(&self.file_access_engine),
+            mount_ops: self.mount_ops,
+            nbd_pool: Arc::clone(&self.nbd_pool),
+            active_sessions: Arc::clone(&self.active_sessions),
+        }
+    }
+
+    /// 清理当前所有活动会话，用于服务停止。
+    pub async fn shutdown_cleanup(&self, reason: &str) {
+        self.cleanup_handle().shutdown_cleanup(reason).await;
+    }
+
+    #[cfg(debug_assertions)]
+    pub async fn register_test_storage_session(
+        &self,
+        parent_path: String,
+        mount_path: String,
+        mapped_session: crate::traits::MappedSession,
+        nbd_index: u32,
+    ) {
+        let (cancel_tx, _cancel_rx) = watch::channel(false);
+        self.active_sessions.lock().await.insert(
+            parent_path,
+            ActiveSession {
+                info: crate::descriptor::UsbDeviceInfo {
+                    sys_path: "/sys/devices/test".into(),
+                    dev_path: Some("/dev/sda1".into()),
+                    serial_number: "TEST".into(),
+                    vid: "0000".into(),
+                    pid: "0000".into(),
+                    device_name: "Test Storage".into(),
+                    device_type: common::types::DeviceType::Storage,
+                    interface_class: 0x08,
+                    interface_subclass: 0x06,
+                    interface_protocol: 0x50,
+                    capacity_bytes: None,
+                },
+                kind: SessionKind::Storage,
+                nbd_index: Some(nbd_index),
+                mount_path: Some(PathBuf::from(mount_path)),
+                mapped_session: Some(mapped_session),
+                cancel_tx,
+                audit_detail: "测试设备".into(),
+            },
+        );
     }
 
     /// 启动编排循环（tokio async，FIFO 顺序处理事件）。

@@ -4,6 +4,7 @@
 //! 不依赖真实 USB 设备。
 
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
 use tokio::sync::mpsc;
@@ -56,6 +57,39 @@ impl DeviceMapper for MockDeviceMapper {
         Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>,
     > {
         Box::pin(async { Err(UnmapError::Failed("mock: 未实现".into())) })
+    }
+}
+
+struct CountingDeviceMapper {
+    unmap_count: Arc<AtomicUsize>,
+}
+
+impl DeviceMapper for CountingDeviceMapper {
+    fn map_device(
+        &self,
+        _ctx: MapContext,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<MappedSession, MapError>> + Send + '_>,
+    > {
+        Box::pin(async {
+            Ok(MappedSession {
+                id: "mapped-1".into(),
+                mount_path: "/mnt/usb_raw/sda1".into(),
+                nbd_device: "/dev/nbd3".into(),
+            })
+        })
+    }
+
+    fn unmap_device(
+        &self,
+        _session: MappedSession,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>>
+    {
+        let unmap_count = Arc::clone(&self.unmap_count);
+        Box::pin(async move {
+            unmap_count.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
     }
 }
 
@@ -216,6 +250,45 @@ async fn test_device_removed() {
     drop(tx);
 
     orchestrator.run().await;
+}
+
+#[tokio::test]
+async fn shutdown_cleanup_unmaps_registered_storage_session() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    let (_tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let unmap_count = Arc::new(AtomicUsize::new(0));
+
+    let orchestrator = DeviceOrchestrator::new(
+        rx,
+        whitelist,
+        audit,
+        device_manager,
+        Arc::new(MockScanner),
+        Arc::new(CountingDeviceMapper {
+            unmap_count: Arc::clone(&unmap_count),
+        }),
+        test_hidg_nodes(),
+    );
+
+    orchestrator
+        .register_test_storage_session(
+            "/sys/devices/test-parent".into(),
+            "/mnt/usb_raw/sda1".into(),
+            MappedSession {
+                id: "mapped-1".into(),
+                mount_path: "/mnt/usb_raw/sda1".into(),
+                nbd_device: "/dev/nbd3".into(),
+            },
+            3,
+        )
+        .await;
+
+    orchestrator.shutdown_cleanup("service_shutdown").await;
+
+    assert_eq!(unmap_count.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
