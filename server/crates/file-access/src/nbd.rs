@@ -150,6 +150,65 @@ const NBD_FLAG_SEND_FLUSH: u32 = 4;
 /// I/O error code (EIO = 5)。
 const EIO: u32 = 5;
 
+pub fn nbd_name_from_device_path(path: &Path) -> Result<String, std::io::Error> {
+    let name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid NBD path: {}", path.display()),
+        )
+    })?;
+    let name = name.to_string_lossy();
+    let Some(rest) = name.strip_prefix("nbd") else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("not an NBD device: {}", path.display()),
+        ));
+    };
+    if rest.is_empty() || !rest.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("NBD partition is not allowed: {}", path.display()),
+        ));
+    }
+    Ok(name.to_string())
+}
+
+pub fn disconnect_nbd_device(device: &Path) -> Result<(), std::io::Error> {
+    let _ = nbd_name_from_device_path(device)?;
+    let nbd_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(device)?;
+    use std::os::unix::io::AsRawFd;
+    let nbd_fd = nbd_file.as_raw_fd();
+
+    // 安全性: nbd_fd 来自刚打开的 NBD 设备文件，ioctl 参数不携带用户指针。
+    unsafe {
+        let _ = nbd_ioctl(nbd_fd, NBD_DISCONNECT, 0);
+        let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_SOCK, 0);
+        let _ = nbd_ioctl(nbd_fd, NBD_CLEAR_QUE, 0);
+    }
+
+    Ok(())
+}
+
+pub fn disconnect_nbd_pool(pool_size: u32) {
+    for idx in 0..pool_size {
+        let device = PathBuf::from(format!("/dev/nbd{idx}"));
+        if !device.exists() {
+            continue;
+        }
+        match disconnect_nbd_device(&device) {
+            Ok(()) => info!(device = %device.display(), "启动恢复: 断开旧 NBD 连接"),
+            Err(e) => warn!(
+                device = %device.display(),
+                error = %e,
+                "启动恢复: 断开旧 NBD 连接失败"
+            ),
+        }
+    }
+}
+
 /// NBD 服务器。
 pub struct NbdServer {
     /// /dev/nbdX 路径。

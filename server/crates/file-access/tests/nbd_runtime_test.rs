@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use file_access::nbd::NbdServer;
+use file_access::nbd::{nbd_name_from_device_path, NbdServer};
 use tempfile::tempdir;
 
 fn make_nbd_sysfs(root: &Path, name: &str, pid: &str, size: &str) {
@@ -60,4 +60,19 @@ fn wait_disconnected_under_times_out_when_pid_remains() {
         .unwrap_err();
 
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+}
+
+#[test]
+fn nbd_name_from_device_path_accepts_whole_nbd() {
+    assert_eq!(
+        nbd_name_from_device_path(Path::new("/dev/nbd3")).unwrap(),
+        "nbd3"
+    );
+}
+
+#[test]
+fn nbd_name_from_device_path_rejects_partition() {
+    let err = nbd_name_from_device_path(Path::new("/dev/nbd3p1")).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 }
