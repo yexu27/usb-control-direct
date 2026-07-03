@@ -14,11 +14,11 @@ use tracing::{error, info, warn};
 
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
-use file_access::engine::FileAccessEngine;
 use file_access::gadget::GadgetRuntime;
 use file_access::nbd::{
     disconnect_nbd_pool, read_nbd_partition_scan_status, NbdPartitionScanStatus,
 };
+use file_access::{FileAccessEngine, StorageSessionManager};
 use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
@@ -154,6 +154,12 @@ async fn main() {
         Arc::clone(&storage),
         gadget_runtime.clone(),
     ));
+    let scanner_for_storage: Arc<dyn usb_identify::traits::Scanner> = scan_service;
+    let mapper_for_storage: Arc<dyn usb_identify::traits::DeviceMapper> = file_access_engine;
+    let storage_session_manager = Arc::new(StorageSessionManager::new(
+        scanner_for_storage,
+        mapper_for_storage,
+    ));
 
     let state = Arc::new(AppState {
         auth_service,
@@ -176,8 +182,7 @@ async fn main() {
         Arc::clone(&state.whitelist_manager),
         Arc::clone(&state.audit_service),
         Arc::clone(&state.device_manager),
-        scan_service,
-        file_access_engine,
+        storage_session_manager,
         hidg_nodes,
     );
     let orchestrator_cleanup = orchestrator.cleanup_handle();

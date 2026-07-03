@@ -8,16 +8,19 @@
 //! - 协调 S03 扫描和 S04 映射
 //! - 拔出清理
 
-pub mod error;
-pub mod traits;
 pub mod descriptor;
-pub mod state_machine;
-pub mod mount;
+pub mod error;
 pub mod monitor;
+pub mod mount;
 pub mod orchestrator;
 pub mod recovery;
 pub mod session;
+pub mod state_machine;
+pub mod traits;
 pub mod udev_monitor;
 
 pub use error::UsbIdentifyError;
-pub use traits::{DeviceMapper, MapContext, MappedSession, Scanner, ScanResult};
+pub use traits::{
+    AuthorizedStorageDevice, DeviceMapper, MapContext, MappedSession, ScanResult, Scanner,
+    StorageSessionController, StorageSessionError, StorageSessionHandle,
+};

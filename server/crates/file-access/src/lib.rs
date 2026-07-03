@@ -15,6 +15,8 @@ pub mod nbd;
 pub mod gadget;
 pub mod gadget_bootstrap;
 pub mod engine;
+pub mod storage_session;
 
 pub use engine::FileAccessEngine;
 pub use error::FileAccessError;
+pub use storage_session::StorageSessionManager;
