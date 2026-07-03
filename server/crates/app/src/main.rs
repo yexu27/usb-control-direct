@@ -173,8 +173,7 @@ async fn main() {
         virusdb_upgrade_mgr,
     });
 
-    // 启动 udev 监听与主编排器
-    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    // 启动 USB 事件源与主编排器
     let (event_tx, event_rx) = mpsc::unbounded_channel::<DeviceEvent>();
 
     let orchestrator = DeviceOrchestrator::new(
@@ -192,18 +191,8 @@ async fn main() {
         orchestrator.run().await;
     });
 
-    // 启动 udev 实时监听
-    let udev_tx = event_tx.clone();
-    let udev_shutdown = shutdown_tx.subscribe();
-    tokio::spawn(async move {
-        usb_identify::udev_monitor::start_udev_monitor(udev_tx, udev_shutdown).await;
-    });
-
-    // 启动时枚举存量设备
-    let enum_tx = event_tx;
-    tokio::task::spawn_blocking(move || {
-        usb_identify::udev_monitor::enumerate_and_send(enum_tx);
-    });
+    let mut usb_event_source = usb_identify::event_source::UsbEventSource::new();
+    usb_event_source.start(event_tx);
 
     // 启动 session 过期清理任务
     {
@@ -254,8 +243,9 @@ async fn main() {
             }
             _ = &mut shutdown_signal => {
                 info!("收到服务退出信号，开始清理 USB 会话");
-                let _ = shutdown_tx.send(());
+                usb_event_source.stop();
                 orchestrator_cleanup.shutdown_cleanup("service_shutdown").await;
+                usb_event_source.join().await;
                 break;
             }
         };

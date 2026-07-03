@@ -10,6 +10,7 @@
 
 pub mod descriptor;
 pub mod error;
+pub mod event_source;
 pub mod monitor;
 pub mod mount;
 pub mod orchestrator;
@@ -17,7 +18,6 @@ pub mod recovery;
 pub mod session;
 pub mod state_machine;
 pub mod traits;
-pub mod udev_monitor;
 
 pub use error::UsbIdentifyError;
 pub use traits::{

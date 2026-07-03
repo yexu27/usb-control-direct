@@ -9,14 +9,20 @@
 use std::collections::BTreeSet;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::os::fd::AsRawFd;
 use std::path::Path;
+use std::time::Duration;
 
 use evdev::{Device, InputEventKind};
+use tokio::sync::watch;
 use tracing::{error, info, warn};
 
 use crate::error::HidAccessError;
+use crate::evdev_poll::{poll_fd_readable, PollResult};
 use crate::hid_report::{keycode_to_hid, KeyboardReport};
 use crate::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult};
+
+const EVDEV_POLL_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// 键盘拦截器运行结果。
 pub enum KeyboardRunResult {
@@ -47,6 +53,23 @@ impl KeyboardInterceptor {
     ///
     /// 返回 Ok 表示键盘正常拔出或映射结束，Err 表示不可恢复的错误。
     pub fn run(&mut self, input_dev_path: &Path) -> Result<KeyboardRunResult, HidAccessError> {
+        self.run_internal(input_dev_path, None)
+    }
+
+    /// 在可取消上下文中运行键盘拦截与验证。
+    pub fn run_with_cancel(
+        &mut self,
+        input_dev_path: &Path,
+        cancel_rx: watch::Receiver<bool>,
+    ) -> Result<KeyboardRunResult, HidAccessError> {
+        self.run_internal(input_dev_path, Some(cancel_rx))
+    }
+
+    fn run_internal(
+        &mut self,
+        input_dev_path: &Path,
+        cancel_rx: Option<watch::Receiver<bool>>,
+    ) -> Result<KeyboardRunResult, HidAccessError> {
         let mut dev = Device::open(input_dev_path).map_err(|e| {
             error!(dev = %input_dev_path.display(), reason = %e, "evdev 设备打开失败");
             HidAccessError::Internal(format!(
@@ -71,18 +94,29 @@ impl KeyboardInterceptor {
 
         // === 阶段 1: 等待 1234 验证序列 ===
         info!(dev = %input_dev_path.display(), "请在该键盘上顺序输入 1 2 3 4");
+        let cancel_rx = cancel_rx.as_ref();
         'auth: loop {
-            for ev in dev.fetch_events().map_err(|e| {
-                HidAccessError::Internal(format!("读取 evdev 事件失败: {}", e))
-            })? {
+            if is_cancelled(cancel_rx) {
+                info!(dev = %input_dev_path.display(), "键盘拦截器收到取消信号");
+                return Ok(KeyboardRunResult::RemovedDuringVerify);
+            }
+            if !wait_evdev_readable(&dev, cancel_rx, input_dev_path)? {
+                continue;
+            }
+            for ev in dev
+                .fetch_events()
+                .map_err(|e| HidAccessError::Internal(format!("读取 evdev 事件失败: {}", e)))?
+            {
                 let event = match Self::parse_evdev_event(ev) {
                     Some(e) => e,
                     None => continue,
                 };
 
-                match self.challenge.transition(event).map_err(|e| {
-                    HidAccessError::Internal(format!("键盘状态机转换失败: {}", e))
-                })? {
+                match self
+                    .challenge
+                    .transition(event)
+                    .map_err(|e| HidAccessError::Internal(format!("键盘状态机转换失败: {}", e)))?
+                {
                     KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped) => {
                         info!(dev = %input_dev_path.display(), hidg = %self.hidg_device.display(),
                               "键盘 1234 验证通过，开始转发");
@@ -106,7 +140,7 @@ impl KeyboardInterceptor {
         }
 
         // === 阶段 2: 按键转发 ===
-        self.forward_loop(&mut dev, input_dev_path)
+        self.forward_loop(&mut dev, input_dev_path, cancel_rx)
     }
 
     /// 将 evdev 事件解析为 KeyboardEvent。
@@ -134,11 +168,19 @@ impl KeyboardInterceptor {
         &mut self,
         dev: &mut Device,
         input_dev_path: &Path,
+        cancel_rx: Option<&watch::Receiver<bool>>,
     ) -> Result<KeyboardRunResult, HidAccessError> {
         let mut pressed: BTreeSet<u8> = BTreeSet::new();
         let mut modifiers: u8 = 0;
 
         loop {
+            if is_cancelled(cancel_rx) {
+                info!(dev = %input_dev_path.display(), "键盘转发器收到取消信号");
+                return Ok(KeyboardRunResult::VerifiedThenRemoved);
+            }
+            if !wait_evdev_readable(dev, cancel_rx, input_dev_path)? {
+                continue;
+            }
             let events = match dev.fetch_events() {
                 Ok(events) => events,
                 Err(_) => return Ok(KeyboardRunResult::VerifiedThenRemoved),
@@ -188,5 +230,28 @@ impl KeyboardInterceptor {
                 }
             }
         }
+    }
+}
+
+fn is_cancelled(cancel_rx: Option<&watch::Receiver<bool>>) -> bool {
+    cancel_rx.map(|rx| *rx.borrow()).unwrap_or(false)
+}
+
+fn wait_evdev_readable(
+    dev: &Device,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+    input_dev_path: &Path,
+) -> Result<bool, HidAccessError> {
+    if is_cancelled(cancel_rx) {
+        return Ok(false);
+    }
+    match poll_fd_readable(dev.as_raw_fd(), EVDEV_POLL_TIMEOUT) {
+        PollResult::Readable => Ok(true),
+        PollResult::Timeout | PollResult::Interrupted => Ok(false),
+        PollResult::Error(e) => Err(HidAccessError::Internal(format!(
+            "等待键盘 evdev {} 可读失败: {}",
+            input_dev_path.display(),
+            e
+        ))),
     }
 }

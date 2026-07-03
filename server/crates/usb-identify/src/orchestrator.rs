@@ -351,7 +351,7 @@ impl DeviceOrchestrator {
             }
         };
 
-        let (cancel_tx, _cancel_rx) = watch::channel(false);
+        let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
             parent_path,
             ActiveSession {
@@ -371,7 +371,7 @@ impl DeviceOrchestrator {
         tokio::task::spawn_blocking(move || {
             use hid_access::evdev_interceptor::{KeyboardInterceptor, KeyboardRunResult};
             let mut interceptor = KeyboardInterceptor::new(hidg_kb);
-            match interceptor.run(&evdev_path) {
+            match interceptor.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(KeyboardRunResult::VerifiedThenRemoved) => {
                     info!(dev = %device_name, "键盘拦截器正常退出");
                 }
@@ -412,7 +412,7 @@ impl DeviceOrchestrator {
             }
         };
 
-        let (cancel_tx, _cancel_rx) = watch::channel(false);
+        let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
             parent_path,
             ActiveSession {
@@ -432,7 +432,7 @@ impl DeviceOrchestrator {
         tokio::task::spawn_blocking(move || {
             use hid_access::mouse_forwarder::MouseForwarder;
             let mut forwarder = MouseForwarder::new(hidg_mouse);
-            match forwarder.run(&evdev_path) {
+            match forwarder.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
                 Err(e) => warn!(dev = %device_name, error = %e, "鼠标转发器异常退出"),
             }

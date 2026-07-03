@@ -5,13 +5,19 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::os::fd::AsRawFd;
 use std::path::Path;
+use std::time::Duration;
 
 use evdev::{Device, InputEventKind, Key, RelativeAxisType};
+use tokio::sync::watch;
 use tracing::{info, trace, warn};
 
 use crate::error::HidAccessError;
+use crate::evdev_poll::{poll_fd_readable, PollResult};
 use crate::hid_report::{clamp_i8, MouseReport};
+
+const EVDEV_POLL_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// 鼠标 evdev 转发器。
 pub struct MouseForwarder {
@@ -26,6 +32,23 @@ impl MouseForwarder {
 
     /// 在 spawn_blocking 中运行鼠标转发。
     pub fn run(&mut self, input_dev_path: &Path) -> Result<(), HidAccessError> {
+        self.run_internal(input_dev_path, None)
+    }
+
+    /// 在可取消上下文中运行鼠标转发。
+    pub fn run_with_cancel(
+        &mut self,
+        input_dev_path: &Path,
+        cancel_rx: watch::Receiver<bool>,
+    ) -> Result<(), HidAccessError> {
+        self.run_internal(input_dev_path, Some(cancel_rx))
+    }
+
+    fn run_internal(
+        &mut self,
+        input_dev_path: &Path,
+        cancel_rx: Option<watch::Receiver<bool>>,
+    ) -> Result<(), HidAccessError> {
         let mut dev = Device::open(input_dev_path).map_err(|e| {
             HidAccessError::Internal(format!(
                 "打开鼠标 input 设备 {} 失败: {}",
@@ -37,16 +60,26 @@ impl MouseForwarder {
         info!(dev = %input_dev_path.display(), "鼠标映射成功，开始转发");
 
         let mut buttons: u8 = 0;
+        let cancel_rx = cancel_rx.as_ref();
 
         loop {
+            if is_cancelled(cancel_rx) {
+                info!(dev = %input_dev_path.display(), "鼠标转发器收到取消信号");
+                return Ok(());
+            }
+            if !wait_evdev_readable(&dev, cancel_rx, input_dev_path)? {
+                continue;
+            }
+
             let mut dx: i32 = 0;
             let mut dy: i32 = 0;
             let mut wheel: i32 = 0;
             let mut changed = false;
 
-            for ev in dev.fetch_events().map_err(|e| {
-                HidAccessError::Internal(format!("鼠标读取 evdev 事件失败: {}", e))
-            })? {
+            for ev in dev
+                .fetch_events()
+                .map_err(|e| HidAccessError::Internal(format!("鼠标读取 evdev 事件失败: {}", e)))?
+            {
                 match ev.kind() {
                     InputEventKind::Key(Key::BTN_LEFT) => {
                         buttons = update_button(buttons, 0, ev.value());
@@ -95,6 +128,29 @@ impl MouseForwarder {
     }
 }
 
+fn is_cancelled(cancel_rx: Option<&watch::Receiver<bool>>) -> bool {
+    cancel_rx.map(|rx| *rx.borrow()).unwrap_or(false)
+}
+
+fn wait_evdev_readable(
+    dev: &Device,
+    cancel_rx: Option<&watch::Receiver<bool>>,
+    input_dev_path: &Path,
+) -> Result<bool, HidAccessError> {
+    if is_cancelled(cancel_rx) {
+        return Ok(false);
+    }
+    match poll_fd_readable(dev.as_raw_fd(), EVDEV_POLL_TIMEOUT) {
+        PollResult::Readable => Ok(true),
+        PollResult::Timeout | PollResult::Interrupted => Ok(false),
+        PollResult::Error(e) => Err(HidAccessError::Internal(format!(
+            "等待鼠标 evdev {} 可读失败: {}",
+            input_dev_path.display(),
+            e
+        ))),
+    }
+}
+
 /// 更新按钮状态位。
 fn update_button(buttons: u8, bit: u8, value: i32) -> u8 {
     if value == 0 {
@@ -109,7 +165,6 @@ fn write_mouse_report(path: &Path, report: &MouseReport) -> Result<(), HidAccess
     let mut file = OpenOptions::new().write(true).open(path).map_err(|e| {
         HidAccessError::Internal(format!("打开 hidg {} 失败: {}", path.display(), e))
     })?;
-    file.write_all(&report.to_bytes()).map_err(|e| {
-        HidAccessError::Internal(format!("写 hidg report 失败: {}", e))
-    })
+    file.write_all(&report.to_bytes())
+        .map_err(|e| HidAccessError::Internal(format!("写 hidg report 失败: {}", e)))
 }

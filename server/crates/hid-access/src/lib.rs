@@ -5,6 +5,7 @@
 
 pub mod error;
 pub mod evdev_interceptor;
+mod evdev_poll;
 pub mod hid_gadget;
 pub mod hid_report;
 pub mod keyboard;
