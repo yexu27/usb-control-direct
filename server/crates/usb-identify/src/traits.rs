@@ -1,7 +1,11 @@
 //! S01 下游模块 trait 定义。
 //!
-//! Scanner (S03, P04 实现) 和 DeviceMapper (S04, P05 实现) 的接口契约。
-//! 本阶段仅定义 trait，mock 实现在 `#[cfg(test)]` 中。
+//! `usb-identify` 只定义病毒扫描和 storage session 控制抽象。
+//! 文件访问、NBD 和 gadget 细节属于 `file-access`。
+//!
+//! `DeviceMapper`、`MapContext`、`MappedSession` 是阶段 1 过渡契约，
+//! 仅为当前 file-access 旧实现保持 workspace 可编译。阶段 2 完成
+//! `StorageSessionManager` 直接驱动 storage pipeline 后必须删除。
 
 use std::path::Path;
 
