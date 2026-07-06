@@ -144,13 +144,3 @@ pub fn read_nbd_partition_scan_status() -> Result<NbdPartitionScanStatus, std::i
     let value = std::fs::read_to_string("/sys/module/nbd/parameters/max_part")?;
     parse_nbd_max_part(&value)
 }
-
-pub fn ensure_partition_scan_disabled() -> Result<(), std::io::Error> {
-    match read_nbd_partition_scan_status()? {
-        NbdPartitionScanStatus::Disabled => Ok(()),
-        NbdPartitionScanStatus::Enabled(max_part) => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("NBD max_part={max_part}, expected 0 to prevent nbdXpY event storm"),
-        )),
-    }
-}

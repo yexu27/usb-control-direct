@@ -3,9 +3,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use file_access::nbd::sysfs::{
-    nbd_name_from_device_path, parse_nbd_max_part, NbdPartitionScanStatus,
+    nbd_name_from_device_path, parse_nbd_max_part, NbdPartitionScanStatus, NbdSysfs,
 };
-use file_access::nbd::NbdServer;
 use tempfile::tempdir;
 
 fn make_nbd_sysfs(root: &Path, name: &str, pid: &str, size: &str) {
@@ -20,10 +19,10 @@ fn wait_ready_under_accepts_matching_pid_and_size() {
     let dir = tempdir().unwrap();
     make_nbd_sysfs(dir.path(), "nbd3", "1234\n", "32768\n");
 
-    let server = NbdServer::new(Path::new("/dev/nbd3"));
+    let sysfs = NbdSysfs::new(dir.path());
 
-    server
-        .wait_ready_under(dir.path(), 32768, Duration::from_millis(50))
+    sysfs
+        .wait_ready("nbd3", 32768, Duration::from_millis(50))
         .unwrap();
 }
 
@@ -32,9 +31,9 @@ fn wait_ready_under_times_out_when_size_does_not_match() {
     let dir = tempdir().unwrap();
     make_nbd_sysfs(dir.path(), "nbd3", "1234\n", "0\n");
 
-    let server = NbdServer::new(Path::new("/dev/nbd3"));
-    let err = server
-        .wait_ready_under(dir.path(), 32768, Duration::from_millis(20))
+    let sysfs = NbdSysfs::new(dir.path());
+    let err = sysfs
+        .wait_ready("nbd3", 32768, Duration::from_millis(20))
         .unwrap_err();
 
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
@@ -45,10 +44,10 @@ fn wait_disconnected_under_accepts_empty_pid() {
     let dir = tempdir().unwrap();
     make_nbd_sysfs(dir.path(), "nbd3", "\n", "0\n");
 
-    let server = NbdServer::new(Path::new("/dev/nbd3"));
+    let sysfs = NbdSysfs::new(dir.path());
 
-    server
-        .wait_disconnected_under(dir.path(), Duration::from_millis(50))
+    sysfs
+        .wait_disconnected("nbd3", Duration::from_millis(50))
         .unwrap();
 }
 
@@ -57,9 +56,9 @@ fn wait_disconnected_under_times_out_when_pid_remains() {
     let dir = tempdir().unwrap();
     make_nbd_sysfs(dir.path(), "nbd3", "2267\n", "32768\n");
 
-    let server = NbdServer::new(Path::new("/dev/nbd3"));
-    let err = server
-        .wait_disconnected_under(dir.path(), Duration::from_millis(20))
+    let sysfs = NbdSysfs::new(dir.path());
+    let err = sysfs
+        .wait_disconnected("nbd3", Duration::from_millis(20))
         .unwrap_err();
 
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);

@@ -15,9 +15,7 @@ use tracing::{error, info, warn};
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
 use file_access::gadget::GadgetRuntime;
-use file_access::nbd::{
-    disconnect_nbd_pool, read_nbd_partition_scan_status, NbdPartitionScanStatus,
-};
+use file_access::nbd::{read_nbd_partition_scan_status, NbdDeviceManager, NbdPartitionScanStatus};
 use file_access::StorageSessionManager;
 use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
@@ -130,7 +128,7 @@ async fn main() {
     if let Err(e) = clear_lun_backing_file(&lun_file) {
         warn!(error = %e, lun_file = %lun_file.display(), "启动恢复: 清空 LUN backing 失败");
     }
-    disconnect_nbd_pool(NBD_POOL_SIZE);
+    NbdDeviceManager::default().recover_pool(NBD_POOL_SIZE);
     if let Err(e) = recover_raw_mounts(&RealMountOps, Path::new("/mnt/usb_raw")) {
         warn!(error = %e, "启动恢复: 清理原始 U 盘挂载失败");
     }
