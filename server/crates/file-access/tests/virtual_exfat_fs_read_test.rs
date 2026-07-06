@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 
 use file_access::exfat::fs::VirtualExfatFs;
+use file_access::exfat::layout::SECTOR_SIZE;
 use file_access::types::{ControlledEntry, ExecFileType, PolicySnapshot};
 
 fn snapshot() -> PolicySnapshot {
@@ -52,4 +53,45 @@ fn virtual_fs_denies_blacklisted_read_without_hiding_node() {
     let node = fs.lookup_path("/bad.blocked").unwrap();
     let err = fs.read_file(node, 0, 6).unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn virtual_fs_reads_last_legal_sector() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("hello.txt"), b"hello").unwrap();
+    let tree = vec![entry(tmp.path(), "hello.txt", 5, "txt")];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
+
+    let last_sector_offset = (fs.total_sectors() - 1) * SECTOR_SIZE as u64;
+    let data = fs
+        .read_at(last_sector_offset, SECTOR_SIZE as usize)
+        .unwrap();
+
+    assert_eq!(data.len(), SECTOR_SIZE as usize);
+}
+
+#[test]
+fn virtual_fs_rejects_read_starting_at_disk_end() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("hello.txt"), b"hello").unwrap();
+    let tree = vec![entry(tmp.path(), "hello.txt", 5, "txt")];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
+
+    let disk_end = fs.total_sectors() * SECTOR_SIZE as u64;
+    let err = fs.read_at(disk_end, SECTOR_SIZE as usize).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+}
+
+#[test]
+fn virtual_fs_rejects_read_crossing_disk_end() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("hello.txt"), b"hello").unwrap();
+    let tree = vec![entry(tmp.path(), "hello.txt", 5, "txt")];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
+
+    let disk_end = fs.total_sectors() * SECTOR_SIZE as u64;
+    let err = fs.read_at(disk_end - 256, 512).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
 }

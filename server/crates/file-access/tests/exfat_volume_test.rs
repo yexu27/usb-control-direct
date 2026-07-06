@@ -25,9 +25,9 @@ fn volume_mbr_has_boot_signature() {
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
-    let content = volume.read_sector(0);
+    let content = volume.read_sector(0).unwrap();
     match content {
         SectorContent::Metadata(data) => {
             assert_eq!(data.len(), SECTOR_SIZE as usize);
@@ -45,9 +45,9 @@ fn volume_boot_sector_has_exfat_signature() {
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
-    let content = volume.read_sector(PARTITION_OFFSET_SECTORS);
+    let content = volume.read_sector(PARTITION_OFFSET_SECTORS).unwrap();
     match content {
         SectorContent::Metadata(data) => {
             assert_eq!(&data[3..11], EXFAT_SIGNATURE);
@@ -63,9 +63,9 @@ fn volume_gap_sectors_are_zero() {
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
-    let content = volume.read_sector(1);
+    let content = volume.read_sector(1).unwrap();
     assert!(matches!(content, SectorContent::Zero));
 }
 
@@ -77,7 +77,7 @@ fn volume_file_data_maps_to_real_path() {
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
     // 查找 data.bin 的数据扇区
     let file_sectors = volume.find_file_data_sectors("data.bin");
@@ -87,7 +87,7 @@ fn volume_file_data_maps_to_real_path() {
     );
 
     let first_sector = file_sectors[0];
-    let content = volume.read_sector(first_sector);
+    let content = volume.read_sector(first_sector).unwrap();
     match content {
         SectorContent::FileData {
             real_path,
@@ -104,28 +104,49 @@ fn volume_file_data_maps_to_real_path() {
 }
 
 #[test]
+fn partial_file_sector_records_valid_bytes() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("short.txt"), b"abc").unwrap();
+
+    let tree = build_file_tree(tmp.path(), &[]);
+    let snapshot = make_snapshot();
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
+    let sectors = volume.find_file_data_sectors("short.txt");
+    let first_sector = *sectors.first().unwrap();
+
+    match volume.read_sector(first_sector).unwrap() {
+        SectorContent::FileData { valid_bytes, .. } => {
+            assert_eq!(valid_bytes, 3);
+        }
+        other => panic!("short.txt should map to file data, got {other:?}"),
+    }
+}
+
+#[test]
 fn volume_total_sectors() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("test.txt"), b"Hello").unwrap();
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
     assert!(volume.total_sectors() > PARTITION_OFFSET_SECTORS);
 }
 
 #[test]
-fn volume_beyond_total_returns_zero() {
+fn volume_beyond_total_returns_error() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("test.txt"), b"Hello").unwrap();
 
     let tree = build_file_tree(tmp.path(), &[]);
     let snapshot = make_snapshot();
-    let volume = VirtualVolume::build(&tree, &snapshot);
+    let volume = VirtualVolume::build(&tree, &snapshot).unwrap();
 
-    let content = volume.read_sector(volume.total_sectors() + 100);
-    assert!(matches!(content, SectorContent::Zero));
+    let err = volume
+        .read_sector(volume.total_sectors() + 100)
+        .unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
 }
 
 #[test]
@@ -144,7 +165,7 @@ fn virtual_volume_uses_minimum_capacity_for_tiny_content() {
         children: vec![],
     };
 
-    let volume = VirtualVolume::build_with_capacity(&[entry], &make_snapshot(), 0);
+    let volume = VirtualVolume::build_with_capacity(&[entry], &make_snapshot(), 0).unwrap();
 
     assert!(volume.total_sectors() * SECTOR_SIZE as u64 >= MIN_VIRTUAL_VOLUME_BYTES);
 }
@@ -152,7 +173,7 @@ fn virtual_volume_uses_minimum_capacity_for_tiny_content() {
 #[test]
 fn virtual_volume_uses_source_capacity_when_larger_than_minimum() {
     let source_size = 64 * 1024 * 1024;
-    let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size);
+    let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size).unwrap();
 
     assert!(volume.total_sectors() * SECTOR_SIZE as u64 >= source_size);
 }
@@ -160,11 +181,11 @@ fn virtual_volume_uses_source_capacity_when_larger_than_minimum() {
 #[test]
 fn allocation_bitmap_chain_covers_large_source_capacity() {
     let source_size = 512 * 1024 * 1024;
-    let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size);
+    let volume = VirtualVolume::build_with_capacity(&[], &make_snapshot(), source_size).unwrap();
     let layout = volume.layout();
 
     let root_sector = layout.cluster_to_sector(2);
-    let root = match volume.read_sector(root_sector) {
+    let root = match volume.read_sector(root_sector).unwrap() {
         SectorContent::Metadata(data) => data,
         other => panic!("root directory sector should be metadata, got {other:?}"),
     };
@@ -183,7 +204,7 @@ fn allocation_bitmap_chain_covers_large_source_capacity() {
         let fat_offset = cluster as u64 * 4;
         let fat_sector =
             PARTITION_OFFSET_SECTORS + layout.fat_offset_sectors + fat_offset / SECTOR_SIZE as u64;
-        let fat_sector_data = match volume.read_sector(fat_sector) {
+        let fat_sector_data = match volume.read_sector(fat_sector).unwrap() {
             SectorContent::Metadata(data) => data,
             other => panic!("FAT sector should be metadata, got {other:?}"),
         };

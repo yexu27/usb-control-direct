@@ -2,6 +2,8 @@
 //!
 //! 基于 exFAT 规范定义虚拟卷的布局参数。所有偏移和大小以扇区为单位。
 
+use std::io;
+
 /// 扇区大小（字节）。
 pub const SECTOR_SIZE: u32 = 512;
 
@@ -135,6 +137,33 @@ impl DiskLayout {
             return None;
         }
         Some(cluster)
+    }
+
+    /// 虚拟整盘字节数，尾部边界为独占端点。
+    pub fn total_bytes(&self) -> u64 {
+        self.total_sectors * SECTOR_SIZE as u64
+    }
+
+    /// 虚拟整盘最后一个合法字节之后的位置。
+    pub fn end_byte_exclusive(&self) -> u64 {
+        self.total_bytes()
+    }
+
+    /// 校验当前布局可由 v1 的 MBR 分区表准确表达。
+    pub fn ensure_mbr_compatible(&self) -> Result<(), io::Error> {
+        if PARTITION_OFFSET_SECTORS > u32::MAX as u64 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "partition offset exceeds MBR u32 field",
+            ));
+        }
+        if self.volume_length_sectors > u32::MAX as u64 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "virtual exFAT volume length exceeds MBR u32 field",
+            ));
+        }
+        Ok(())
     }
 }
 

@@ -5,12 +5,11 @@ use std::sync::Mutex;
 
 use tracing::debug;
 
-use crate::exfat::allocator::ExfatAllocator;
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::exfat::runtime_state::ExfatRuntimeState;
 use crate::types::{ControlledEntry, PolicySnapshot};
 use crate::vfs::mutation::{FsMutation, NodeKind};
-use crate::vfs::{NodeId, VfsIndex, VfsNodeKind};
+use crate::vfs::{NodeId, VfsNodeKind};
 
 pub struct VirtualExfatFs {
     runtime: Mutex<ExfatRuntimeState>,
@@ -23,13 +22,11 @@ impl VirtualExfatFs {
         snapshot: PolicySnapshot,
         source_size_bytes: u64,
     ) -> Result<Self, std::io::Error> {
-        let index = VfsIndex::from_controlled_tree(mount_root, tree)?;
-        let allocator = ExfatAllocator::build(&index, source_size_bytes)?;
         let runtime =
             ExfatRuntimeState::from_controlled_tree(mount_root, tree, snapshot, source_size_bytes)?;
         debug!(
             source_size_bytes,
-            metadata_memory_bytes = allocator.estimated_memory_bytes(),
+            total_sectors = runtime.total_sectors(),
             "受控虚拟 exFAT 文件系统构建完成"
         );
         Ok(Self {

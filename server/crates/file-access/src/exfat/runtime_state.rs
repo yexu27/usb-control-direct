@@ -48,7 +48,7 @@ impl ExfatRuntimeState {
         source_size_bytes: u64,
     ) -> Result<Self, std::io::Error> {
         let index = VfsIndex::from_controlled_tree(mount_root, entries)?;
-        let volume = VirtualVolume::build_with_capacity(entries, &snapshot, source_size_bytes);
+        let volume = VirtualVolume::build_with_capacity(entries, &snapshot, source_size_bytes)?;
         let layout = volume.layout().clone();
         let mut directory_store = DirectoryStore::default();
         let mut fat = FatState::new(layout.cluster_count);
@@ -208,6 +208,7 @@ impl ExfatRuntimeState {
     }
 
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
+        self.validate_read_range(offset, len)?;
         let mut out = Vec::with_capacity(len);
         let mut current = offset;
         while out.len() < len {
@@ -265,7 +266,7 @@ impl ExfatRuntimeState {
                         "read out of virtual exFAT range",
                     ));
                 }
-                _ => match self.volume.read_sector(sector) {
+                _ => match self.volume.read_sector(sector)? {
                     crate::types::SectorContent::Metadata(data) => {
                         out.extend_from_slice(&data[sector_offset..sector_offset + take]);
                     }
@@ -300,6 +301,22 @@ impl ExfatRuntimeState {
         Ok(out)
     }
 
+    fn validate_read_range(&self, offset: u64, len: usize) -> Result<(), std::io::Error> {
+        let end = offset.checked_add(len as u64).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "read range overflows virtual exFAT disk",
+            )
+        })?;
+        if end > self.volume.layout().end_byte_exclusive() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "read range exceeds virtual exFAT disk",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn directory_image(
         &self,
         path: &str,
@@ -322,7 +339,7 @@ impl ExfatRuntimeState {
                     data.extend_from_slice(overlay);
                     continue;
                 }
-                match self.volume.read_sector(sector) {
+                match self.volume.read_sector(sector)? {
                     crate::types::SectorContent::Metadata(sector_data) => {
                         data.extend_from_slice(&sector_data);
                     }

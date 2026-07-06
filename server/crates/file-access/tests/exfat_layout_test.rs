@@ -1,6 +1,6 @@
 use file_access::exfat::layout::{
-    DiskLayout, BOOT_REGION_SECTORS, CLUSTER_SIZE, MBR_SECTOR, PARTITION_OFFSET_SECTORS,
-    SECTOR_SIZE, SECTORS_PER_CLUSTER, MIN_VIRTUAL_VOLUME_BYTES,
+    DiskLayout, BOOT_REGION_SECTORS, CLUSTER_SIZE, MBR_SECTOR, MIN_VIRTUAL_VOLUME_BYTES,
+    PARTITION_OFFSET_SECTORS, SECTORS_PER_CLUSTER, SECTOR_SIZE,
 };
 
 #[test]
@@ -36,7 +36,10 @@ fn layout_fat_grows_with_cluster_count() {
 fn cluster_to_sector_offset() {
     let layout = DiskLayout::new(10);
     let sector = layout.cluster_to_sector(2);
-    assert_eq!(sector, PARTITION_OFFSET_SECTORS + layout.cluster_heap_offset_sectors);
+    assert_eq!(
+        sector,
+        PARTITION_OFFSET_SECTORS + layout.cluster_heap_offset_sectors
+    );
     let sector3 = layout.cluster_to_sector(3);
     assert_eq!(sector3, sector + SECTORS_PER_CLUSTER as u64);
 }
@@ -65,4 +68,37 @@ fn layout_respects_source_partition_size_when_larger_than_minimum() {
 
     assert!(layout.cluster_count >= 8);
     assert!(layout.total_sectors * SECTOR_SIZE as u64 >= source_size);
+}
+
+#[test]
+fn layout_exposes_total_byte_boundary() {
+    let layout = DiskLayout::new(10);
+
+    assert_eq!(
+        layout.total_bytes(),
+        layout.total_sectors * SECTOR_SIZE as u64
+    );
+    assert_eq!(layout.end_byte_exclusive(), layout.total_bytes());
+}
+
+#[test]
+fn layout_accepts_mbr_representable_volume() {
+    let layout = DiskLayout::new(10);
+
+    layout.ensure_mbr_compatible().unwrap();
+}
+
+#[test]
+fn layout_rejects_volume_length_beyond_mbr_u32() {
+    let layout = DiskLayout {
+        fat_offset_sectors: 24,
+        fat_length_sectors: 1,
+        cluster_heap_offset_sectors: 32,
+        cluster_count: 1,
+        total_sectors: PARTITION_OFFSET_SECTORS + u32::MAX as u64 + 1,
+        volume_length_sectors: u32::MAX as u64 + 1,
+    };
+
+    let err = layout.ensure_mbr_compatible().unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 }

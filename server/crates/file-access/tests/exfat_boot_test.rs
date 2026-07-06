@@ -1,7 +1,7 @@
-use file_access::exfat::boot::generate_boot_region;
+use file_access::exfat::boot::{generate_boot_region, generate_mbr};
 use file_access::exfat::layout::{
-    DiskLayout, SECTOR_SIZE, EXFAT_SIGNATURE, BOOT_SIGNATURE,
-    BYTES_PER_SECTOR_SHIFT, SECTORS_PER_CLUSTER_SHIFT,
+    DiskLayout, BYTES_PER_SECTOR_SHIFT, EXFAT_SIGNATURE, PARTITION_OFFSET_SECTORS,
+    SECTORS_PER_CLUSTER_SHIFT, SECTOR_SIZE,
 };
 
 #[test]
@@ -63,11 +63,48 @@ fn boot_checksum_sector_is_filled() {
     let layout = DiskLayout::new(100);
     let boot = generate_boot_region(&layout);
     let checksum_offset = 11 * SECTOR_SIZE as usize;
-    let first_checksum = u32::from_le_bytes(boot[checksum_offset..checksum_offset + 4].try_into().unwrap());
+    let first_checksum = u32::from_le_bytes(
+        boot[checksum_offset..checksum_offset + 4]
+            .try_into()
+            .unwrap(),
+    );
     for i in 0..(SECTOR_SIZE as usize / 4) {
         let offset = checksum_offset + i * 4;
         let val = u32::from_le_bytes(boot[offset..offset + 4].try_into().unwrap());
         assert_eq!(val, first_checksum, "Checksum at position {}", i);
     }
     assert_ne!(first_checksum, 0);
+}
+
+#[test]
+fn mbr_partition_fields_match_layout() {
+    let layout = DiskLayout::new(100);
+    let mbr = generate_mbr(&layout).unwrap();
+
+    assert_eq!(mbr[510], 0x55);
+    assert_eq!(mbr[511], 0xAA);
+    assert_eq!(mbr[446 + 4], 0x07);
+    assert_eq!(
+        u32::from_le_bytes(mbr[446 + 8..446 + 12].try_into().unwrap()) as u64,
+        PARTITION_OFFSET_SECTORS
+    );
+    assert_eq!(
+        u32::from_le_bytes(mbr[446 + 12..446 + 16].try_into().unwrap()) as u64,
+        layout.volume_length_sectors
+    );
+}
+
+#[test]
+fn mbr_rejects_unrepresentable_volume_length() {
+    let layout = DiskLayout {
+        fat_offset_sectors: 24,
+        fat_length_sectors: 1,
+        cluster_heap_offset_sectors: 32,
+        cluster_count: 1,
+        total_sectors: PARTITION_OFFSET_SECTORS + u32::MAX as u64 + 1,
+        volume_length_sectors: u32::MAX as u64 + 1,
+    };
+
+    let err = generate_mbr(&layout).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 }

@@ -2,6 +2,8 @@
 //!
 //! 包含 Boot Sector + 8 Extended Boot Sectors + OEM Parameters + Reserved + Boot Checksum。
 
+use std::io;
+
 use crate::exfat::layout::{
     DiskLayout, SECTOR_SIZE, BYTES_PER_SECTOR_SHIFT, SECTORS_PER_CLUSTER_SHIFT,
     PARTITION_OFFSET_SECTORS, EXFAT_SIGNATURE, FS_REVISION, FIRST_CLUSTER,
@@ -73,20 +75,17 @@ fn compute_boot_checksum(data: &[u8]) -> u32 {
 }
 
 /// 生成 MBR 扇区（512 字节）。
-pub fn generate_mbr(layout: &DiskLayout) -> Vec<u8> {
+pub fn generate_mbr(layout: &DiskLayout) -> Result<Vec<u8>, io::Error> {
+    layout.ensure_mbr_compatible()?;
     let mut mbr = vec![0u8; SECTOR_SIZE as usize];
     let entry_offset = 446;
     mbr[entry_offset] = 0x00;
     mbr[entry_offset + 4] = 0x07;
     mbr[entry_offset + 8..entry_offset + 12]
         .copy_from_slice(&(PARTITION_OFFSET_SECTORS as u32).to_le_bytes());
-    let num_sectors = if layout.volume_length_sectors > u32::MAX as u64 {
-        u32::MAX
-    } else {
-        layout.volume_length_sectors as u32
-    };
+    let num_sectors = layout.volume_length_sectors as u32;
     mbr[entry_offset + 12..entry_offset + 16].copy_from_slice(&num_sectors.to_le_bytes());
     mbr[510] = 0x55;
     mbr[511] = 0xAA;
-    mbr
+    Ok(mbr)
 }

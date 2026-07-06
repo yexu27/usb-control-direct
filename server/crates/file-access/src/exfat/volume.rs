@@ -4,6 +4,7 @@
 //! 元数据扇区预生成在内存中，文件数据扇区映射到真实文件路径。
 
 use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
 
 use crate::exfat::bitmap::generate_bitmap;
@@ -68,7 +69,7 @@ impl VirtualVolume {
     /// 参数:
     ///   - tree: 受控文件树。
     ///   - snapshot: 策略快照。
-    pub fn build(tree: &[ControlledEntry], snapshot: &PolicySnapshot) -> Self {
+    pub fn build(tree: &[ControlledEntry], snapshot: &PolicySnapshot) -> Result<Self, io::Error> {
         Self::build_with_capacity(tree, snapshot, 0)
     }
 
@@ -77,7 +78,7 @@ impl VirtualVolume {
         tree: &[ControlledEntry],
         snapshot: &PolicySnapshot,
         source_size_bytes: u64,
-    ) -> Self {
+    ) -> Result<Self, io::Error> {
         let mut builder = VolumeBuilder::new(snapshot, source_size_bytes);
         builder.allocate_metadata();
         builder.allocate_files(tree, &[]);
@@ -85,13 +86,16 @@ impl VirtualVolume {
     }
 
     /// 读取指定扇区。
-    pub fn read_sector(&self, sector: u64) -> SectorContent {
+    pub fn read_sector(&self, sector: u64) -> Result<SectorContent, io::Error> {
         if sector >= self.layout.total_sectors {
-            return SectorContent::Zero;
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "read sector exceeds virtual exFAT disk",
+            ));
         }
 
         if let Some(data) = self.metadata_sectors.get(&sector) {
-            return SectorContent::Metadata(data.clone());
+            return Ok(SectorContent::Metadata(data.clone()));
         }
 
         if let Some(mapping) = self.file_data_ranges.iter().find(|mapping| {
@@ -101,15 +105,15 @@ impl VirtualVolume {
             let offset = mapping.offset + sector_delta * SECTOR_SIZE as u64;
             let remaining = mapping.byte_len.saturating_sub(sector_delta * SECTOR_SIZE as u64);
             let valid_bytes = remaining.min(SECTOR_SIZE as u64) as u32;
-            return SectorContent::FileData {
+            return Ok(SectorContent::FileData {
                 real_path: mapping.real_path.clone(),
                 offset,
                 valid_bytes,
                 blocked: mapping.blocked,
-            };
+            });
         }
 
-        SectorContent::Zero
+        Ok(SectorContent::Zero)
     }
 
     /// 总扇区数。
@@ -385,7 +389,7 @@ impl<'a> VolumeBuilder<'a> {
     }
 
     /// 生成最终的虚拟卷。
-    fn generate(mut self) -> VirtualVolume {
+    fn generate(mut self) -> Result<VirtualVolume, io::Error> {
         // 根目录可能需要多个簇 — 在最终生成阶段分配额外簇
         let root_data_len = self.root_dir_entries.len().max(CLUSTER_SIZE as usize);
         let root_clusters_needed = (root_data_len as u32).div_ceil(CLUSTER_SIZE);
@@ -427,7 +431,7 @@ impl<'a> VolumeBuilder<'a> {
         let mut directory_path_clusters = HashMap::new();
 
         // MBR
-        let mbr = generate_mbr(&layout);
+        let mbr = generate_mbr(&layout)?;
         metadata_sectors.insert(0, mbr);
 
         // Boot Region (Main)
@@ -613,14 +617,14 @@ impl<'a> VolumeBuilder<'a> {
             file_sector_map.insert(mapping.name.clone(), sectors);
         }
 
-        VirtualVolume {
+        Ok(VirtualVolume {
             metadata_sectors,
             file_data_ranges,
             layout,
             file_sector_map,
             directory_sector_paths,
             directory_path_clusters,
-        }
+        })
     }
 }
 
@@ -665,10 +669,10 @@ mod tests {
             permission: 1,
         };
 
-        let volume = VirtualVolume::build(&[entry], &snapshot);
+        let volume = VirtualVolume::build(&[entry], &snapshot).unwrap();
         let sectors = volume.find_file_data_sectors("tool.bin");
         assert!(!sectors.is_empty());
-        match volume.read_sector(sectors[0]) {
+        match volume.read_sector(sectors[0]).unwrap() {
             SectorContent::FileData { blocked, .. } => assert!(blocked),
             other => panic!("expected file data sector, got {other:?}"),
         }

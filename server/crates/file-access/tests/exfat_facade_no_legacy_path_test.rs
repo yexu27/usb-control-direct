@@ -91,3 +91,11 @@ fn production_exfat_module_does_not_import_directory_snapshot_diff() {
         "production exfat module must not expose diff.rs"
     );
 }
+
+#[test]
+fn virtual_exfat_facade_does_not_use_legacy_allocator() {
+    let fs_rs = source_file("src/exfat/fs.rs");
+
+    assert!(!fs_rs.contains("ExfatAllocator"));
+    assert!(!fs_rs.contains("exfat::allocator"));
+}
