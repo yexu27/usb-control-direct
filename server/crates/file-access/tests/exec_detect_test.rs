@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use file_access::exec_detect::detect_exec_type;
 use file_access::types::ExecFileType;
 
