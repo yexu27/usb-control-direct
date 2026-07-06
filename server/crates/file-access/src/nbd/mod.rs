@@ -4,6 +4,7 @@
 
 pub mod io;
 pub mod protocol;
+pub mod sysfs;
 
 use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
@@ -13,10 +14,14 @@ use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
-use crate::block_backend::BlockBackend;
-use crate::exfat::layout::SECTOR_SIZE;
 use self::io::{read_exact_fd, write_all_fd};
 use self::protocol::{build_reply, NbdCommand, NbdRequest, NBD_EIO, NBD_REQUEST_SIZE};
+pub use self::sysfs::{
+    ensure_partition_scan_disabled, nbd_name_from_device_path, parse_nbd_max_part,
+    read_nbd_partition_scan_status, NbdPartitionScanStatus,
+};
+use crate::block_backend::BlockBackend;
+use crate::exfat::layout::SECTOR_SIZE;
 
 pub trait NbdBackend: Send + Sync {
     fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error>;
@@ -102,29 +107,6 @@ const NBD_FLAG_HAS_FLAGS: u32 = 1;
 const NBD_FLAG_READ_ONLY: u32 = 2;
 const NBD_FLAG_SEND_FLUSH: u32 = 4;
 
-pub fn nbd_name_from_device_path(path: &Path) -> Result<String, std::io::Error> {
-    let name = path.file_name().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("invalid NBD path: {}", path.display()),
-        )
-    })?;
-    let name = name.to_string_lossy();
-    let Some(rest) = name.strip_prefix("nbd") else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("not an NBD device: {}", path.display()),
-        ));
-    };
-    if rest.is_empty() || !rest.chars().all(|ch| ch.is_ascii_digit()) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("NBD partition is not allowed: {}", path.display()),
-        ));
-    }
-    Ok(name.to_string())
-}
-
 pub fn disconnect_nbd_device(device: &Path) -> Result<(), std::io::Error> {
     let _ = nbd_name_from_device_path(device)?;
     let nbd_file = std::fs::OpenOptions::new()
@@ -159,33 +141,6 @@ pub fn disconnect_nbd_pool(pool_size: u32) {
             ),
         }
     }
-}
-
-/// NBD 本机分区扫描状态。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NbdPartitionScanStatus {
-    Disabled,
-    Enabled(u32),
-}
-
-pub fn parse_nbd_max_part(value: &str) -> Result<NbdPartitionScanStatus, std::io::Error> {
-    let parsed = value.trim().parse::<u32>().map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("invalid nbd max_part value: {}", e),
-        )
-    })?;
-
-    if parsed == 0 {
-        Ok(NbdPartitionScanStatus::Disabled)
-    } else {
-        Ok(NbdPartitionScanStatus::Enabled(parsed))
-    }
-}
-
-pub fn read_nbd_partition_scan_status() -> Result<NbdPartitionScanStatus, std::io::Error> {
-    let value = std::fs::read_to_string("/sys/module/nbd/parameters/max_part")?;
-    parse_nbd_max_part(&value)
 }
 
 /// NBD 服务器。

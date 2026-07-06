@@ -13,7 +13,7 @@ use tracing::{debug, error, info};
 
 use crate::exfat::fs::VirtualExfatFs;
 use crate::gadget::{GadgetError, GadgetRuntime};
-use crate::nbd::{run_request_loop, NbdServer};
+use crate::nbd::{ensure_partition_scan_disabled, run_request_loop, NbdServer};
 
 /// 已发布 storage 资源的运行时句柄。
 pub(crate) trait PublishedStorageRuntime: Send {
@@ -89,6 +89,9 @@ impl StorageRuntimePublisher for StoragePublisher {
             let total_sectors = fs.total_sectors();
             let fs = Arc::new(fs);
             let mut nbd_server = NbdServer::new(&nbd_device);
+
+            ensure_partition_scan_disabled()
+                .map_err(|e| PublishError::Nbd(format!("NBD 本机分区扫描未关闭，拒绝发布: {e}")))?;
 
             debug!(nbd = %nbd_device.display(), total_sectors, "启动 NBD 服务");
             let user_fd = nbd_server

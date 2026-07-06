@@ -2,9 +2,10 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use file_access::nbd::{
-    nbd_name_from_device_path, parse_nbd_max_part, NbdPartitionScanStatus, NbdServer,
+use file_access::nbd::sysfs::{
+    nbd_name_from_device_path, parse_nbd_max_part, NbdPartitionScanStatus,
 };
+use file_access::nbd::NbdServer;
 use tempfile::tempdir;
 
 fn make_nbd_sysfs(root: &Path, name: &str, pid: &str, size: &str) {
