@@ -1,52 +1,67 @@
 //! USB 设备管理器。
 //!
-//! 以父设备路径（去掉 :N.M 接口后缀）为唯一键管理已连接 USB 设备，
-//! 合并同一物理设备的多个接口到一条记录。
+//! 以父设备路径分组管理已连接 USB interface。
+//! 准入、白名单和会话启动由 `DeviceOrchestrator` 负责，本模块只维护接口注册表。
 
 use std::collections::HashMap;
 
-use common::types::DeviceType;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::descriptor::UsbDeviceInfo;
 
-/// 大容量存储设备接口类。
-const CLASS_MASS_STORAGE: u8 = 0x08;
-/// HID 接口类。
-const CLASS_HID: u8 = 0x03;
+/// 单个 USB interface 记录。
+#[derive(Debug, Clone)]
+pub struct InterfaceRecord {
+    pub info: UsbDeviceInfo,
+    pub session_key: String,
+    pub connected_at: i64,
+}
 
-/// 设备记录。
+/// 父 USB 设备记录。
 #[derive(Debug, Clone)]
 pub struct DeviceRecord {
-    /// 设备信息（首个接口）。
-    pub info: UsbDeviceInfo,
-    /// 该设备的所有接口 sys_path。
-    pub interfaces: Vec<String>,
-    /// 各接口的 class 值（与 interfaces 一一对应）。
-    pub interface_classes: Vec<u8>,
-    /// 首次连接时间（Unix 秒）。
+    pub parent_path: String,
+    interfaces: HashMap<String, InterfaceRecord>,
     pub connected_at: i64,
 }
 
 impl DeviceRecord {
-    /// 是否为存储类设备。
-    pub fn is_storage(&self) -> bool {
-        self.info.device_type == DeviceType::Storage
+    pub fn interface_count(&self) -> usize {
+        self.interfaces.len()
     }
 
-    /// 是否疑似 BadUSB 设备（同时具备 Storage 和 HID 接口）。
-    pub fn is_badusb(&self) -> bool {
-        let has_storage = self.interface_classes.contains(&CLASS_MASS_STORAGE);
-        let has_hid = self.interface_classes.contains(&CLASS_HID);
-        has_storage && has_hid
+    pub fn interface(&self, sys_path: &str) -> Option<&InterfaceRecord> {
+        self.interfaces.get(sys_path)
     }
+
+    pub fn interfaces(&self) -> impl Iterator<Item = &InterfaceRecord> {
+        self.interfaces.values()
+    }
+}
+
+/// interface add 注册结果。
+#[derive(Debug, Clone)]
+pub struct InterfaceAddResult {
+    pub parent_path: String,
+    pub session_key: String,
+    pub is_new_parent: bool,
+    pub is_new_interface: bool,
+}
+
+/// interface remove 注册结果。
+#[derive(Debug, Clone)]
+pub struct InterfaceRemoveResult {
+    pub parent_path: String,
+    pub session_key: String,
+    pub interface: InterfaceRecord,
+    pub parent_removed: bool,
 }
 
 /// USB 设备管理器。
 ///
-/// 维护已连接设备的注册表，增删查均以父设备路径为键。
+/// 维护已连接 USB interface 注册表，按 parent path 分组，但所有生命周期结果都按
+/// interface sys_path 返回。
 pub struct DeviceManager {
-    /// 父设备路径 → DeviceRecord。
     records: HashMap<String, DeviceRecord>,
 }
 
@@ -59,89 +74,83 @@ impl Default for DeviceManager {
 impl DeviceManager {
     /// 创建设备管理器。
     pub fn new() -> Self {
-        DeviceManager {
+        Self {
             records: HashMap::new(),
         }
     }
 
-    /// 添加设备。按父设备路径归并同物理设备的多个接口。
-    ///
-    /// 如果父设备路径已存在，追加接口并保留首次记录的 info。
-    /// 如果不存在，创建新记录。
-    /// 多接口设备同时具备 Storage + HID 时输出 BadUSB 告警。
-    pub fn add(&mut self, info: UsbDeviceInfo) {
+    /// 添加 USB interface。
+    pub fn add_interface(&mut self, info: UsbDeviceInfo) -> InterfaceAddResult {
         let parent_path = parent_device_path(&info.sys_path);
-        let class = info.interface_class;
+        let session_key = interface_session_key(&info.sys_path);
         let now = common::time::now_unix();
+        let is_new_parent = !self.records.contains_key(&parent_path);
 
-        if let Some(record) = self.records.get_mut(&parent_path) {
-            if !record.interfaces.contains(&info.sys_path) {
-                record.interfaces.push(info.sys_path.clone());
-                record.interface_classes.push(class);
-            }
+        let record = self.records.entry(parent_path.clone()).or_insert_with(|| {
             info!(
                 parent = %parent_path,
                 dev = %info.device_name,
-                interfaces = ?record.interfaces,
-                "设备接口追加"
+                "USB 父设备注册"
             );
-            if record.is_badusb() {
-                warn!(
-                    parent = %parent_path,
-                    dev = %info.device_name,
-                    "检测到 BadUSB 伪装设备（同时具备 Storage 和 HID 接口）"
-                );
+            DeviceRecord {
+                parent_path: parent_path.clone(),
+                interfaces: HashMap::new(),
+                connected_at: now,
             }
-        } else {
+        });
+
+        let is_new_interface = !record.interfaces.contains_key(&info.sys_path);
+        if is_new_interface {
             info!(
                 parent = %parent_path,
+                sys_path = %info.sys_path,
                 dev = %info.device_name,
                 type = ?info.device_type,
-                "设备注册"
+                "USB 接口注册"
             );
-            let sys_path = info.sys_path.clone();
-            self.records.insert(
-                parent_path,
-                DeviceRecord {
+            record.interfaces.insert(
+                info.sys_path.clone(),
+                InterfaceRecord {
                     info,
-                    interfaces: vec![sys_path],
-                    interface_classes: vec![class],
+                    session_key: session_key.clone(),
                     connected_at: now,
                 },
             );
         }
+
+        InterfaceAddResult {
+            parent_path,
+            session_key,
+            is_new_parent,
+            is_new_interface,
+        }
     }
 
-    /// 移除设备的指定接口。
-    ///
-    /// 返回被移除的设备记录（当且仅当该设备的所有接口都已移除时）。
-    pub fn remove_interface(&mut self, sys_path: &str) -> Option<DeviceRecord> {
+    /// 移除 USB interface。
+    pub fn remove_interface(&mut self, sys_path: &str) -> Option<InterfaceRemoveResult> {
         let parent_path = parent_device_path(sys_path);
-
         let record = self.records.get_mut(&parent_path)?;
-        if let Some(pos) = record.interfaces.iter().position(|iface| iface == sys_path) {
-            record.interfaces.remove(pos);
-            if pos < record.interface_classes.len() {
-                record.interface_classes.remove(pos);
-            }
-        }
+        let interface = record.interfaces.remove(sys_path)?;
+        let session_key = interface.session_key.clone();
+        let parent_removed = record.interfaces.is_empty();
 
-        if record.interfaces.is_empty() {
-            let removed = self.records.remove(&parent_path);
-            info!(
-                parent = %parent_path,
-                dev = ?removed.as_ref().map(|r| &r.info.device_name),
-                "设备移除"
-            );
-            removed
+        if parent_removed {
+            self.records.remove(&parent_path);
+            info!(parent = %parent_path, "USB 父设备移除");
         } else {
             info!(
                 parent = %parent_path,
-                remaining = ?record.interfaces,
-                "设备接口移除（仍有其他接口）"
+                remaining = record.interfaces.len(),
+                "USB 接口移除，父设备仍有其它接口"
             );
-            None
         }
+
+        Some(InterfaceRemoveResult {
+            parent_path,
+            session_key,
+            interface,
+            parent_removed,
+        })
     }
 
     /// 根据父设备路径查询设备。
@@ -149,29 +158,29 @@ impl DeviceManager {
         self.records.get(parent_path)
     }
 
-    /// 根据序列号查找已连接设备信息。
+    /// 根据序列号查找已连接接口信息。
     pub fn connected_device_by_serial(&self, serial: &str) -> Option<&UsbDeviceInfo> {
-        self.records.values().find(|r| r.info.serial_number == serial).map(|r| &r.info)
-    }
-
-    /// 根据序列号判断设备是否疑似 BadUSB（同时具备 Storage 和 HID 接口）。
-    pub fn is_badusb_by_serial(&self, serial: &str) -> bool {
         self.records
             .values()
-            .find(|r| r.info.serial_number == serial)
-            .map(|r| r.is_badusb())
-            .unwrap_or(false)
+            .flat_map(|record| record.interfaces.values())
+            .find(|interface| interface.info.serial_number == serial)
+            .map(|interface| &interface.info)
     }
 
-    /// 列出所有已连接设备。
+    /// 列出所有已连接父设备记录。
     pub fn list_all(&self) -> Vec<&DeviceRecord> {
         self.records.values().collect()
     }
 
-    /// 已连接设备数量。
+    /// 已连接父设备数量。
     pub fn count(&self) -> usize {
         self.records.len()
     }
+}
+
+/// 生成接口级会话键。
+pub fn interface_session_key(sys_path: &str) -> String {
+    sys_path.to_string()
 }
 
 /// 从接口 sys_path 提取父设备路径。

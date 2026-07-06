@@ -106,6 +106,44 @@ fn test_storage_info(serial: &str) -> UsbDeviceInfo {
     }
 }
 
+fn composite_storage_info(serial: &str, interface: &str) -> UsbDeviceInfo {
+    UsbDeviceInfo {
+        sys_path: format!(
+            "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.9/2-1.9:{}",
+            interface
+        ),
+        dev_path: Some("/dev/sda1".into()),
+        serial_number: serial.into(),
+        vid: "0930".into(),
+        pid: "6545".into(),
+        device_name: format!("Test U盘 {}", serial),
+        device_type: DeviceType::Storage,
+        interface_class: 0x08,
+        interface_subclass: 0x06,
+        interface_protocol: 0x50,
+        capacity_bytes: Some(16 * 1024 * 1024 * 1024),
+    }
+}
+
+fn composite_unsupported_info(serial: &str, interface: &str) -> UsbDeviceInfo {
+    UsbDeviceInfo {
+        sys_path: format!(
+            "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.9/2-1.9:{}",
+            interface
+        ),
+        dev_path: None,
+        serial_number: serial.into(),
+        vid: "0930".into(),
+        pid: "6545".into(),
+        device_name: format!("Composite Vendor {}", serial),
+        device_type: DeviceType::Unsupported,
+        interface_class: 0xff,
+        interface_subclass: 0x42,
+        interface_protocol: 0x01,
+        capacity_bytes: None,
+    }
+}
+
 fn setup_services(db_path: &std::path::Path) -> (Arc<AuditService>, Arc<WhitelistManager>) {
     initialize_database(db_path);
     let storage = Arc::new(Storage::open(db_path).unwrap());
@@ -366,7 +404,7 @@ async fn test_parent_device_removed_clears_registered_device() {
         let mut dm = device_manager.write().unwrap();
         let mut info = test_keyboard_info();
         info.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into();
-        dm.add(info);
+        dm.add_interface(info);
     }
 
     let orchestrator = build_orchestrator(
@@ -427,7 +465,7 @@ async fn test_multi_interface_keyboard_registers_one_device() {
     let record = dm
         .get_by_parent("/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1")
         .unwrap();
-    assert_eq!(record.interfaces.len(), 2);
+    assert_eq!(record.interface_count(), 2);
 }
 
 #[tokio::test]
@@ -442,12 +480,12 @@ async fn test_multi_interface_remove_waits_until_last_interface() {
         let mut dm = device_manager.write().unwrap();
         let mut kb0 = test_keyboard_info();
         kb0.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.0".into();
-        dm.add(kb0);
+        dm.add_interface(kb0);
 
         let mut kb1 = test_keyboard_info();
         kb1.sys_path = "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.1/2-1.1:1.1".into();
         kb1.device_type = DeviceType::Unsupported;
-        dm.add(kb1);
+        dm.add_interface(kb1);
     }
 
     let orchestrator = build_orchestrator(
@@ -470,5 +508,197 @@ async fn test_multi_interface_remove_waits_until_last_interface() {
 
     orchestrator.run().await;
 
+    assert_eq!(device_manager.read().unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn unsupported_interface_first_does_not_block_later_whitelisted_storage() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    add_storage_whitelist(&whitelist, "SN-PHONE", 1);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        storage_session,
+    );
+
+    tx.send(DeviceEvent::UnsupportedAdded(
+        composite_unsupported_info("SN-PHONE", "1.1"),
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::StorageAdded(composite_storage_info(
+        "SN-PHONE", "1.0",
+    )))
+    .unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 1);
+    let dm = device_manager.read().unwrap();
+    let record = dm
+        .get_by_parent("/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.9")
+        .unwrap();
+    assert_eq!(record.interface_count(), 2);
+}
+
+#[tokio::test]
+async fn unsupported_interface_after_storage_does_not_stop_or_duplicate_storage() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    add_storage_whitelist(&whitelist, "SN-PHONE", 1);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        storage_session,
+    );
+
+    tx.send(DeviceEvent::StorageAdded(composite_storage_info(
+        "SN-PHONE", "1.0",
+    )))
+    .unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        composite_unsupported_info("SN-PHONE", "1.1"),
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 1);
+    assert_eq!(storage_session_assert.stopped.load(Ordering::SeqCst), 0);
+    assert_eq!(device_manager.read().unwrap().count(), 1);
+}
+
+#[tokio::test]
+async fn removing_storage_interface_stops_storage_even_when_unsupported_interface_remains() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    add_storage_whitelist(&whitelist, "SN-PHONE", 1);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        storage_session,
+    );
+
+    let storage = composite_storage_info("SN-PHONE", "1.0");
+    let vendor = composite_unsupported_info("SN-PHONE", "1.1");
+
+    tx.send(DeviceEvent::StorageAdded(storage.clone())).unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        vendor,
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path)).unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 1);
+    assert_eq!(storage_session_assert.stopped.load(Ordering::SeqCst), 1);
+    assert_eq!(device_manager.read().unwrap().count(), 1);
+}
+
+#[tokio::test]
+async fn removing_unsupported_interface_does_not_stop_storage() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    add_storage_whitelist(&whitelist, "SN-PHONE", 1);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        storage_session,
+    );
+
+    let storage = composite_storage_info("SN-PHONE", "1.0");
+    let vendor = composite_unsupported_info("SN-PHONE", "1.1");
+
+    tx.send(DeviceEvent::StorageAdded(storage)).unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        vendor.clone(),
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path)).unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 1);
+    assert_eq!(storage_session_assert.stopped.load(Ordering::SeqCst), 0);
+    assert_eq!(device_manager.read().unwrap().count(), 1);
+}
+
+#[tokio::test]
+async fn removing_all_composite_interfaces_clears_parent_and_stops_storage_once() {
+    let dir = tempdir().unwrap();
+    let db_path = dir.path().join("test.db");
+    let (audit, whitelist) = setup_services(&db_path);
+    add_storage_whitelist(&whitelist, "SN-PHONE", 1);
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator(
+        rx,
+        whitelist,
+        audit,
+        Arc::clone(&device_manager),
+        storage_session,
+    );
+
+    let storage = composite_storage_info("SN-PHONE", "1.0");
+    let vendor = composite_unsupported_info("SN-PHONE", "1.1");
+
+    tx.send(DeviceEvent::StorageAdded(storage.clone())).unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        vendor.clone(),
+        "不支持的设备类型".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path)).unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path)).unwrap();
+    drop(tx);
+
+    orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 1);
+    assert_eq!(storage_session_assert.stopped.load(Ordering::SeqCst), 1);
     assert_eq!(device_manager.read().unwrap().count(), 0);
 }

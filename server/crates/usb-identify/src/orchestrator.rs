@@ -6,7 +6,7 @@
 //! - Mouse -> evdev 转发（S02）
 //! - Unsupported -> 记录 BLOCKED 日志
 //!
-//! 热插拔生命周期按 USB interface 事件归并到物理父设备路径。
+//! 热插拔生命周期按 USB interface 事件独立处理，父设备路径只用于分组和 storage 清理。
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, watch, Mutex};
 use tracing::{debug, error, info, warn};
 
 use crate::descriptor::UsbDeviceInfo;
-use crate::monitor::{DeviceManager, DeviceRecord};
+use crate::monitor::{DeviceManager, InterfaceAddResult, InterfaceRemoveResult};
 use crate::traits::{AuthorizedStorageDevice, StorageSessionController};
 
 use common::audit_const::event_type;
@@ -199,32 +199,26 @@ impl DeviceOrchestrator {
         }
     }
 
-    async fn register_session(&self, parent_path: String, session: ActiveSession) {
-        self.active_sessions
-            .lock()
-            .await
-            .insert(parent_path, session);
+    async fn register_session(&self, session_key: String, session: ActiveSession) {
+        self.active_sessions.lock().await.insert(session_key, session);
     }
 
-    fn add_device_record(&self, info: UsbDeviceInfo) -> bool {
-        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
-        let mut is_new = false;
-        if let Ok(mut dm) = self.device_manager.write() {
-            is_new = dm.get_by_parent(&parent_path).is_none();
-            dm.add(info);
-        }
-        is_new
+    fn add_interface_record(&self, info: UsbDeviceInfo) -> InterfaceAddResult {
+        let mut manager = self
+            .device_manager
+            .write()
+            .expect("device manager poisoned");
+        manager.add_interface(info)
     }
 
     /// 处理大容量存储设备。
     async fn handle_storage(&mut self, info: UsbDeviceInfo) {
-        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
-        let is_new_device = self.add_device_record(info.clone());
-        if !is_new_device {
+        let add_result = self.add_interface_record(info.clone());
+        if !add_result.is_new_interface {
             debug!(
-                parent = %parent_path,
+                session_key = %add_result.session_key,
                 sys_path = %info.sys_path,
-                "Storage 重复接口事件已归并，跳过重复编排"
+                "Storage 重复接口事件已跳过"
             );
             return;
         }
@@ -243,17 +237,6 @@ impl DeviceOrchestrator {
                 if let Err(e) = self.audit.log_usb_audit(&mut log) {
                     error!(error = %e, "审计日志写入失败");
                 }
-                let (cancel_tx, _) = watch::channel(false);
-                self.register_session(
-                    parent_path,
-                    ActiveSession {
-                        info,
-                        kind: SessionKind::Storage,
-                        cancel_tx,
-                        audit_detail: "未授权设备".into(),
-                    },
-                )
-                .await;
                 return;
             }
         };
@@ -283,7 +266,7 @@ impl DeviceOrchestrator {
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
         self.register_session(
-            parent_path.clone(),
+            add_result.session_key.clone(),
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Storage,
@@ -294,7 +277,7 @@ impl DeviceOrchestrator {
         .await;
 
         let device = AuthorizedStorageDevice {
-            parent_path,
+            parent_path: add_result.parent_path,
             sys_path: info.sys_path.clone(),
             dev_path,
             serial_number: serial.clone(),
@@ -314,6 +297,10 @@ impl DeviceOrchestrator {
                 );
             }
             Err(e) => {
+                self.active_sessions
+                    .lock()
+                    .await
+                    .remove(&add_result.session_key);
                 warn!(
                     serial = %serial,
                     dev = %info.device_name,
@@ -326,13 +313,12 @@ impl DeviceOrchestrator {
 
     /// 处理键盘设备。
     async fn handle_keyboard(&mut self, info: UsbDeviceInfo) {
-        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
-        let is_new_device = self.add_device_record(info.clone());
-        if !is_new_device {
+        let add_result = self.add_interface_record(info.clone());
+        if !add_result.is_new_interface {
             debug!(
-                parent = %parent_path,
+                session_key = %add_result.session_key,
                 sys_path = %info.sys_path,
-                "HID 重复接口事件已归并，跳过重复拦截启动"
+                "HID 重复接口事件已跳过"
             );
             return;
         }
@@ -353,7 +339,7 @@ impl DeviceOrchestrator {
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
-            parent_path,
+            add_result.session_key,
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Keyboard,
@@ -387,13 +373,12 @@ impl DeviceOrchestrator {
 
     /// 处理鼠标设备。
     async fn handle_mouse(&mut self, info: UsbDeviceInfo) {
-        let parent_path = crate::monitor::parent_device_path(&info.sys_path);
-        let is_new_device = self.add_device_record(info.clone());
-        if !is_new_device {
+        let add_result = self.add_interface_record(info.clone());
+        if !add_result.is_new_interface {
             debug!(
-                parent = %parent_path,
+                session_key = %add_result.session_key,
                 sys_path = %info.sys_path,
-                "HID 重复接口事件已归并，跳过重复转发启动"
+                "HID 重复接口事件已跳过"
             );
             return;
         }
@@ -414,7 +399,7 @@ impl DeviceOrchestrator {
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
-            parent_path,
+            add_result.session_key,
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Mouse,
@@ -441,98 +426,95 @@ impl DeviceOrchestrator {
 
     /// 处理不支持的设备。
     fn handle_unsupported(&mut self, info: UsbDeviceInfo, reason: String) {
-        warn!(dev = %info.device_name, reason = %reason, "不支持的 USB 设备");
-        let _ = self.add_device_record(info);
+        let add_result = self.add_interface_record(info.clone());
+        if add_result.is_new_interface {
+            warn!(
+                parent = %add_result.parent_path,
+                sys_path = %info.sys_path,
+                class = info.interface_class,
+                subclass = info.interface_subclass,
+                protocol = info.interface_protocol,
+                dev = %info.device_name,
+                reason = %reason,
+                "不支持的 USB 接口，已跳过映射"
+            );
+        } else {
+            debug!(
+                session_key = %add_result.session_key,
+                sys_path = %info.sys_path,
+                "不支持接口重复事件已跳过"
+            );
+        }
     }
 
-    async fn cleanup_session_by_parent(
-        &mut self,
-        parent_path: &str,
-        device_record: &DeviceRecord,
-        reason: &str,
-    ) {
-        let session = self.active_sessions.lock().await.remove(parent_path);
+    async fn cleanup_removed_interface(&mut self, removed: InterfaceRemoveResult, reason: &str) {
+        let session = self.active_sessions.lock().await.remove(&removed.session_key);
 
-        if let Some(session) = session {
-            let _ = session.cancel_tx.send(true);
-
-            if session.kind == SessionKind::Storage {
-                if let Err(e) = self
-                    .storage_session
-                    .stop_by_parent(parent_path.to_string(), reason.to_string())
-                    .await
-                {
-                    warn!(
-                        parent = %parent_path,
-                        error = %e,
-                        reason = %reason,
-                        "Storage session 清理失败"
-                    );
-                }
-            }
-
-            let mut log = build_audit_log(&session.info, event_type::DEVICE_REMOVE);
-            log.detail = Some(session.audit_detail.clone());
-            if let Err(e) = self.audit.log_usb_audit(&mut log) {
-                error!(error = %e, reason = %reason, "审计日志写入失败");
-            }
-
+        let Some(session) = session else {
             info!(
-                dev = %session.info.device_name,
-                kind = ?session.kind,
+                parent = %removed.parent_path,
+                sys_path = %removed.interface.info.sys_path,
+                type = ?removed.interface.info.device_type,
                 reason = %reason,
-                "设备会话清理完成"
+                "无 active session 的 USB 接口移除完成"
             );
             return;
+        };
+
+        let _ = session.cancel_tx.send(true);
+
+        if session.kind == SessionKind::Storage {
+            if let Err(e) = self
+                .storage_session
+                .stop_by_parent(removed.parent_path.clone(), reason.to_string())
+                .await
+            {
+                warn!(
+                    parent = %removed.parent_path,
+                    error = %e,
+                    reason = %reason,
+                    "Storage session 清理失败"
+                );
+            }
         }
 
-        let should_audit = matches!(
-            device_record.info.device_type,
-            common::types::DeviceType::Storage
-                | common::types::DeviceType::Keyboard
-                | common::types::DeviceType::Mouse
-        );
-        if should_audit {
-            if device_record.info.device_type == common::types::DeviceType::Storage {
-                if let Err(e) = self
-                    .storage_session
-                    .stop_by_parent(parent_path.to_string(), reason.to_string())
-                    .await
-                {
-                    warn!(
-                        parent = %parent_path,
-                        error = %e,
-                        reason = %reason,
-                        "Storage session 清理失败"
-                    );
-                }
-            }
-            let mut log = build_audit_log(&device_record.info, event_type::DEVICE_REMOVE);
-            log.detail = Some("设备拔出".into());
-            if let Err(e) = self.audit.log_usb_audit(&mut log) {
-                error!(error = %e, reason = %reason, "审计日志写入失败");
-            }
+        let mut log = build_audit_log(&session.info, event_type::DEVICE_REMOVE);
+        log.detail = Some(session.audit_detail.clone());
+        if let Err(e) = self.audit.log_usb_audit(&mut log) {
+            error!(error = %e, reason = %reason, "审计日志写入失败");
         }
+
+        info!(
+            parent = %removed.parent_path,
+            dev = %session.info.device_name,
+            kind = ?session.kind,
+            reason = %reason,
+            parent_removed = removed.parent_removed,
+            "USB 接口会话清理完成"
+        );
     }
 
     /// 处理设备移除。
     async fn handle_removed(&mut self, sys_path: String) {
-        let parent_path = crate::monitor::parent_device_path(&sys_path);
-
         let removed = if let Ok(mut dm) = self.device_manager.write() {
             dm.remove_interface(&sys_path)
         } else {
             None
         };
 
-        let Some(device_record) = removed else {
+        let Some(removed) = removed else {
             return;
         };
 
-        info!(dev = %device_record.info.device_name, type = ?device_record.info.device_type, "设备完全拔出");
+        info!(
+            parent = %removed.parent_path,
+            sys_path = %removed.interface.info.sys_path,
+            type = ?removed.interface.info.device_type,
+            parent_removed = removed.parent_removed,
+            "USB 接口拔出"
+        );
 
-        self.cleanup_session_by_parent(&parent_path, &device_record, "usb_remove")
-            .await;
+        self.cleanup_removed_interface(removed, "usb_remove").await;
     }
 }
 
