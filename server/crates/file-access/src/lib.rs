@@ -18,6 +18,7 @@ pub mod gadget;
 pub mod gadget_bootstrap;
 pub mod media_builder;
 pub mod publisher;
+pub mod startup_recovery;
 pub mod storage_session;
 
 pub use error::FileAccessError;
