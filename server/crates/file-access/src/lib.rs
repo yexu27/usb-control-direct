@@ -14,6 +14,7 @@ pub mod exfat;
 pub mod nbd;
 pub mod gadget;
 pub mod gadget_bootstrap;
+pub mod media_builder;
 pub mod engine;
 pub mod storage_session;
 
