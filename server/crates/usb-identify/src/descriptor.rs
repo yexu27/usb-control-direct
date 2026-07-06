@@ -133,10 +133,10 @@ pub struct InterfaceInfo {
     pub interface_protocol: u8,
 }
 
-/// 检测设备是否为 BadUSB（多接口伪装）。
+/// 观测设备是否同时暴露 Storage 和 HID 接口。
 ///
-/// 一个设备同时暴露 Storage（0x08）和 HID（0x03）接口时标记为可疑。
-pub fn detect_badusb(interfaces: &[InterfaceInfo]) -> bool {
+/// 该函数只表达描述符组合事实，不参与准入阻断。
+pub fn has_storage_and_hid_interfaces(interfaces: &[InterfaceInfo]) -> bool {
     let has_storage = interfaces
         .iter()
         .any(|iface| iface.interface_class == CLASS_MASS_STORAGE);
@@ -151,27 +151,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn detect_badusb_storage_plus_hid() {
+    fn detects_storage_plus_hid_combination_for_observation_only() {
         let interfaces = vec![
             InterfaceInfo { interface_class: 0x08, interface_subclass: 0x06, interface_protocol: 0x50 },
             InterfaceInfo { interface_class: 0x03, interface_subclass: 0x01, interface_protocol: 0x01 },
         ];
-        assert!(detect_badusb(&interfaces));
+        assert!(has_storage_and_hid_interfaces(&interfaces));
     }
 
     #[test]
-    fn detect_badusb_storage_only() {
+    fn storage_only_is_not_storage_plus_hid_combination() {
         let interfaces = vec![
             InterfaceInfo { interface_class: 0x08, interface_subclass: 0x06, interface_protocol: 0x50 },
         ];
-        assert!(!detect_badusb(&interfaces));
+        assert!(!has_storage_and_hid_interfaces(&interfaces));
     }
 
     #[test]
-    fn detect_badusb_hid_only() {
+    fn hid_only_is_not_storage_plus_hid_combination() {
         let interfaces = vec![
             InterfaceInfo { interface_class: 0x03, interface_subclass: 0x01, interface_protocol: 0x01 },
         ];
-        assert!(!detect_badusb(&interfaces));
+        assert!(!has_storage_and_hid_interfaces(&interfaces));
     }
 }

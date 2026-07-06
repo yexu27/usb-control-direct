@@ -59,6 +59,28 @@ fn converts_device_type_to_internal_device_event() {
 }
 
 #[test]
+fn unsupported_interface_maps_to_unsupported_added_event() {
+    let info = UsbDeviceInfo {
+        sys_path: "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.9/2-1.9:1.1".into(),
+        dev_path: None,
+        serial_number: "SN-PHONE".into(),
+        vid: "18d1".into(),
+        pid: "4ee7".into(),
+        device_name: "Phone Vendor".into(),
+        device_type: DeviceType::Unsupported,
+        interface_class: 0xff,
+        interface_subclass: 0x42,
+        interface_protocol: 0x01,
+        capacity_bytes: None,
+    };
+
+    assert!(matches!(
+        device_event_from_info(info),
+        DeviceEvent::UnsupportedAdded(_, _)
+    ));
+}
+
+#[test]
 fn enumerator_accepts_usb_interface_only() {
     assert!(is_usb_interface_devtype("usb_interface"));
     assert!(!is_usb_interface_devtype("usb_device"));
