@@ -185,26 +185,21 @@ impl ExfatRuntimeState {
         self.volume.layout().cluster_to_sector(cluster)
     }
 
-    pub fn read_file(
-        &self,
-        node_id: NodeId,
-        offset: u64,
-        len: usize,
-    ) -> Result<Vec<u8>, std::io::Error> {
-        let node = self.index.node(node_id).ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::NotFound, "virtual node not found")
+    fn ensure_file_read_allowed(&self, node_id: u64) -> Result<&VfsNode, std::io::Error> {
+        let node = self.index.node(NodeId(node_id)).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "file data owner not found in VFS")
         })?;
         if let AccessDecision::Deny(reason) =
             evaluate_access(&node_to_controlled_entry(node), &self.snapshot)
         {
+            tracing::warn!(
+                virtual_path = %node.virtual_path,
+                reason = %reason,
+                "文件访问控制阻断块读"
+            );
             return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason));
         }
-        let mut file = std::fs::OpenOptions::new().read(true).open(&node.real_path)?;
-        file.seek(SeekFrom::Start(offset))?;
-        let mut buf = vec![0u8; len];
-        let read_len = file.read(&mut buf)?;
-        buf.truncate(read_len);
-        Ok(buf)
+        Ok(node)
     }
 
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
@@ -230,7 +225,8 @@ impl ExfatRuntimeState {
                     let read_len = take.min(available);
                     if read_len == 0 {
                         out.resize(out.len() + take, 0);
-                    } else if let Some(node) = self.index.node(NodeId(node_id)) {
+                    } else {
+                        let node = self.ensure_file_read_allowed(node_id)?;
                         let mut file = std::fs::File::open(&node.real_path)?;
                         file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
                         let mut data = vec![0u8; read_len];
@@ -239,25 +235,20 @@ impl ExfatRuntimeState {
                         if actual < take {
                             out.resize(out.len() + take - actual, 0);
                         }
-                    } else {
-                        out.resize(out.len() + take, 0);
                     }
                 }
                 SectorOwner::AllocatedZero {
                     node_id,
                     file_offset,
                 } => {
-                    if let Some(node) = self.index.node(NodeId(node_id)) {
-                        let mut file = std::fs::File::open(&node.real_path)?;
-                        file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
-                        let mut data = vec![0u8; take];
-                        let actual = file.read(&mut data)?;
-                        out.extend_from_slice(&data[..actual]);
-                        if actual < take {
-                            out.resize(out.len() + take - actual, 0);
-                        }
-                    } else {
-                        out.resize(out.len() + take, 0);
+                    let node = self.ensure_file_read_allowed(node_id)?;
+                    let mut file = std::fs::File::open(&node.real_path)?;
+                    file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
+                    let mut data = vec![0u8; take];
+                    let actual = file.read(&mut data)?;
+                    out.extend_from_slice(&data[..actual]);
+                    if actual < take {
+                        out.resize(out.len() + take - actual, 0);
                     }
                 }
                 SectorOwner::OutOfRange => {

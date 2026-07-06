@@ -50,15 +50,6 @@ impl VirtualExfatFs {
         self.runtime.lock().unwrap().lookup_node_id(path)
     }
 
-    pub fn read_file(
-        &self,
-        node_id: NodeId,
-        offset: u64,
-        len: usize,
-    ) -> Result<Vec<u8>, std::io::Error> {
-        self.runtime.lock().unwrap().read_file(node_id, offset, len)
-    }
-
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
         self.runtime.lock().unwrap().read_at(offset, len)
     }

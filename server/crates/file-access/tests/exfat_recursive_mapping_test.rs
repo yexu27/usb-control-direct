@@ -76,8 +76,6 @@ fn initial_mapping_preserves_deep_directory_tree() {
     assert!(fs.lookup_path("/a").is_some());
     assert!(fs.lookup_path("/a/b").is_some());
     assert!(fs.lookup_path("/a/b/c.txt").is_some());
-    let node = fs.lookup_path("/a/b/c.txt").unwrap();
-    assert_eq!(fs.read_file(node, 0, 4).unwrap(), b"deep");
 
     let root = fs
         .read_at(fs.root_dir_offset_for_test(), 4096)
@@ -101,5 +99,12 @@ fn initial_mapping_preserves_deep_directory_tree() {
         .read_at(fs.cluster_offset_for_test(b.first_cluster), 4096)
         .expect("read /a/b directory");
     let b_entries = parse_entry_sets(&b_dir).expect("parse /a/b directory");
-    assert!(b_entries.iter().any(|entry| entry.name == "c.txt"));
+    let c = b_entries
+        .iter()
+        .find(|entry| entry.name == "c.txt")
+        .expect("/a/b contains c.txt");
+    let data = fs
+        .read_at(fs.cluster_offset_for_test(c.first_cluster), 4096)
+        .expect("read /a/b/c.txt data");
+    assert_eq!(&data[..4], b"deep");
 }

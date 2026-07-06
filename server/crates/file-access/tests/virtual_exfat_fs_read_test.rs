@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
 
+use file_access::exfat::directory_parser::parse_entry_sets;
 use file_access::exfat::fs::VirtualExfatFs;
 use file_access::exfat::layout::SECTOR_SIZE;
 use file_access::types::{ControlledEntry, ExecFileType, PolicySnapshot};
@@ -31,27 +32,74 @@ fn entry(root: &std::path::Path, name: &str, size: u64, extension: &str) -> Cont
     }
 }
 
+fn root_file_data_offset(fs: &VirtualExfatFs, name: &str) -> u64 {
+    let root = fs
+        .read_at(fs.root_dir_offset_for_test(), 4096)
+        .expect("read root directory");
+    let entries = parse_entry_sets(&root).expect("parse root directory");
+    let file = entries
+        .iter()
+        .find(|entry| entry.name == name)
+        .unwrap_or_else(|| panic!("root directory contains {name}"));
+    assert_ne!(
+        file.first_cluster, 0,
+        "{name} should have file data cluster"
+    );
+    fs.cluster_offset_for_test(file.first_cluster)
+}
+
 #[test]
-fn virtual_fs_reads_file_data_from_real_mount() {
+fn read_at_allows_unblocked_file_data_from_real_mount() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("ok.txt"), b"hello").unwrap();
     let tree = vec![entry(tmp.path(), "ok.txt", 5, "txt")];
     let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
 
-    let node = fs.lookup_path("/ok.txt").unwrap();
-    let data = fs.read_file(node, 0, 5).unwrap();
-    assert_eq!(data, b"hello");
+    let offset = root_file_data_offset(&fs, "ok.txt");
+    let data = fs.read_at(offset, SECTOR_SIZE as usize).unwrap();
+
+    assert_eq!(&data[..5], b"hello");
 }
 
 #[test]
-fn virtual_fs_denies_blacklisted_read_without_hiding_node() {
+fn read_at_denies_blacklisted_file_data_without_hiding_node() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("bad.blocked"), b"secret").unwrap();
     let tree = vec![entry(tmp.path(), "bad.blocked", 6, "blocked")];
     let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
 
-    let node = fs.lookup_path("/bad.blocked").unwrap();
-    let err = fs.read_file(node, 0, 6).unwrap_err();
+    assert!(fs.lookup_path("/bad.blocked").is_some());
+    let offset = root_file_data_offset(&fs, "bad.blocked");
+    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn read_at_denies_executable_file_data_when_exec_control_enabled() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("setup.exe"), b"MZ executable").unwrap();
+    let mut executable = entry(tmp.path(), "setup.exe", 13, "exe");
+    executable.exec_type = Some(ExecFileType::Pe);
+    let fs =
+        VirtualExfatFs::build(tmp.path(), &[executable], snapshot(), 16 * 1024 * 1024).unwrap();
+
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    let offset = root_file_data_offset(&fs, "setup.exe");
+    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn read_at_denies_autorun_file_data_when_auto_read_control_enabled() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("autorun.inf"), b"[autorun]").unwrap();
+    let mut autorun = entry(tmp.path(), "autorun.inf", 9, "inf");
+    autorun.is_autorun_inf = true;
+    let fs = VirtualExfatFs::build(tmp.path(), &[autorun], snapshot(), 16 * 1024 * 1024).unwrap();
+
+    assert!(fs.lookup_path("/autorun.inf").is_some());
+    let offset = root_file_data_offset(&fs, "autorun.inf");
+    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
 }
 
