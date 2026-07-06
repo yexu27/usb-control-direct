@@ -2,10 +2,6 @@
 //!
 //! `usb-identify` 只定义病毒扫描和 storage session 控制抽象。
 //! 文件访问、NBD 和 gadget 细节属于 `file-access`。
-//!
-//! `DeviceMapper`、`MapContext`、`MappedSession` 是阶段 1 过渡契约，
-//! 仅为当前 file-access 旧实现保持 workspace 可编译。阶段 2 完成
-//! `StorageSessionManager` 直接驱动 storage pipeline 后必须删除。
 
 use std::path::Path;
 
@@ -83,72 +79,6 @@ pub trait Scanner: Send + Sync {
 
     /// 取消正在进行的扫描任务。
     fn cancel(&self, mount_path: &Path);
-}
-
-/// 映射上下文。
-#[derive(Debug, Clone)]
-pub struct MapContext {
-    /// U 盘挂载路径。
-    pub mount_path: String,
-    /// 扫描结果（含病毒文件列表）。
-    pub scan_result: ScanResult,
-    /// 权限：0=只读 / 1=读写。
-    pub permission: i32,
-    /// 真实源分区大小（字节），用于生成受控主机可见的虚拟 U 盘容量。
-    /// Source partition size in bytes, used as the virtual media capacity target.
-    pub source_size_bytes: u64,
-    /// 已分配的 NBD 设备路径，例如 /dev/nbd3。
-    /// Allocated NBD device path, for example /dev/nbd3.
-    pub nbd_device: String,
-}
-
-/// 映射会话句柄。
-#[derive(Debug)]
-pub struct MappedSession {
-    /// 标识（用于清理时定位）。
-    pub id: String,
-    /// 挂载路径。
-    pub mount_path: String,
-    /// 本次映射使用的 NBD 设备路径。
-    /// NBD device path used by this mapping.
-    pub nbd_device: String,
-}
-
-/// 映射错误。
-#[derive(Debug, thiserror::Error)]
-pub enum MapError {
-    #[error("NBD 启动失败: {0}")]
-    NbdFailed(String),
-    #[error("OTG Gadget 绑定失败: {0}")]
-    GadgetFailed(String),
-    #[error("虚拟文件树构建失败: {0}")]
-    BuildFailed(String),
-}
-
-/// 取消映射错误。
-#[derive(Debug, thiserror::Error)]
-pub enum UnmapError {
-    #[error("取消映射失败: {0}")]
-    Failed(String),
-}
-
-/// S04 文件访问控制映射：构建虚拟文件树 + NBD + OTG（P05 实现）。
-///
-/// 注意：mount/umount 由 S01 自己完成，DeviceMapper 只负责虚拟映射。
-pub trait DeviceMapper: Send + Sync {
-    /// 构建受控文件树 + 启动 NBD + 绑定 OTG Gadget。
-    fn map_device(
-        &self,
-        ctx: MapContext,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<MappedSession, MapError>> + Send + '_>,
-    >;
-
-    /// 解绑 OTG + 停止 NBD + 清理虚拟文件树。
-    fn unmap_device(
-        &self,
-        session: MappedSession,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UnmapError>> + Send + '_>>;
 }
 
 /// 大容量存储受控会话控制器。

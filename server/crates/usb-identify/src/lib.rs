@@ -21,6 +21,6 @@ pub mod traits;
 
 pub use error::UsbIdentifyError;
 pub use traits::{
-    AuthorizedStorageDevice, DeviceMapper, MapContext, MappedSession, ScanResult, Scanner,
-    StorageSessionController, StorageSessionError, StorageSessionHandle,
+    AuthorizedStorageDevice, ScanResult, Scanner, StorageSessionController, StorageSessionError,
+    StorageSessionHandle,
 };

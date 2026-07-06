@@ -18,7 +18,7 @@ use file_access::gadget::GadgetRuntime;
 use file_access::nbd::{
     disconnect_nbd_pool, read_nbd_partition_scan_status, NbdPartitionScanStatus,
 };
-use file_access::{FileAccessEngine, StorageSessionManager};
+use file_access::StorageSessionManager;
 use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
@@ -150,15 +150,11 @@ async fn main() {
         &config.scan_log_dir,
     ));
 
-    let file_access_engine = Arc::new(FileAccessEngine::new(
-        Arc::clone(&storage),
-        gadget_runtime.clone(),
-    ));
     let scanner_for_storage: Arc<dyn usb_identify::traits::Scanner> = scan_service;
-    let mapper_for_storage: Arc<dyn usb_identify::traits::DeviceMapper> = file_access_engine;
     let storage_session_manager = Arc::new(StorageSessionManager::new(
         scanner_for_storage,
-        mapper_for_storage,
+        Arc::clone(&storage),
+        gadget_runtime.clone(),
     ));
 
     let state = Arc::new(AppState {

@@ -21,9 +21,6 @@ pub enum UsbIdentifyError {
     #[error("扫描错误: {0}")]
     ScanError(String),
 
-    #[error("映射错误: {0}")]
-    MapError(String),
-
     #[error("存储层错误: {0}")]
     Storage(#[from] storage::error::StorageError),
 
