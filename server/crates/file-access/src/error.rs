@@ -21,6 +21,18 @@ pub enum FileAccessError {
     #[error("OTG Gadget 绑定失败: {0}")]
     GadgetFailed(String),
 
+    /// 挂载失败。
+    #[error("挂载失败: {0}")]
+    MountFailed(String),
+
+    /// 卸载失败。
+    #[error("卸载失败: {0}")]
+    UmountFailed(String),
+
+    /// 启动恢复失败。
+    #[error("启动恢复失败: {0}")]
+    RecoveryFailed(String),
+
     /// I/O 错误。
     #[error("I/O 错误: {0}")]
     Io(#[from] std::io::Error),

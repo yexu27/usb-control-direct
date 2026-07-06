@@ -10,9 +10,6 @@ use std::sync::Arc;
 use storage::Storage;
 use tokio::sync::{watch, Mutex};
 use tracing::{info, warn};
-use usb_identify::mount::{
-    dev_name_from_path, mount_partition, mount_path_for, mount_target_exists, MountOperations,
-};
 use usb_identify::traits::{
     AuthorizedStorageDevice, ScanResult, Scanner, StorageSessionController, StorageSessionError,
     StorageSessionHandle,
@@ -22,6 +19,10 @@ use crate::exfat::fs::VirtualExfatFs;
 use crate::gadget::GadgetRuntime;
 use crate::media_builder::VirtualMediaBuilder;
 use crate::publisher::{PublishedStorageRuntime, StoragePublisher, StorageRuntimePublisher};
+use crate::raw_mount::{
+    dev_name_from_path, mount_partition, mount_path_for, mount_target_exists, MountOperations,
+    RealMountOps,
+};
 
 const DEFAULT_NBD_POOL_SIZE: u32 = 4;
 
@@ -55,7 +56,7 @@ impl StorageSessionMountOps for RealStorageSessionMountOps {
     }
 
     fn umount(&self, mount_point: &str) -> Result<(), StorageSessionError> {
-        usb_identify::mount::RealMountOps
+        RealMountOps
             .umount(mount_point)
             .map_err(|e| StorageSessionError::Failed(e.to_string()))
     }

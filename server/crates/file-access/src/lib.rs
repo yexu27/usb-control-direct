@@ -13,6 +13,7 @@ pub mod file_tree;
 pub mod policy;
 pub mod exfat;
 pub mod nbd;
+pub mod raw_mount;
 pub mod gadget;
 pub mod gadget_bootstrap;
 pub mod media_builder;
