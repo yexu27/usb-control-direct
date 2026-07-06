@@ -3,21 +3,18 @@
 mod config;
 mod logging;
 mod shutdown;
+mod usb_bootstrap;
 
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
-use file_access::gadget::GadgetRuntime;
-use file_access::nbd::{read_nbd_partition_scan_status, NbdDeviceManager, NbdPartitionScanStatus};
 use file_access::StorageSessionManager;
-use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
 };
@@ -36,39 +33,8 @@ use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use usb_identify::monitor::DeviceManager;
-use usb_identify::mount::RealMountOps;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
-use usb_identify::recovery::{clear_lun_backing_file, recover_raw_mounts};
 use whitelist::WhitelistManager;
-
-const NBD_POOL_SIZE: u32 = 4;
-
-fn prepare_usb_gadget_startup(config: &AppConfig) -> Result<(GadgetRuntime, HidgNodes), String> {
-    let bootstrap_config = file_access::gadget_bootstrap::GadgetBootstrapConfig {
-        configfs_root: std::path::PathBuf::from("/sys/kernel/config/usb_gadget"),
-        udc_root: std::path::PathBuf::from("/sys/class/udc"),
-        gadget_name: config.gadget.name.clone(),
-        config_name: config.gadget.config.clone(),
-        udc: config.gadget.udc.clone(),
-        keep_adb: config.gadget.keep_adb,
-        storage_function: config.gadget.storage.function.clone(),
-        storage_lun: config.gadget.storage.lun,
-        keyboard_function: config.gadget.keyboard.function.clone(),
-        mouse_function: config.gadget.mouse.function.clone(),
-    };
-
-    let gadget_runtime = file_access::gadget_bootstrap::GadgetBootstrap::prepare(bootstrap_config)
-        .map_err(|e| format!("USB gadget bootstrap 失败: {e}"))?;
-
-    let names = HidFunctionNames {
-        keyboard: config.gadget.keyboard.function.clone(),
-        mouse: config.gadget.mouse.function.clone(),
-    };
-    let hidg_nodes = discover_hidg_nodes_for_functions(gadget_runtime.gadget_dir(), &names)
-        .map_err(|e| format!("hidg 节点发现失败: {e}"))?;
-
-    Ok((gadget_runtime, hidg_nodes))
-}
 
 #[tokio::main]
 async fn main() {
@@ -113,8 +79,10 @@ async fn main() {
     );
 
     // ===== USB Gadget 运行时检查 =====
-    let (gadget_runtime, hidg_nodes) =
-        prepare_usb_gadget_startup(&config).expect("USB gadget 启动准备失败");
+    let usb_runtime =
+        usb_bootstrap::prepare_usb_runtime(&config).expect("USB runtime 启动准备失败");
+    let gadget_runtime = usb_runtime.gadget_runtime;
+    let hidg_nodes = usb_runtime.hidg_nodes;
     info!(
         gadget = %gadget_runtime.gadget_name(),
         function = %gadget_runtime.function_name(),
@@ -123,23 +91,12 @@ async fn main() {
         mouse = %hidg_nodes.mouse.display(),
         "USB gadget 启动准备完成"
     );
-
-    let lun_file = gadget_runtime.lun_dir().join("file");
-    if let Err(e) = clear_lun_backing_file(&lun_file) {
-        warn!(error = %e, lun_file = %lun_file.display(), "启动恢复: 清空 LUN backing 失败");
-    }
-    NbdDeviceManager::default().recover_pool(NBD_POOL_SIZE);
-    if let Err(e) = recover_raw_mounts(&RealMountOps, Path::new("/mnt/usb_raw")) {
-        warn!(error = %e, "启动恢复: 清理原始 U 盘挂载失败");
-    }
-    match read_nbd_partition_scan_status() {
-        Ok(NbdPartitionScanStatus::Disabled) => info!("NBD 本机分区扫描已关闭"),
-        Ok(NbdPartitionScanStatus::Enabled(max_part)) => warn!(
-            max_part,
-            "NBD 本机分区扫描已开启，生产镜像应配置 nbd.max_part=0，避免 nbdXpY 事件风暴"
-        ),
-        Err(e) => warn!(error = %e, "读取 NBD 分区扫描配置失败"),
-    }
+    info!(
+        cleared_lun = usb_runtime.recovery_report.cleared_lun,
+        disconnected_nbd = usb_runtime.recovery_report.disconnected_nbd,
+        recovered_mounts = usb_runtime.recovery_report.recovered_mounts,
+        "USB storage 启动恢复完成"
+    );
 
     // ===== 实例化下游服务 =====
     let scan_service = Arc::new(ScanService::new(
