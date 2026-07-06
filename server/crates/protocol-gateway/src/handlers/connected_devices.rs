@@ -43,8 +43,9 @@ pub fn handle_get_connected_devices(ctx: &RequestContext, payload: &[u8]) -> Vec
     let devices: Vec<ConnectedDevice> = dm_guard
         .list_all()
         .iter()
-        .filter_map(|record| {
-            let info = &record.info;
+        .flat_map(|record| record.interfaces())
+        .filter_map(|interface| {
+            let info = &interface.info;
             let is_spoof = detect_spoof(info);
             let is_in_whitelist = wl_mgr
                 .map(|m| m.is_whitelisted(&info.serial_number).is_some())
@@ -145,12 +146,12 @@ mod tests {
             .unwrap();
 
         let mut manager = DeviceManager::new();
-        manager.add(device("ADDABLE", DeviceType::Storage, 0x08));
-        manager.add(device("KEYBOARD", DeviceType::Keyboard, 0x03));
-        manager.add(device("UNKNOWN", DeviceType::Unknown, 0xff));
-        manager.add(device("WHITELISTED", DeviceType::Storage, 0x08));
-        manager.add(device("SPOOF", DeviceType::Storage, 0x03));
-        manager.add(device("   ", DeviceType::Storage, 0x08));
+        manager.add_interface(device("ADDABLE", DeviceType::Storage, 0x08));
+        manager.add_interface(device("KEYBOARD", DeviceType::Keyboard, 0x03));
+        manager.add_interface(device("UNKNOWN", DeviceType::Unknown, 0xff));
+        manager.add_interface(device("WHITELISTED", DeviceType::Storage, 0x08));
+        manager.add_interface(device("SPOOF", DeviceType::Storage, 0x03));
+        manager.add_interface(device("   ", DeviceType::Storage, 0x08));
 
         (
             RequestContext {
