@@ -4,7 +4,7 @@
 //! mass storage LUN。它不构建文件树、不加载策略、不扫描病毒。
 
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,9 +19,6 @@ use crate::nbd::{run_request_loop, NbdServer};
 pub(crate) trait PublishedStorageRuntime: Send {
     /// 清理发布资源。
     fn stop(self: Box<Self>) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-    /// 当前发布使用的 NBD 设备路径。
-    fn nbd_device(&self) -> &Path;
 }
 
 /// Storage 发布能力。
@@ -34,9 +31,7 @@ pub(crate) trait StorageRuntimePublisher: Send + Sync {
         readonly: bool,
     ) -> Pin<
         Box<
-            dyn Future<Output = Result<Box<dyn PublishedStorageRuntime>, PublishError>>
-                + Send
-                + '_,
+            dyn Future<Output = Result<Box<dyn PublishedStorageRuntime>, PublishError>> + Send + '_,
         >,
     >;
 }
@@ -63,10 +58,6 @@ impl PublishedStorageRuntime for PublishedStorage {
             info!(nbd = %this.nbd_device.display(), "storage 发布资源已清理");
         })
     }
-
-    fn nbd_device(&self) -> &Path {
-        &self.nbd_device
-    }
 }
 
 /// Storage publisher。
@@ -90,9 +81,7 @@ impl StorageRuntimePublisher for StoragePublisher {
         readonly: bool,
     ) -> Pin<
         Box<
-            dyn Future<Output = Result<Box<dyn PublishedStorageRuntime>, PublishError>>
-                + Send
-                + '_,
+            dyn Future<Output = Result<Box<dyn PublishedStorageRuntime>, PublishError>> + Send + '_,
         >,
     > {
         Box::pin(async move {
