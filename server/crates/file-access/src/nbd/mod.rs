@@ -4,93 +4,22 @@
 
 pub mod io;
 pub mod protocol;
+pub mod request_loop;
 pub mod sysfs;
 
 use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
-use self::io::{read_exact_fd, write_all_fd};
-use self::protocol::{build_reply, NbdCommand, NbdRequest, NBD_EIO, NBD_REQUEST_SIZE};
+pub use self::request_loop::run_request_loop;
 pub use self::sysfs::{
     ensure_partition_scan_disabled, nbd_name_from_device_path, parse_nbd_max_part,
     read_nbd_partition_scan_status, NbdPartitionScanStatus,
 };
-use crate::block_backend::BlockBackend;
 use crate::exfat::layout::SECTOR_SIZE;
-
-pub trait NbdBackend: Send + Sync {
-    fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error>;
-    fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error>;
-    fn flush(&self) -> Result<(), std::io::Error>;
-
-    fn shutdown(&self) -> Result<(), std::io::Error> {
-        self.flush()
-    }
-}
-
-impl<T: BlockBackend> NbdBackend for T {
-    fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
-        BlockBackend::read_at(self, offset, len)
-    }
-
-    fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
-        BlockBackend::write_at(self, offset, data)
-    }
-
-    fn flush(&self) -> Result<(), std::io::Error> {
-        BlockBackend::flush(self)
-    }
-
-    fn shutdown(&self) -> Result<(), std::io::Error> {
-        BlockBackend::shutdown(self)
-    }
-}
-
-pub struct NbdCommandHandler<B: NbdBackend> {
-    backend: Arc<B>,
-}
-
-impl<B: NbdBackend> NbdCommandHandler<B> {
-    pub fn new(backend: Arc<B>) -> Self {
-        Self { backend }
-    }
-
-    pub fn read_data(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
-        read_backend_data(self.backend.as_ref(), offset, len)
-    }
-
-    pub fn handle_flush(&self) -> Result<(), std::io::Error> {
-        self.backend.flush()
-    }
-
-    pub fn handle_disconnect(&self) -> Result<(), std::io::Error> {
-        self.backend.shutdown()
-    }
-}
-
-fn read_backend_data<B: NbdBackend>(
-    backend: &B,
-    offset: u64,
-    len: usize,
-) -> Result<Vec<u8>, std::io::Error> {
-    let data = backend.read_at(offset, len)?;
-    if data.len() != len {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            format!(
-                "NBD backend returned {} bytes for {} byte read",
-                data.len(),
-                len
-            ),
-        ));
-    }
-    Ok(data)
-}
 
 // Linux NBD ioctl 常量
 const NBD_SET_SOCK: u64 = 0xAB00;
@@ -440,111 +369,6 @@ impl Drop for NbdServer {
     fn drop(&mut self) {
         self.stop();
     }
-}
-
-/// 请求处理循环。
-///
-/// 从 user_fd 读取 NBD 请求，按策略处理，写回响应。
-pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
-    let mut request_buf = [0u8; NBD_REQUEST_SIZE];
-
-    loop {
-        // 读取 28 字节请求
-        if read_exact_fd(user_fd, &mut request_buf).is_err() {
-            debug!("NBD 连接断开");
-            break;
-        }
-
-        let req = match NbdRequest::parse(&request_buf) {
-            Some(r) => r,
-            None => {
-                error!("NBD 请求解析失败");
-                break;
-            }
-        };
-
-        match req.command {
-            NbdCommand::Read => handle_read(user_fd, &req, backend.as_ref()),
-            NbdCommand::Write => handle_write(user_fd, &req, backend.as_ref()),
-            NbdCommand::Flush => {
-                let error = match backend.flush() {
-                    Ok(()) => 0,
-                    Err(e) => {
-                        warn!(
-                            offset = req.from,
-                            len = req.len,
-                            error = %e,
-                            "NBD FLUSH 失败"
-                        );
-                        NBD_EIO
-                    }
-                };
-                let reply = build_reply(req.handle, error);
-                let _ = write_all_fd(user_fd, &reply);
-            }
-            NbdCommand::Disconnect => {
-                if let Err(e) = backend.shutdown() {
-                    warn!(error = %e, "NBD DISCONNECT 前 shutdown 失败");
-                }
-                info!("NBD 收到 DISCONNECT");
-                break;
-            }
-            NbdCommand::Unknown(cmd) => {
-                warn!("NBD 未知命令: {}", cmd);
-                let reply = build_reply(req.handle, NBD_EIO);
-                let _ = write_all_fd(user_fd, &reply);
-            }
-        }
-    }
-}
-
-/// 处理 READ 请求。
-fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
-    let mut response_data = Vec::with_capacity(16 + req.len as usize);
-    match read_backend_data(backend, req.from, req.len as usize) {
-        Ok(data) => {
-            let reply = build_reply(req.handle, 0);
-            response_data.extend_from_slice(&reply);
-            response_data.extend_from_slice(&data);
-            let _ = write_all_fd(user_fd, &response_data);
-        }
-        Err(e) => {
-            warn!(
-                offset = req.from,
-                len = req.len,
-                error = %e,
-                "NBD READ 失败"
-            );
-            let reply = build_reply(req.handle, NBD_EIO);
-            let _ = write_all_fd(user_fd, &reply);
-        }
-    }
-}
-
-/// 处理 WRITE 请求。
-fn handle_write<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
-    // 先读取写入数据
-    let mut write_data = vec![0u8; req.len as usize];
-    if read_exact_fd(user_fd, &mut write_data).is_err() {
-        warn!("NBD WRITE 数据读取失败");
-        return;
-    }
-
-    let error = match backend.write_at(req.from, &write_data) {
-        Ok(()) => 0,
-        Err(e) => {
-            warn!(
-                offset = req.from,
-                len = req.len,
-                error = %e,
-                "NBD WRITE 失败"
-            );
-            NBD_EIO
-        }
-    };
-
-    let reply = build_reply(req.handle, error);
-    let _ = write_all_fd(user_fd, &reply);
 }
 
 /// NBD ioctl 封装。
