@@ -1,8 +1,9 @@
-//! NBD 块设备后端。
+//! NBD 块设备发布模块。
 //!
-//! 通过 socketpair + ioctl 对接 Linux 内核 NBD 驱动。
-//! 用户空间侧处理 28 字节请求，返回 16 字节响应头 + 数据。
-//! NBD_DO_IT ioctl 通过 tokio::task::spawn_blocking 运行。
+//! NBD 只负责 Linux NBD 协议、设备生命周期和块请求转发，不承载策略、病毒、文件树或 gadget 语义。
+
+pub mod io;
+pub mod protocol;
 
 use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
@@ -14,73 +15,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::block_backend::BlockBackend;
 use crate::exfat::layout::SECTOR_SIZE;
-
-/// NBD 请求魔数。
-pub const NBD_REQUEST_MAGIC: u32 = 0x25609513;
-
-/// NBD 响应魔数。
-pub const NBD_REPLY_MAGIC: u32 = 0x67446698;
-
-/// NBD 请求大小（字节）。
-const NBD_REQUEST_SIZE: usize = 28;
-
-/// NBD 命令类型。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NbdCommand {
-    Read,
-    Write,
-    Disconnect,
-    Flush,
-    Unknown(u32),
-}
-
-/// NBD 请求。
-#[derive(Debug)]
-pub struct NbdRequest {
-    pub command: NbdCommand,
-    pub handle: u64,
-    pub from: u64,
-    pub len: u32,
-}
-
-impl NbdRequest {
-    /// 解析 28 字节 NBD 请求。
-    pub fn parse(buf: &[u8; NBD_REQUEST_SIZE]) -> Option<Self> {
-        let magic = u32::from_be_bytes(buf[0..4].try_into().unwrap());
-        if magic != NBD_REQUEST_MAGIC {
-            return None;
-        }
-
-        let type_val = u32::from_be_bytes(buf[4..8].try_into().unwrap());
-        let command = match type_val & 0xFFFF {
-            0 => NbdCommand::Read,
-            1 => NbdCommand::Write,
-            2 => NbdCommand::Disconnect,
-            3 => NbdCommand::Flush,
-            other => NbdCommand::Unknown(other),
-        };
-
-        let handle = u64::from_be_bytes(buf[8..16].try_into().unwrap());
-        let from = u64::from_be_bytes(buf[16..24].try_into().unwrap());
-        let len = u32::from_be_bytes(buf[24..28].try_into().unwrap());
-
-        Some(NbdRequest {
-            command,
-            handle,
-            from,
-            len,
-        })
-    }
-}
-
-/// 构建 16 字节 NBD 响应头。
-pub fn build_reply(handle: u64, error: u32) -> Vec<u8> {
-    let mut reply = Vec::with_capacity(16);
-    reply.extend_from_slice(&NBD_REPLY_MAGIC.to_be_bytes());
-    reply.extend_from_slice(&error.to_be_bytes());
-    reply.extend_from_slice(&handle.to_be_bytes());
-    reply
-}
+use self::io::{read_exact_fd, write_all_fd};
+use self::protocol::{build_reply, NbdCommand, NbdRequest, NBD_EIO, NBD_REQUEST_SIZE};
 
 pub trait NbdBackend: Send + Sync {
     fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error>;
@@ -165,9 +101,6 @@ const NBD_DISCONNECT: u64 = 0xAB08;
 const NBD_FLAG_HAS_FLAGS: u32 = 1;
 const NBD_FLAG_READ_ONLY: u32 = 2;
 const NBD_FLAG_SEND_FLUSH: u32 = 4;
-
-/// I/O error code (EIO = 5)。
-const EIO: u32 = 5;
 
 pub fn nbd_name_from_device_path(path: &Path) -> Result<String, std::io::Error> {
     let name = path.file_name().ok_or_else(|| {
@@ -469,7 +402,10 @@ impl NbdServer {
             if Instant::now() >= deadline {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    format!("NBD device {} still connected", self.nbd_device_path.display()),
+                    format!(
+                        "NBD device {} still connected",
+                        self.nbd_device_path.display()
+                    ),
                 ));
             }
 
@@ -559,7 +495,7 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
 
     loop {
         // 读取 28 字节请求
-        if read_exact(user_fd, &mut request_buf).is_err() {
+        if read_exact_fd(user_fd, &mut request_buf).is_err() {
             debug!("NBD 连接断开");
             break;
         }
@@ -585,11 +521,11 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
                             error = %e,
                             "NBD FLUSH 失败"
                         );
-                        EIO
+                        NBD_EIO
                     }
                 };
                 let reply = build_reply(req.handle, error);
-                let _ = write_all(user_fd, &reply);
+                let _ = write_all_fd(user_fd, &reply);
             }
             NbdCommand::Disconnect => {
                 if let Err(e) = backend.shutdown() {
@@ -600,8 +536,8 @@ pub fn run_request_loop<B: NbdBackend>(user_fd: RawFd, backend: Arc<B>) {
             }
             NbdCommand::Unknown(cmd) => {
                 warn!("NBD 未知命令: {}", cmd);
-                let reply = build_reply(req.handle, EIO);
-                let _ = write_all(user_fd, &reply);
+                let reply = build_reply(req.handle, NBD_EIO);
+                let _ = write_all_fd(user_fd, &reply);
             }
         }
     }
@@ -615,7 +551,7 @@ fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
             let reply = build_reply(req.handle, 0);
             response_data.extend_from_slice(&reply);
             response_data.extend_from_slice(&data);
-            let _ = write_all(user_fd, &response_data);
+            let _ = write_all_fd(user_fd, &response_data);
         }
         Err(e) => {
             warn!(
@@ -624,8 +560,8 @@ fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
                 error = %e,
                 "NBD READ 失败"
             );
-            let reply = build_reply(req.handle, EIO);
-            let _ = write_all(user_fd, &reply);
+            let reply = build_reply(req.handle, NBD_EIO);
+            let _ = write_all_fd(user_fd, &reply);
         }
     }
 }
@@ -634,7 +570,7 @@ fn handle_read<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
 fn handle_write<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     // 先读取写入数据
     let mut write_data = vec![0u8; req.len as usize];
-    if read_exact(user_fd, &mut write_data).is_err() {
+    if read_exact_fd(user_fd, &mut write_data).is_err() {
         warn!("NBD WRITE 数据读取失败");
         return;
     }
@@ -648,76 +584,12 @@ fn handle_write<B: NbdBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
                 error = %e,
                 "NBD WRITE 失败"
             );
-            EIO
+            NBD_EIO
         }
     };
 
     let reply = build_reply(req.handle, error);
-    let _ = write_all(user_fd, &reply);
-}
-
-pub fn is_retryable_io_error(error: &std::io::Error) -> bool {
-    error.kind() == std::io::ErrorKind::Interrupted
-}
-
-/// 从 fd 精确读取。
-fn read_exact(fd: RawFd, buf: &mut [u8]) -> Result<(), std::io::Error> {
-    let mut pos = 0;
-    while pos < buf.len() {
-        // 安全性: fd 为有效文件描述符，buf[pos..] 为有效可写内存区域。
-        let n = unsafe {
-            libc::read(
-                fd,
-                buf[pos..].as_mut_ptr() as *mut libc::c_void,
-                buf.len() - pos,
-            )
-        };
-        if n < 0 {
-            let err = std::io::Error::last_os_error();
-            if is_retryable_io_error(&err) {
-                continue;
-            }
-            return Err(err);
-        }
-        if n == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "NBD socket closed while reading",
-            ));
-        }
-        pos += n as usize;
-    }
-    Ok(())
-}
-
-/// 向 fd 写入全部数据。
-fn write_all(fd: RawFd, data: &[u8]) -> Result<(), std::io::Error> {
-    let mut pos = 0;
-    while pos < data.len() {
-        // 安全性: fd 为有效文件描述符，data[pos..] 为有效只读内存区域。
-        let n = unsafe {
-            libc::write(
-                fd,
-                data[pos..].as_ptr() as *const libc::c_void,
-                data.len() - pos,
-            )
-        };
-        if n < 0 {
-            let err = std::io::Error::last_os_error();
-            if is_retryable_io_error(&err) {
-                continue;
-            }
-            return Err(err);
-        }
-        if n == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::WriteZero,
-                "NBD socket wrote zero bytes",
-            ));
-        }
-        pos += n as usize;
-    }
-    Ok(())
+    let _ = write_all_fd(user_fd, &reply);
 }
 
 /// NBD ioctl 封装。
