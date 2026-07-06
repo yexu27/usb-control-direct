@@ -177,7 +177,7 @@ fn split_virtual_path(path: &str) -> Result<(String, String), std::io::Error> {
     Ok((parent.to_string(), name.to_string()))
 }
 
-impl crate::nbd::NbdBackend for VirtualExfatFs {
+impl crate::block_backend::BlockBackend for VirtualExfatFs {
     fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
         VirtualExfatFs::read_at(self, offset, len)
     }
@@ -188,5 +188,9 @@ impl crate::nbd::NbdBackend for VirtualExfatFs {
 
     fn flush(&self) -> Result<(), std::io::Error> {
         VirtualExfatFs::flush(self)
+    }
+
+    fn shutdown(&self) -> Result<(), std::io::Error> {
+        VirtualExfatFs::shutdown(self)
     }
 }

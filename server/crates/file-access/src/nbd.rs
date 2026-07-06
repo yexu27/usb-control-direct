@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
+use crate::block_backend::BlockBackend;
 use crate::exfat::layout::SECTOR_SIZE;
 
 /// NBD 请求魔数。
@@ -88,6 +89,24 @@ pub trait NbdBackend: Send + Sync {
 
     fn shutdown(&self) -> Result<(), std::io::Error> {
         self.flush()
+    }
+}
+
+impl<T: BlockBackend> NbdBackend for T {
+    fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
+        BlockBackend::read_at(self, offset, len)
+    }
+
+    fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+        BlockBackend::write_at(self, offset, data)
+    }
+
+    fn flush(&self) -> Result<(), std::io::Error> {
+        BlockBackend::flush(self)
+    }
+
+    fn shutdown(&self) -> Result<(), std::io::Error> {
+        BlockBackend::shutdown(self)
     }
 }
 

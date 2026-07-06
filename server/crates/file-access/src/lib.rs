@@ -4,6 +4,7 @@
 //! 按 5 级优先级策略决定每个文件的可见性和可访问性。
 
 pub mod error;
+pub mod block_backend;
 pub mod types;
 pub mod vfs;
 pub mod exec_detect;
