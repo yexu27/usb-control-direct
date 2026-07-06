@@ -13,7 +13,7 @@ use super::io::{read_exact_fd, write_all_fd};
 use super::protocol::{build_reply, NbdCommand, NbdRequest, NBD_EIO, NBD_REQUEST_SIZE};
 
 /// 请求处理循环。
-pub fn run_request_loop<B: BlockBackend>(user_fd: RawFd, backend: Arc<B>) {
+pub fn run_request_loop<B: BlockBackend + ?Sized>(user_fd: RawFd, backend: Arc<B>) {
     let mut request_buf = [0u8; NBD_REQUEST_SIZE];
 
     loop {
@@ -50,7 +50,7 @@ pub fn run_request_loop<B: BlockBackend>(user_fd: RawFd, backend: Arc<B>) {
     }
 }
 
-fn read_backend_data<B: BlockBackend>(
+fn read_backend_data<B: BlockBackend + ?Sized>(
     backend: &B,
     offset: u64,
     len: usize,
@@ -69,7 +69,7 @@ fn read_backend_data<B: BlockBackend>(
     Ok(data)
 }
 
-fn handle_read<B: BlockBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
+fn handle_read<B: BlockBackend + ?Sized>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let mut response_data = Vec::with_capacity(16 + req.len as usize);
     match read_backend_data(backend, req.from, req.len as usize) {
         Ok(data) => {
@@ -91,7 +91,7 @@ fn handle_read<B: BlockBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     }
 }
 
-fn handle_write<B: BlockBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
+fn handle_write<B: BlockBackend + ?Sized>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let mut write_data = vec![0u8; req.len as usize];
     if read_exact_fd(user_fd, &mut write_data).is_err() {
         warn!("NBD WRITE 数据读取失败");
@@ -115,7 +115,7 @@ fn handle_write<B: BlockBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) 
     let _ = write_all_fd(user_fd, &reply);
 }
 
-fn handle_flush<B: BlockBackend>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
+fn handle_flush<B: BlockBackend + ?Sized>(user_fd: RawFd, req: &NbdRequest, backend: &B) {
     let error = match backend.flush() {
         Ok(()) => 0,
         Err(e) => {

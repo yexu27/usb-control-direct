@@ -2,7 +2,9 @@
 //!
 //! NBD 只负责 Linux NBD 协议、设备生命周期和块请求转发，不承载策略、病毒、文件树或 gadget 语义。
 
+pub mod device;
 pub mod io;
+pub mod manager;
 pub mod protocol;
 pub mod request_loop;
 pub mod sysfs;
@@ -14,6 +16,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
+pub use self::manager::NbdDeviceManager;
 pub use self::request_loop::run_request_loop;
 pub use self::sysfs::{
     ensure_partition_scan_disabled, nbd_name_from_device_path, parse_nbd_max_part,
