@@ -6,12 +6,6 @@ pub enum UsbIdentifyError {
     #[error("udev 错误: {0}")]
     Udev(String),
 
-    #[error("挂载失败: {0}")]
-    MountFailed(String),
-
-    #[error("卸载失败: {0}")]
-    UmountFailed(String),
-
     #[error("描述符解析失败: {0}")]
     DescriptorParseFailed(String),
 

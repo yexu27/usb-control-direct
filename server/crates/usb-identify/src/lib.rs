@@ -1,22 +1,20 @@
-//! S01 USB 设备识别与映射引擎。
+//! S01 USB 设备识别与准入路由。
 //!
-//! 装置端 USB 设备的全生命周期编排器：
-//! - udev 监听 USB 热插拔
+//! 本 crate 负责:
+//! - udev USB 热插拔事件归并
 //! - 描述符解析与设备分类
-//! - U 盘 mount/umount
-//! - U 盘状态机管理
-//! - 协调 S03 扫描和 S04 映射
-//! - 拔出清理
+//! - 白名单和权限判定
+//! - 将授权 storage 设备路由到 StorageSessionController
+//! - 键盘和鼠标 HID 受控链路编排
+//!
+//! 本 crate 不负责存储运行资源、病毒扫描实现、虚拟介质发布、
+//! 启动恢复或 storage 资源清理。
 
 pub mod descriptor;
 pub mod error;
 pub mod event_source;
 pub mod monitor;
-pub mod mount;
 pub mod orchestrator;
-pub mod recovery;
-pub mod session;
-pub mod state_machine;
 pub mod traits;
 
 pub use error::UsbIdentifyError;

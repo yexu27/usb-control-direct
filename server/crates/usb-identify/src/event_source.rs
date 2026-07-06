@@ -2,7 +2,7 @@
 //!
 //! 本模块负责启动时枚举和运行期 udev 订阅，将系统 USB 状态转换成
 //! `DeviceEvent` 发送给 `DeviceOrchestrator`。本模块不做白名单、准入、
-//! mount、scan、NBD 或 gadget 处理。
+//! 存储资源或下游业务处理。
 
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
