@@ -86,6 +86,10 @@ pub trait Scanner: Send + Sync {
 /// `DeviceOrchestrator` 只依赖该抽象，不直接 mount、scan、启动 NBD 或操作 gadget。
 pub trait StorageSessionController: Send + Sync {
     /// 启动一个已授权 storage 设备的受控会话。
+    ///
+    /// 返回 `Ok(StorageSessionHandle)` 只表示 StorageSessionManager 已接受该设备
+    /// 并开始后台 mount/scan/media/NBD/gadget pipeline，不表示设备已经映射成功。
+    /// 映射成功或失败由 StorageSessionManager 在后台 pipeline 中记录。
     fn start_authorized_storage(
         &self,
         device: AuthorizedStorageDevice,

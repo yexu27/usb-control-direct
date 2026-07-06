@@ -310,7 +310,7 @@ impl DeviceOrchestrator {
                 info!(
                     serial = %serial,
                     session = %handle.session_id,
-                    "Storage session 已启动"
+                    "Storage session 已接受，等待后台映射完成"
                 );
             }
             Err(e) => {

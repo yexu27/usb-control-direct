@@ -331,6 +331,13 @@ async fn run_storage_pipeline(
         "Storage session pipeline 开始"
     );
 
+    info!(
+        serial = %device.serial_number,
+        dev = %device.device_name,
+        mount_point = %mount_path_str,
+        "Storage session 进入挂载阶段"
+    );
+
     if let Err(e) = mount_ops.mount_partition(&device.dev_path, &mount_path_str, read_only) {
         warn!(
             serial = %device.serial_number,
@@ -349,6 +356,13 @@ async fn run_storage_pipeline(
         nbd_pool.lock().await.release(nbd_index);
         return;
     }
+
+    info!(
+        serial = %device.serial_number,
+        dev = %device.device_name,
+        mount = %mount_point.display(),
+        "Storage session 进入扫描阶段"
+    );
 
     let scan_result = tokio::select! {
         result = scanner.scan(&mount_point, &device.serial_number, &device.device_name) => result,
@@ -391,6 +405,12 @@ async fn run_storage_pipeline(
         .and_then(|size| u64::try_from(size).ok())
         .unwrap_or_else(|| block_device_size_bytes(&device.dev_path));
 
+    info!(
+        serial = %device.serial_number,
+        dev = %device.device_name,
+        "Storage session 进入虚拟介质构建阶段"
+    );
+
     let media = match media_builder.build(
         &mount_point,
         scan_result,
@@ -416,6 +436,13 @@ async fn run_storage_pipeline(
             return;
         }
     };
+
+    info!(
+        serial = %device.serial_number,
+        dev = %device.device_name,
+        nbd = nbd_index,
+        "Storage session 进入发布阶段"
+    );
 
     let published = tokio::select! {
         result = publisher.publish(media, nbd_index, read_only) => result,
