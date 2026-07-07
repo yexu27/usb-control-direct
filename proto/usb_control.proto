@@ -125,6 +125,23 @@ message RspConnectedDevices {
     repeated ConnectedDevice devices = 1;
 }
 
+// 管理端可查询的受控设备运行态条目
+message DeviceRuntimeStatus {
+    string runtime_id = 1;
+    string parent_path = 2;
+    string interface_path = 3;
+    string serial_number = 4;
+    string device_name = 5;
+    string device_type = 6;         // storage / keyboard / mouse
+    string interface_type = 7;      // mass_storage / hid_keyboard / hid_mouse
+    string status = 8;              // accepted / processing / mapped / failed / removed
+    string stage = 9;               // admission / mount / scan / media_build / publish / keyboard_verify / mouse_publish / cleanup
+    string fail_code = 10;          // mount_failed / scan_failed / publish_failed / verify_failed / device_removed ...
+    string fail_reason = 11;        // 失败原因中文描述；无失败时为空
+    int64 connected_at = 12;        // Unix 秒
+    int64 updated_at = 13;          // Unix 秒
+}
+
 // CMD_ADD_WHITELIST（0x0104）—— 添加白名单设备
 message CmdAddWhitelist {
     string session_token = 1;
@@ -326,6 +343,16 @@ message CmdDeleteLogs {
     string log_type = 2;
     int64 start_time = 3;           // Unix 秒，包含
     int64 end_time = 4;             // Unix 秒，包含
+}
+
+// CMD_GET_DEVICE_RUNTIME_STATUS（0x0406）—— 获取受控设备运行态
+message CmdGetDeviceRuntimeStatus {
+    string session_token = 1;
+}
+
+// RSP_DEVICE_RUNTIME_STATUS（0x0407）
+message RspDeviceRuntimeStatus {
+    repeated DeviceRuntimeStatus devices = 1;
 }
 
 // ============================================================
