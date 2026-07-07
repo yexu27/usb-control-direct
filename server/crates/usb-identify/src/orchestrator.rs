@@ -364,6 +364,12 @@ impl DeviceOrchestrator {
                 Ok(KeyboardRunResult::RemovedDuringVerify) => {
                     info!(dev = %device_name, "键盘验证阶段设备拔出");
                 }
+                Ok(KeyboardRunResult::VerificationFailed) => {
+                    warn!(
+                        dev = %device_name,
+                        "键盘验证码错误，本次映射已拒绝；请重新插拔键盘后再输入 1234"
+                    );
+                }
                 Err(e) => {
                     warn!(dev = %device_name, sys_path = %info.sys_path, error = %e, "键盘拦截器异常退出");
                 }
