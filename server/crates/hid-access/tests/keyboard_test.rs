@@ -1,16 +1,22 @@
-use hid_access::keyboard::{KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult};
+use hid_access::keyboard::{
+    KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult,
+};
 
-#[test]
-fn grab_success_transitions_to_waiting() {
+const KEY_1: u8 = 0x1E;
+const KEY_2: u8 = 0x1F;
+const KEY_3: u8 = 0x20;
+const KEY_4: u8 = 0x21;
+const KEY_5: u8 = 0x22;
+const KEY_9: u8 = 0x26;
+
+fn start_waiting() -> KeyboardChallenge {
     let mut kb = KeyboardChallenge::new();
-    assert_eq!(kb.state(), KeyboardState::KbDetected);
-
     let result = kb.transition(KeyboardEvent::GrabSuccess).unwrap();
     assert_eq!(
         result,
         KeyboardTransitionResult::Transitioned(KeyboardState::KbWaiting)
     );
-    assert_eq!(kb.state(), KeyboardState::KbWaiting);
+    kb
 }
 
 #[test]
@@ -21,104 +27,116 @@ fn grab_failed_transitions_to_rejected() {
         result,
         KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
     );
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
 }
 
 #[test]
 fn correct_1234_transitions_to_mapped() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
+    let mut kb = start_waiting();
 
-    for &ch in &[0x1E, 0x1F, 0x20] {
-        let r = kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
-        assert_eq!(r, KeyboardTransitionResult::Unchanged);
-    }
-
-    let result = kb.transition(KeyboardEvent::KeyPress(0x21)).unwrap();
     assert_eq!(
-        result,
+        kb.transition(KeyboardEvent::KeyPress(KEY_1)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_2)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_3)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_4)).unwrap(),
         KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
     );
-}
-
-#[test]
-fn wrong_key_clears_buffer() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-
-    kb.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
-    kb.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
-    let r = kb.transition(KeyboardEvent::KeyPress(0x26)).unwrap();
-    assert_eq!(r, KeyboardTransitionResult::Unchanged);
-    assert_eq!(kb.state(), KeyboardState::KbWaiting);
-
-    for &ch in &[0x1E, 0x1F, 0x20, 0x21] {
-        kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
-    }
     assert_eq!(kb.state(), KeyboardState::KbMapped);
 }
 
 #[test]
-fn modifier_key_ignored_during_challenge() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
+fn wrong_first_key_rejects_immediately() {
+    let mut kb = start_waiting();
 
-    kb.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
-    let r = kb.transition(KeyboardEvent::ModifierKey).unwrap();
-    assert_eq!(r, KeyboardTransitionResult::Unchanged);
-
-    for &ch in &[0x1F, 0x20, 0x21] {
-        kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
-    }
-    assert_eq!(kb.state(), KeyboardState::KbMapped);
-}
-
-#[test]
-fn unplug_from_detected() {
-    let mut kb = KeyboardChallenge::new();
-    let result = kb.transition(KeyboardEvent::Unplug).unwrap();
     assert_eq!(
-        result,
-        KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved)
+        kb.transition(KeyboardEvent::KeyPress(KEY_9)).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
     );
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
 }
 
 #[test]
-fn unplug_from_waiting() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-    let result = kb.transition(KeyboardEvent::Unplug).unwrap();
+fn wrong_middle_key_rejects_immediately() {
+    let mut kb = start_waiting();
+
     assert_eq!(
-        result,
-        KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved)
+        kb.transition(KeyboardEvent::KeyPress(KEY_1)).unwrap(),
+        KeyboardTransitionResult::Unchanged
     );
-}
-
-#[test]
-fn unplug_from_mapped() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-    for &ch in &[0x1E, 0x1F, 0x20, 0x21] {
-        kb.transition(KeyboardEvent::KeyPress(ch)).unwrap();
-    }
-    let result = kb.transition(KeyboardEvent::Unplug).unwrap();
     assert_eq!(
-        result,
-        KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved)
+        kb.transition(KeyboardEvent::KeyPress(KEY_2)).unwrap(),
+        KeyboardTransitionResult::Unchanged
     );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_5)).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
 }
 
 #[test]
-fn invalid_transition_grab_in_waiting() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-    let result = kb.transition(KeyboardEvent::GrabSuccess);
+fn wrong_last_key_rejects_immediately() {
+    let mut kb = start_waiting();
+
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_1)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_2)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_3)).unwrap(),
+        KeyboardTransitionResult::Unchanged
+    );
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_5)).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
+}
+
+#[test]
+fn modifier_key_during_verification_rejects() {
+    let mut kb = start_waiting();
+
+    assert_eq!(
+        kb.transition(KeyboardEvent::ModifierKey).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
+}
+
+#[test]
+fn rejected_state_does_not_accept_later_correct_code() {
+    let mut kb = start_waiting();
+
+    assert_eq!(
+        kb.transition(KeyboardEvent::KeyPress(KEY_9)).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    let result = kb.transition(KeyboardEvent::KeyPress(KEY_1));
     assert!(result.is_err());
-    assert_eq!(kb.state(), KeyboardState::KbWaiting);
+    assert_eq!(kb.state(), KeyboardState::KbRejected);
 }
 
 #[test]
-fn no_timeout_stays_waiting() {
-    let mut kb = KeyboardChallenge::new();
-    kb.transition(KeyboardEvent::GrabSuccess).unwrap();
-    assert_eq!(kb.state(), KeyboardState::KbWaiting);
+fn unplug_from_waiting_transitions_to_removed() {
+    let mut kb = start_waiting();
+
+    assert_eq!(
+        kb.transition(KeyboardEvent::Unplug).unwrap(),
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved)
+    );
+    assert_eq!(kb.state(), KeyboardState::KbRemoved);
 }

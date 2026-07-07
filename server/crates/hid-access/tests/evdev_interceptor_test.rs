@@ -1,13 +1,8 @@
-//! 键盘拦截器测试。
-//!
-//! 验证 KeyboardChallenge 状态机与拦截器的集成行为：
-//! 正常 1234 验证流程、错误序列重置、修饰键不干扰、拔出事件。
-
+use evdev::Key;
 use hid_access::hid_report::{keycode_to_hid, KeyboardReport};
 use hid_access::keyboard::{
     KeyboardChallenge, KeyboardEvent, KeyboardState, KeyboardTransitionResult,
 };
-use evdev::Key;
 
 #[test]
 fn test_1234_sequence_produces_correct_key_events() {
@@ -18,58 +13,36 @@ fn test_1234_sequence_produces_correct_key_events() {
 }
 
 #[test]
-fn test_modifier_keys_do_not_interrupt_sequence() {
+fn test_wrong_key_rejects_instead_of_resetting_sequence() {
     let mut ch = KeyboardChallenge::new();
     ch.transition(KeyboardEvent::GrabSuccess).unwrap();
-    assert_eq!(ch.state(), KeyboardState::KbWaiting);
 
-    // 按 1
-    let result = ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
-    assert!(matches!(result, KeyboardTransitionResult::Unchanged));
-    assert_eq!(ch.state(), KeyboardState::KbWaiting);
+    ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
+    ch.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
 
-    // Shift 修饰键
-    let result = ch.transition(KeyboardEvent::ModifierKey).unwrap();
-    assert!(matches!(result, KeyboardTransitionResult::Unchanged));
-    assert_eq!(ch.state(), KeyboardState::KbWaiting);
-
-    // 按 2（修饰键不应清空缓冲区）
-    let result = ch.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
-    assert!(matches!(result, KeyboardTransitionResult::Unchanged));
-    assert_eq!(ch.state(), KeyboardState::KbWaiting);
-
-    // 完成 3 4
-    ch.transition(KeyboardEvent::KeyPress(0x20)).unwrap();
-    let result = ch.transition(KeyboardEvent::KeyPress(0x21)).unwrap();
-    assert!(matches!(
+    let result = ch.transition(KeyboardEvent::KeyPress(0x22)).unwrap();
+    assert_eq!(
         result,
-        KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
-    ));
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    assert_eq!(ch.state(), KeyboardState::KbRejected);
+
+    let later_correct_input = ch.transition(KeyboardEvent::KeyPress(0x1E));
+    assert!(later_correct_input.is_err());
+    assert_eq!(ch.state(), KeyboardState::KbRejected);
 }
 
 #[test]
-fn test_wrong_key_resets_sequence() {
+fn test_modifier_key_rejects_during_verification() {
     let mut ch = KeyboardChallenge::new();
     ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-    // 正确输入 1 2
-    ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
-    ch.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
-
-    // 输入错误键 5（不是 3）
-    let result = ch.transition(KeyboardEvent::KeyPress(0x22)).unwrap();
-    assert!(matches!(result, KeyboardTransitionResult::Unchanged));
-    assert_eq!(ch.state(), KeyboardState::KbWaiting);
-
-    // 重新输入完整 1234 应成功
-    ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
-    ch.transition(KeyboardEvent::KeyPress(0x1F)).unwrap();
-    ch.transition(KeyboardEvent::KeyPress(0x20)).unwrap();
-    let result = ch.transition(KeyboardEvent::KeyPress(0x21)).unwrap();
-    assert!(matches!(
+    let result = ch.transition(KeyboardEvent::ModifierKey).unwrap();
+    assert_eq!(
         result,
-        KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
-    ));
+        KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
+    );
+    assert_eq!(ch.state(), KeyboardState::KbRejected);
 }
 
 #[test]
@@ -77,13 +50,12 @@ fn test_unplug_during_verification() {
     let mut ch = KeyboardChallenge::new();
     ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-    // 输入一半，拔出
     ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
     let result = ch.transition(KeyboardEvent::Unplug).unwrap();
-    assert!(matches!(
+    assert_eq!(
         result,
         KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved)
-    ));
+    );
 }
 
 #[test]
