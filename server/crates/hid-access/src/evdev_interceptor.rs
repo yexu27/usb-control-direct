@@ -26,10 +26,12 @@ const EVDEV_POLL_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// 键盘拦截器运行结果。
 pub enum KeyboardRunResult {
-    /// 验证通过，转发后设备拔出。
+    /// 验证通过，转发后设备拔出或映射结束。
     VerifiedThenRemoved,
-    /// 验证阶段设备拔出。
+    /// 验证阶段设备拔出或上层取消。
     RemovedDuringVerify,
+    /// 验证阶段输入错误，本次映射已拒绝。
+    VerificationFailed,
 }
 
 /// 键盘 evdev 拦截器。
@@ -122,6 +124,13 @@ impl KeyboardInterceptor {
                               "键盘 1234 验证通过，开始转发");
                         break 'auth; // 进入转发阶段
                     }
+                    KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected) => {
+                        warn!(
+                            dev = %input_dev_path.display(),
+                            "键盘 1234 验证失败，本次映射已拒绝；请重新插拔键盘后再验证"
+                        );
+                        return Ok(KeyboardRunResult::VerificationFailed);
+                    }
                     KeyboardTransitionResult::Transitioned(KeyboardState::KbRemoved) => {
                         info!(dev = %input_dev_path.display(), "键盘在验证阶段被拔出");
                         return Ok(KeyboardRunResult::RemovedDuringVerify);
@@ -133,7 +142,7 @@ impl KeyboardInterceptor {
                         )));
                     }
                     KeyboardTransitionResult::Unchanged => {
-                        // 继续等待（输入中途或错误后已自动重置）
+                        // 正确验证码输入中途，继续等待。
                     }
                 }
             }
@@ -145,8 +154,9 @@ impl KeyboardInterceptor {
 
     /// 将 evdev 事件解析为 KeyboardEvent。
     ///
-    /// 仅处理按键按下事件（value == 1），释放事件和重复事件忽略。
-    /// 修饰键 → KeyboardEvent::ModifierKey，普通键 → KeyboardEvent::KeyPress(hid_usage)。
+    /// value == 1 的按下事件转为 KeyboardEvent。
+    /// value == 0 的释放事件、value == 2 的重复事件、同步事件继续忽略。
+    /// 修饰键按下转为 ModifierKey，是否拒绝由 KeyboardChallenge 判断。
     /// 未映射的键返回 None。
     fn parse_evdev_event(ev: evdev::InputEvent) -> Option<KeyboardEvent> {
         if let InputEventKind::Key(key) = ev.kind() {
