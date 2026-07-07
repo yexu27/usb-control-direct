@@ -4,7 +4,7 @@
 //! - Storage -> 白名单查询 -> storage session 路由
 //! - Keyboard -> evdev 拦截（S02）
 //! - Mouse -> evdev 转发（S02）
-//! - Unsupported -> 记录 BLOCKED 日志
+//! - Unsupported -> 记录运行日志，不启动会话，不写 USB 审计日志
 //!
 //! 热插拔生命周期按 USB interface 事件独立处理，父设备路径只用于分组和 storage 清理。
 
