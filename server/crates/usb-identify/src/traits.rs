@@ -48,15 +48,95 @@ pub enum StorageSessionError {
     Failed(String),
 }
 
-/// 病毒扫描错误。
-#[derive(Debug, thiserror::Error)]
-pub enum ScanError {
-    #[error("扫描失败: {0}")]
-    Failed(String),
-    #[error("扫描被取消")]
-    Cancelled,
-    #[error("clamd 不可用")]
+/// 病毒扫描错误分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanErrorKind {
+    /// clamd/clamdscan 不可用或无法启动。
     ServiceUnavailable,
+    /// clamdscan 正常启动但扫描引擎返回错误。
+    EngineFailed,
+    /// clamdscan 日志无法解析。
+    LogParseFailed,
+    /// 扫描路径、日志路径或文件系统 IO 失败。
+    IoError,
+    /// USB 拔出或会话取消导致扫描中断。
+    Cancelled,
+    /// 队列状态或未知内部错误。
+    InternalError,
+}
+
+impl ScanErrorKind {
+    /// 返回用于运行态和日志 detail 的稳定分类码。
+    pub fn code(self) -> &'static str {
+        match self {
+            ScanErrorKind::ServiceUnavailable => "scan_service_unavailable",
+            ScanErrorKind::EngineFailed => "scan_engine_failed",
+            ScanErrorKind::LogParseFailed => "scan_log_parse_failed",
+            ScanErrorKind::IoError => "scan_io_error",
+            ScanErrorKind::Cancelled => "scan_cancelled",
+            ScanErrorKind::InternalError => "scan_internal_error",
+        }
+    }
+
+    /// 返回中文默认原因，供缺省错误文本使用。
+    pub fn default_reason(self) -> &'static str {
+        match self {
+            ScanErrorKind::ServiceUnavailable => "病毒库不可用或扫描服务不可用",
+            ScanErrorKind::EngineFailed => "病毒扫描引擎异常",
+            ScanErrorKind::LogParseFailed => "扫描日志解析失败",
+            ScanErrorKind::IoError => "扫描 IO 失败",
+            ScanErrorKind::Cancelled => "扫描被取消",
+            ScanErrorKind::InternalError => "扫描内部错误",
+        }
+    }
+}
+
+/// 病毒扫描错误。
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{message}")]
+pub struct ScanError {
+    kind: ScanErrorKind,
+    message: String,
+}
+
+impl ScanError {
+    /// 创建带稳定分类的扫描错误。
+    pub fn new(kind: ScanErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+        }
+    }
+
+    /// 创建扫描取消错误。
+    pub fn cancelled(message: impl Into<String>) -> Self {
+        Self::new(ScanErrorKind::Cancelled, message)
+    }
+
+    /// 返回错误分类。
+    pub fn kind(&self) -> ScanErrorKind {
+        self.kind
+    }
+
+    /// 返回稳定失败码。
+    pub fn fail_code(&self) -> &'static str {
+        self.kind.code()
+    }
+
+    /// 返回 T06 detail 推荐写入值。
+    pub fn detail_code(&self) -> &'static str {
+        self.kind.code()
+    }
+
+    /// 返回中文可读原因。
+    pub fn reason(&self) -> &str {
+        &self.message
+    }
+
+    /// 是否为扫描取消。
+    pub fn is_cancelled(&self) -> bool {
+        self.kind == ScanErrorKind::Cancelled
+    }
 }
 
 /// S03 病毒扫描（P04 实现）。
