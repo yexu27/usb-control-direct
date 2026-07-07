@@ -43,7 +43,7 @@
         <mxCell id="map_failed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" value="MAP_FAILED ×&#xa;映射失败" vertex="1">
           <mxGeometry height="45" width="190" x="780" y="590" as="geometry" />
         </mxCell>
-        <mxCell id="removed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=11;arcSize=8;strokeWidth=2;align=center;verticalAlign=middle;" value="REMOVED — 任意状态 + USB 拔出 → REMOVED&#xa;MAPPED 时：卸载 /mnt/usb_raw，停止 NBD server，清理 OTG 映射 ｜ 其他状态：清理已分配资源" vertex="1">
+        <mxCell id="removed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=11;arcSize=8;strokeWidth=2;align=center;verticalAlign=middle;" value="REMOVED — 任意状态 + USB 拔出 → REMOVED&#xa;MAPPED 时：卸载 /mnt/usb-control/raw/&lt;session-id&gt;，停止 NBD server，清理 OTG 映射 ｜ 其他状态：清理已分配资源" vertex="1">
           <mxGeometry height="50" width="900" x="150" y="700" as="geometry" />
         </mxCell>
         <mxCell id="e-start" edge="1" parent="1" style="endArrow=block;endFill=1;strokeColor=#333333;" value="">

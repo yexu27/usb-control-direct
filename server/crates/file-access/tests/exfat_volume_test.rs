@@ -152,7 +152,7 @@ fn volume_beyond_total_returns_error() {
 #[test]
 fn virtual_volume_uses_minimum_capacity_for_tiny_content() {
     let entry = ControlledEntry {
-        real_path: "/mnt/usb_raw/123.txt".into(),
+        real_path: "/mnt/usb-control/raw/<session-id>/123.txt".into(),
         virtual_name: "123.txt".into(),
         is_dir: false,
         file_size: 3,

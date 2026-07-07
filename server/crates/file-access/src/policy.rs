@@ -136,7 +136,7 @@ mod tests {
             permission: 1,
         };
         let entry = ControlledEntry {
-            real_path: PathBuf::from("/mnt/usb_raw/script.PS1"),
+            real_path: PathBuf::from("/mnt/usb-control/raw/<session-id>/script.PS1"),
             virtual_name: "script.PS1".to_string(),
             file_size: 1,
             is_dir: false,
@@ -165,7 +165,7 @@ mod tests {
             permission: 1,
         };
         let entry = ControlledEntry {
-            real_path: PathBuf::from("/mnt/usb_raw/eicar.exe"),
+            real_path: PathBuf::from("/mnt/usb-control/raw/<session-id>/eicar.exe"),
             virtual_name: "[virus-blocked]eicar.exe".to_string(),
             file_size: 0,
             is_dir: false,

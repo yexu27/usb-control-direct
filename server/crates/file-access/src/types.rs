@@ -17,7 +17,7 @@ pub enum ExecFileType {
 /// 受控文件树节点。
 #[derive(Debug, Clone)]
 pub struct ControlledEntry {
-    /// 真实文件路径（/mnt/usb_raw 下）。
+    /// 真实文件路径（/mnt/usb-control/raw/<session-id> 下）。
     pub real_path: PathBuf,
     /// 虚拟路径（相对于虚拟根）。
     pub virtual_name: String,

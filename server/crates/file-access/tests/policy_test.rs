@@ -20,7 +20,7 @@ fn make_snapshot(
 
 fn make_entry(name: &str) -> ControlledEntry {
     ControlledEntry {
-        real_path: PathBuf::from(format!("/mnt/usb_raw/{}", name)),
+        real_path: PathBuf::from(format!("/mnt/usb-control/raw/<session-id>/{}", name)),
         virtual_name: name.to_string(),
         file_size: 1024,
         is_dir: false,

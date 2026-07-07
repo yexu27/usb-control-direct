@@ -76,10 +76,10 @@
 
 | 文件系统 | 装置端处理 | 当前内核支持状态 |
 |---|---|---|
-| FAT32 / vfat | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ 可用 |
-| exFAT | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ OOT 内核模块 exfat.ko 已验证可用 |
-| NTFS | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入；读写能力依赖 ntfs-3g | ✅ 可用（ntfs-3g 已安装） |
-| ext2 / ext3 / ext4 | Linux 挂载层挂载到 `/mnt/usb_raw` 后作为目录树输入 | ✅ 可用 |
+| FAT32 / vfat | Linux 挂载层挂载到 `/mnt/usb-control/raw/<session-id>` 后作为目录树输入 | ✅ 可用 |
+| exFAT | Linux 挂载层挂载到 `/mnt/usb-control/raw/<session-id>` 后作为目录树输入 | ✅ OOT 内核模块 exfat.ko 已验证可用 |
+| NTFS | Linux 挂载层挂载到 `/mnt/usb-control/raw/<session-id>` 后作为目录树输入；读写能力依赖 ntfs-3g | ✅ 可用（ntfs-3g 已安装） |
+| ext2 / ext3 / ext4 | Linux 挂载层挂载到 `/mnt/usb-control/raw/<session-id>` 后作为目录树输入 | ✅ 可用 |
 | 其他文件系统 | 不纳入本版本目标支持范围；挂载失败时拒绝映射并记录 USB 审计日志 | — |
 
 ---
@@ -104,7 +104,7 @@
 
 ```
 真实 U 盘 (/dev/sdX)
-  → Linux 挂载层 (/mnt/usb_raw)
+  → Linux 挂载层 (/mnt/usb-control/raw/<session-id>)
     → Rust NBD server（策略判断 + 虚拟 exFAT 扇区生成）
       → /dev/nbdX
         → f_mass_storage lun.0

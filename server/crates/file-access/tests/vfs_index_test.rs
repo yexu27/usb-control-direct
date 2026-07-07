@@ -42,18 +42,18 @@ fn dir(path: &str, name: &str, children: Vec<ControlledEntry>) -> ControlledEntr
 fn vfs_index_preserves_nested_directories_and_same_names() {
     let tree = vec![
         dir(
-            "/mnt/usb_raw/a",
+            "/mnt/usb-control/raw/<session-id>/a",
             "a",
-            vec![file("/mnt/usb_raw/a/readme.txt", "readme.txt", 3)],
+            vec![file("/mnt/usb-control/raw/<session-id>/a/readme.txt", "readme.txt", 3)],
         ),
         dir(
-            "/mnt/usb_raw/b",
+            "/mnt/usb-control/raw/<session-id>/b",
             "b",
-            vec![file("/mnt/usb_raw/b/readme.txt", "readme.txt", 4)],
+            vec![file("/mnt/usb-control/raw/<session-id>/b/readme.txt", "readme.txt", 4)],
         ),
     ];
 
-    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb_raw"), &tree).unwrap();
+    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb-control/raw/<session-id>"), &tree).unwrap();
     let a = index.lookup_path("/a/readme.txt").unwrap();
     let b = index.lookup_path("/b/readme.txt").unwrap();
 
@@ -64,9 +64,9 @@ fn vfs_index_preserves_nested_directories_and_same_names() {
 
 #[test]
 fn vfs_index_keeps_virus_file_visible_with_zero_virtual_size() {
-    let mut infected = file("/mnt/usb_raw/bad.exe", "[病毒禁止访问]bad.exe", 4096);
+    let mut infected = file("/mnt/usb-control/raw/<session-id>/bad.exe", "[病毒禁止访问]bad.exe", 4096);
     infected.is_virus = true;
-    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb_raw"), &[infected])
+    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb-control/raw/<session-id>"), &[infected])
         .unwrap();
     let node = index
         .node(index.lookup_path("/[病毒禁止访问]bad.exe").unwrap())
@@ -74,12 +74,12 @@ fn vfs_index_keeps_virus_file_visible_with_zero_virtual_size() {
 
     assert!(node.is_virus);
     assert_eq!(node.size, 0);
-    assert_eq!(node.real_path, PathBuf::from("/mnt/usb_raw/bad.exe"));
+    assert_eq!(node.real_path, PathBuf::from("/mnt/usb-control/raw/<session-id>/bad.exe"));
 }
 
 #[test]
 fn root_node_is_stable() {
-    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb_raw"), &[]).unwrap();
+    let index = VfsIndex::from_controlled_tree(&PathBuf::from("/mnt/usb-control/raw/<session-id>"), &[]).unwrap();
     assert_eq!(index.root_id(), NodeId(1));
     assert_eq!(index.node(index.root_id()).unwrap().virtual_path, "/");
 }

@@ -35,14 +35,14 @@ VM 自动化必须先覆盖以下 S04 runtime 场景，再进入 RK3568 + Window
 
 | 编号 | 场景 | Windows 检查 | RK 真实 U 盘检查 | 通过标准 |
 | --- | --- | --- | --- | --- |
-| V01 | 初始深度目录 `/a/b/c.txt` | `Get-ChildItem G:\ -Recurse` | `find /mnt/usb_raw/sdc2 -maxdepth 5` | Windows 可见且内容可读，真实文件不变 |
-| V02 | 不同目录同名文件 | `Get-ChildItem G:\a,G:\b` | `find /mnt/usb_raw/sdc2 -name readme.txt` | 两个文件均可见且内容区分 |
+| V01 | 初始深度目录 `/a/b/c.txt` | `Get-ChildItem G:\ -Recurse` | `find /mnt/usb-control/raw/<session-id>/sdc2 -maxdepth 5` | Windows 可见且内容可读，真实文件不变 |
+| V02 | 不同目录同名文件 | `Get-ChildItem G:\a,G:\b` | `find /mnt/usb-control/raw/<session-id>/sdc2 -name readme.txt` | 两个文件均可见且内容区分 |
 | V03 | 新建 0 字节根文件 | `New-Item -ItemType File G:\empty_$stamp.txt` | `find ... -name empty_$stamp.txt -printf "%s"` | RK size=0 |
 | V04 | 新建 0 字节嵌套文件 | `New-Item -ItemType File G:\dir\empty_$stamp.txt` | `find ... -name empty_$stamp.txt` | RK 嵌套文件存在，size=0 |
-| V05 | 新建空根目录 | `New-Item -ItemType Directory G:\empty_dir_$stamp` | `test -d /mnt/usb_raw/.../empty_dir_$stamp` | 真实目录存在 |
-| V06 | 新建嵌套空目录 | `New-Item -ItemType Directory G:\nested_$stamp\a\b -Force` | `test -d /mnt/usb_raw/.../nested_$stamp/a/b` | 完整目录链存在 |
-| V07 | 新建根文件并写内容 | `Set-Content G:\data_$stamp.txt` | `cat /mnt/usb_raw/.../data_$stamp.txt` | 内容一致 |
-| V08 | 新建嵌套文件并写内容 | `Set-Content G:\nested_$stamp\a\b\data_$stamp.txt` | `cat /mnt/usb_raw/.../nested_$stamp/a/b/data_$stamp.txt` | 内容一致 |
+| V05 | 新建空根目录 | `New-Item -ItemType Directory G:\empty_dir_$stamp` | `test -d /mnt/usb-control/raw/<session-id>/.../empty_dir_$stamp` | 真实目录存在 |
+| V06 | 新建嵌套空目录 | `New-Item -ItemType Directory G:\nested_$stamp\a\b -Force` | `test -d /mnt/usb-control/raw/<session-id>/.../nested_$stamp/a/b` | 完整目录链存在 |
+| V07 | 新建根文件并写内容 | `Set-Content G:\data_$stamp.txt` | `cat /mnt/usb-control/raw/<session-id>/.../data_$stamp.txt` | 内容一致 |
+| V08 | 新建嵌套文件并写内容 | `Set-Content G:\nested_$stamp\a\b\data_$stamp.txt` | `cat /mnt/usb-control/raw/<session-id>/.../nested_$stamp/a/b/data_$stamp.txt` | 内容一致 |
 | V09 | 修改已有文件 | `Set-Content` 覆盖内容 | `cat` | 内容更新 |
 | V10 | 截断已有文件 | 写入更短内容 | `stat -c %s` | size 变小 |
 | V11 | 扩展已有文件 | 写入更长内容 | `stat -c %s; cat` | size 和内容正确 |

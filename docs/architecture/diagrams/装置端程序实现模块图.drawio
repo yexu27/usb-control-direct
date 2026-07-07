@@ -67,7 +67,7 @@
         <mxCell id="infra" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;fontSize=16;fontStyle=1;arcSize=6;align=left;verticalAlign=top;spacingTop=8;spacingLeft=12;opacity=50;" value="基础设施" vertex="1">
           <mxGeometry height="115" width="1490" x="385" y="930" as="geometry" />
         </mxCell>
-        <mxCell id="kernel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="Linux 挂载层&#xa;/mnt/usb_raw" vertex="1">
+        <mxCell id="kernel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="Linux 挂载层&#xa;/mnt/usb-control/raw/&lt;session-id&gt;" vertex="1">
           <mxGeometry height="50" width="185" x="410" y="965" as="geometry" />
         </mxCell>
         <mxCell id="nbd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=11;arcSize=8;align=center;verticalAlign=middle;" value="NBD server&#xa;虚拟 exFAT 块设备" vertex="1">

@@ -5,7 +5,7 @@ use file_access::vfs::VfsIndex;
 
 #[test]
 fn vfs_index_applies_create_empty_file_and_directory() {
-    let root = PathBuf::from("/mnt/usb_raw/sdc2");
+    let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
     let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
 
     index
@@ -31,13 +31,13 @@ fn vfs_index_applies_create_empty_file_and_directory() {
     assert_eq!(index.node(file).unwrap().size, 0);
     assert_eq!(
         index.node(file).unwrap().real_path,
-        PathBuf::from("/mnt/usb_raw/sdc2/dir/empty.txt")
+        PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2/dir/empty.txt")
     );
 }
 
 #[test]
 fn vfs_index_applies_rename_and_delete() {
-    let root = PathBuf::from("/mnt/usb_raw/sdc2");
+    let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
     let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
     index
         .apply_mutation(&FsMutation::CreateDir {
@@ -81,7 +81,7 @@ fn vfs_index_applies_rename_and_delete() {
 
 #[test]
 fn vfs_index_applies_truncate() {
-    let root = PathBuf::from("/mnt/usb_raw/sdc2");
+    let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
     let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
     index
         .apply_mutation(&FsMutation::CreateFile {

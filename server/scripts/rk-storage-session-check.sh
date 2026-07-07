@@ -2,7 +2,7 @@
 set -u
 
 NBD_POOL_SIZE="${NBD_POOL_SIZE:-4}"
-MOUNT_BASE="${MOUNT_BASE:-/mnt/usb_raw}"
+MOUNT_BASE="${MOUNT_BASE:-/mnt/usb-control/raw}"
 GADGET_ROOT="${GADGET_ROOT:-/sys/kernel/config/usb_gadget}"
 
 section() {

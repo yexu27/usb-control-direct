@@ -99,7 +99,7 @@ apt-get install -y clamav clamav-daemon
 ### 4.2 扫描流程设计
 
 ```
-USB 插入 → 挂载到 /mnt/usb_raw
+USB 插入 → 挂载到 /mnt/usb-control/raw/<session-id>
   → 遍历文件列表
     → 逐文件发送到 clamd 扫描（SCAN 命令或 clamdscan）
       → 标记结果：clean / infected / failed

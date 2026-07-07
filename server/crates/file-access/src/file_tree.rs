@@ -20,7 +20,7 @@ pub const VIRUS_PREFIX: &str = "[病毒禁止访问]";
 /// 构建受控文件树。
 ///
 /// 参数:
-///   - mount_path: U 盘挂载路径（如 /mnt/usb_raw）。
+///   - mount_path: StorageSession 拥有的 U 盘挂载路径（如 /mnt/usb-control/raw/<session-id>）。
 ///   - infected_files: 病毒文件相对路径列表（来自 ScanResult.infected_files）。
 ///
 /// 返回:
