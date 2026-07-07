@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::fs::VirtualExfatFs;
-use file_access::types::{ControlledEntry, PolicySnapshot};
+use file_access::types::{blocked_placeholder_bytes, ControlledEntry, PolicySnapshot};
 use file_access::vfs::mutation::{FsMutation, NodeKind};
 
 fn readonly_snapshot() -> PolicySnapshot {
@@ -108,7 +108,76 @@ fn runtime_blacklist_rejects_new_file_extension_without_real_fs_change() {
 }
 
 #[test]
-fn runtime_virus_file_is_visible_zero_size_and_cannot_be_deleted() {
+fn runtime_blocked_placeholder_rejects_write_delete_rename_truncate_and_rewrite() {
+    let tmp = tempfile::tempdir().unwrap();
+    let real = tmp.path().join("blocked.txt");
+    std::fs::write(&real, b"secret").unwrap();
+
+    let mut snapshot = rw_snapshot();
+    snapshot.file_type_blacklist_enabled = true;
+    snapshot.blacklist_extensions.insert(".txt".to_string());
+
+    let entry = file(real.clone(), "blocked.txt", 6);
+    let mut state =
+        ExfatRuntimeState::from_controlled_tree(tmp.path(), &[entry], snapshot, 16 * 1024 * 1024)
+            .unwrap();
+
+    let node = state.lookup_path("/blocked.txt").unwrap();
+    assert!(node.is_blocked_placeholder());
+    assert_eq!(node.size, blocked_placeholder_bytes().len() as u64);
+
+    let write_err = state
+        .commit_mutation(FsMutation::WriteFile {
+            virtual_path: "/blocked.txt".to_string(),
+            offset: 0,
+            data: b"leak".to_vec(),
+        })
+        .unwrap_err();
+    assert_eq!(write_err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let truncate_err = state
+        .commit_mutation(FsMutation::Truncate {
+            virtual_path: "/blocked.txt".to_string(),
+            len: 0,
+        })
+        .unwrap_err();
+    assert_eq!(truncate_err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let rename_err = state
+        .commit_mutation(FsMutation::Rename {
+            from: "/blocked.txt".to_string(),
+            to: "/renamed.bin".to_string(),
+            kind: NodeKind::File,
+        })
+        .unwrap_err();
+    assert_eq!(rename_err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let rewrite_err = state
+        .commit_mutation(FsMutation::RewriteFile {
+            virtual_path: "/blocked.txt".to_string(),
+            size: 4,
+            valid_data_len: 4,
+            chain: None,
+            data_patches: Vec::new(),
+        })
+        .unwrap_err();
+    assert_eq!(rewrite_err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let delete_err = state
+        .commit_mutation(FsMutation::Delete {
+            virtual_path: "/blocked.txt".to_string(),
+            kind: NodeKind::File,
+        })
+        .unwrap_err();
+    assert_eq!(delete_err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    assert_eq!(std::fs::read(&real).unwrap(), b"secret");
+    assert!(state.lookup_path("/blocked.txt").is_some());
+    assert!(state.lookup_path("/renamed.bin").is_none());
+}
+
+#[test]
+fn runtime_virus_file_is_visible_placeholder_size_and_cannot_be_deleted() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("bad.exe"), b"virus").unwrap();
     let mut infected = file(tmp.path().join("bad.exe"), "[病毒禁止访问]bad.exe", 5);
@@ -118,7 +187,8 @@ fn runtime_virus_file_is_visible_zero_size_and_cannot_be_deleted() {
             .unwrap();
     let node = state.lookup_path("/[病毒禁止访问]bad.exe").unwrap();
     assert!(node.is_virus);
-    assert_eq!(node.size, 0);
+    assert_eq!(node.size, blocked_placeholder_bytes().len() as u64);
+    assert!(node.is_blocked_placeholder());
 
     let err = state
         .commit_mutation(FsMutation::Delete {

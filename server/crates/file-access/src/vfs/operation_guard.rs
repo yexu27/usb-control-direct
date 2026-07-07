@@ -1,4 +1,7 @@
 //! S04 文件系统操作准入检查。
+//!
+//! 本模块只处理路径级策略和只读权限。已有 VFS 节点是否为阻断占位文件，
+//! 由 `ExfatRuntimeState` 基于节点状态判断，避免 OperationGuard 依赖 VFS 索引。
 
 use crate::types::{ExecFileType, PolicySnapshot};
 
@@ -26,7 +29,6 @@ pub enum FsOperation {
     },
     Delete {
         virtual_path: String,
-        is_virus: bool,
     },
 }
 
@@ -54,14 +56,7 @@ impl OperationGuard {
             | FsOperation::WriteFile { virtual_path }
             | FsOperation::Truncate { virtual_path } => self.check_path(virtual_path),
             FsOperation::Rename { to, .. } => self.check_path(to),
-            FsOperation::Delete { is_virus: true, .. } => Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "病毒文件禁止删除",
-            )),
-            FsOperation::Delete {
-                virtual_path,
-                is_virus: false,
-            } => self.check_path(virtual_path),
+            FsOperation::Delete { virtual_path } => self.check_path(virtual_path),
             FsOperation::WriteExecutable {
                 virtual_path,
                 exec_type,

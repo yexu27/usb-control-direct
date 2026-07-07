@@ -678,8 +678,34 @@ fn read_placeholder_slice(file_offset: u64, sector_offset: usize, take: usize) -
     out
 }
 
+fn mutation_name(mutation: &FsMutation) -> &'static str {
+    match mutation {
+        FsMutation::CreateDir { .. } => "create_dir",
+        FsMutation::CreateFile { .. } => "create_file",
+        FsMutation::WriteFile { .. } => "write_file",
+        FsMutation::Truncate { .. } => "truncate",
+        FsMutation::Rename { .. } => "rename",
+        FsMutation::Delete { .. } => "delete",
+        FsMutation::RewriteFile { .. } => "rewrite_file",
+    }
+}
+
 impl ExfatRuntimeState {
     fn check_mutation(&self, mutation: &FsMutation) -> Result<(), std::io::Error> {
+        match mutation {
+            FsMutation::WriteFile { virtual_path, .. }
+            | FsMutation::RewriteFile { virtual_path, .. }
+            | FsMutation::Truncate { virtual_path, .. }
+            | FsMutation::Delete { virtual_path, .. } => {
+                self.deny_if_blocked_placeholder(virtual_path, mutation_name(mutation))?;
+            }
+            FsMutation::Rename { from, to, .. } => {
+                self.deny_if_blocked_placeholder(from, "rename_from")?;
+                self.deny_if_blocked_placeholder(to, "rename_to")?;
+            }
+            FsMutation::CreateDir { .. } | FsMutation::CreateFile { .. } => {}
+        }
+
         let guard = OperationGuard::new(self.snapshot.clone());
         match mutation {
             FsMutation::CreateDir { parent, name, .. } => guard.check(&FsOperation::CreateDir {
@@ -701,12 +727,30 @@ impl ExfatRuntimeState {
             }),
             FsMutation::Delete { virtual_path, .. } => guard.check(&FsOperation::Delete {
                 virtual_path: virtual_path.clone(),
-                is_virus: self
-                    .lookup_path(virtual_path)
-                    .map(|node| node.is_virus)
-                    .unwrap_or(false),
             }),
         }
+    }
+
+    fn deny_if_blocked_placeholder(
+        &self,
+        virtual_path: &str,
+        operation: &str,
+    ) -> Result<(), std::io::Error> {
+        if let Some(node) = self.lookup_path(virtual_path) {
+            if node.is_blocked_placeholder() {
+                tracing::warn!(
+                    virtual_path = %node.virtual_path,
+                    reason = node.blocked_reason().unwrap_or("unknown"),
+                    operation,
+                    "阻断占位文件禁止变更"
+                );
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "阻断占位文件禁止变更",
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn refresh_runtime_metadata_after_mutation(
