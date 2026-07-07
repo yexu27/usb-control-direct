@@ -3,8 +3,9 @@
 //! 实现架构 06 §2 定义的键盘准入流程：
 //! - S01 检测到键盘设备后，S02 尝试 HID 接管（grab）。
 //! - 接管成功后进入等待状态，要求用户按序输入 "1234" 挑战码。
-//! - 修饰键（Ctrl/Alt/Shift/Fn 等）不干扰序列匹配，也不重置缓冲区。
-//! - 错误按键清空缓冲区，继续等待，不超时、不自动拒绝。
+//! - 输入序列必须严格等于 "1234"。
+//! - 任意普通按键不匹配当前位置期望值，立即进入 KbRejected。
+//! - 验证阶段按下修饰键也视为非验证码按键，立即进入 KbRejected。
 //! - 接管失败直接进入 KbRejected，不进入挑战流程。
 //! - 任意状态下拔出设备均进入 KbRemoved。
 
@@ -37,7 +38,7 @@ pub enum KeyboardEvent {
     GrabFailed,
     /// 普通按键（非修饰键），携带 HID 用途码字节。
     KeyPress(u8),
-    /// 修饰键按下（Ctrl/Alt/Shift/Fn 等），不影响挑战序列。
+    /// 修饰键按下（Ctrl/Alt/Shift/Fn 等）。
     ModifierKey,
     /// 键盘物理拔出。
     Unplug,
@@ -48,7 +49,7 @@ pub enum KeyboardEvent {
 pub enum KeyboardTransitionResult {
     /// 状态已迁移，携带新状态。
     Transitioned(KeyboardState),
-    /// 状态未变化（例如挑战码输入中途或错误按键）。
+    /// 状态未变化，仅用于挑战码正确输入中途。
     Unchanged,
 }
 
@@ -73,7 +74,7 @@ impl KeyboardChallenge {
     ///
     /// 返回:
     /// - `Ok(Transitioned(new_state))`: 状态迁移成功。
-    /// - `Ok(Unchanged)`: 状态未变化（挑战码输入中途或修饰键）。
+    /// - `Ok(Unchanged)`: 状态未变化（挑战码正确输入中途）。
     /// - `Err(InvalidTransition)`: 当前状态不允许该事件。
     pub fn transition(
         &mut self,
@@ -140,11 +141,7 @@ impl KeyboardChallenge {
         event: KeyboardEvent,
     ) -> Result<KeyboardTransitionResult, HidAccessError> {
         match event {
-            KeyboardEvent::ModifierKey => {
-                // 修饰键不影响挑战序列，直接忽略。
-                debug!("忽略修饰键，挑战序列不受影响");
-                Ok(KeyboardTransitionResult::Unchanged)
-            }
+            KeyboardEvent::ModifierKey => self.reject("验证阶段收到非验证码修饰键"),
             KeyboardEvent::KeyPress(key) => self.handle_key_press(key),
             other => Err(HidAccessError::InvalidTransition {
                 from: format!("{:?}", self.state),
@@ -158,7 +155,7 @@ impl KeyboardChallenge {
     /// - 按键与挑战码当前期望位置匹配：追加到缓冲区。
     ///   - 若序列完整（4位全部匹配）：迁移到 KbMapped。
     ///   - 否则：继续等待，返回 Unchanged。
-    /// - 按键不匹配：清空缓冲区，返回 Unchanged（继续等待）。
+    /// - 按键不匹配：迁移到 KbRejected，拒绝本次键盘映射。
     fn handle_key_press(
         &mut self,
         key: u8,
@@ -194,14 +191,23 @@ impl KeyboardChallenge {
             // 序列未完成，继续等待。
             Ok(KeyboardTransitionResult::Unchanged)
         } else {
-            debug!(
+            warn!(
                 key,
                 expected = expected_key,
-                "挑战码输入错误，清空缓冲区重新等待"
+                position = expected_pos,
+                "挑战码输入错误，拒绝本次键盘映射"
             );
-            self.input_buffer.clear();
-            Ok(KeyboardTransitionResult::Unchanged)
+            self.reject("验证码输入不匹配")
         }
+    }
+
+    fn reject(&mut self, reason: &'static str) -> Result<KeyboardTransitionResult, HidAccessError> {
+        warn!(reason, "键盘 1234 验证失败，迁移到 KbRejected");
+        self.input_buffer.clear();
+        self.state = KeyboardState::KbRejected;
+        Ok(KeyboardTransitionResult::Transitioned(
+            KeyboardState::KbRejected,
+        ))
     }
 }
 
@@ -272,41 +278,31 @@ mod tests {
     }
 
     #[test]
-    fn 错误按键清空缓冲区后仍可继续输入() {
+    fn 错误按键后进入_kb_rejected() {
         let mut ch = KeyboardChallenge::new();
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-        // 先输入部分正确序列
         press_sequence(&mut ch, &[0x1E, 0x1F]).unwrap();
-        // 输入错误按键
         let result = ch.transition(KeyboardEvent::KeyPress(0x26)).unwrap();
-        assert_eq!(result, KeyboardTransitionResult::Unchanged);
-        assert_eq!(ch.state(), KeyboardState::KbWaiting);
-
-        // 重新输入完整正确序列应能成功
-        let result = press_sequence(&mut ch, &[0x1E, 0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(
             result,
-            KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
+            KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
         );
+        assert_eq!(ch.state(), KeyboardState::KbRejected);
     }
 
     #[test]
-    fn 修饰键不影响挑战序列() {
+    fn 修饰键输入后进入_kb_rejected() {
         let mut ch = KeyboardChallenge::new();
         ch.transition(KeyboardEvent::GrabSuccess).unwrap();
 
-        // 输入部分序列后夹杂修饰键
         ch.transition(KeyboardEvent::KeyPress(0x1E)).unwrap();
         let modifier_result = ch.transition(KeyboardEvent::ModifierKey).unwrap();
-        assert_eq!(modifier_result, KeyboardTransitionResult::Unchanged);
-
-        // 修饰键后继续完成序列
-        let result = press_sequence(&mut ch, &[0x1F, 0x20, 0x21]).unwrap();
         assert_eq!(
-            result,
-            KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped)
+            modifier_result,
+            KeyboardTransitionResult::Transitioned(KeyboardState::KbRejected)
         );
+        assert_eq!(ch.state(), KeyboardState::KbRejected);
     }
 
     #[test]
