@@ -20,6 +20,7 @@ pub struct ScanResult {
 /// S01 已完成设备类型识别、白名单命中和权限判定。
 #[derive(Debug, Clone)]
 pub struct AuthorizedStorageDevice {
+    pub runtime_id: String,
     pub parent_path: String,
     pub sys_path: String,
     pub dev_path: String,

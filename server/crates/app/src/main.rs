@@ -135,6 +135,7 @@ async fn main() {
         Arc::clone(&state.whitelist_manager),
         Arc::clone(&state.audit_service),
         Arc::clone(&state.device_manager),
+        Arc::clone(&state.device_runtime_registry),
         storage_session_manager,
         hidg_nodes,
     );

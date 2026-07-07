@@ -10,6 +10,7 @@ use tempfile::tempdir;
 use tokio::sync::mpsc;
 
 use common::types::DeviceType;
+use device_runtime::DeviceRuntimeRegistry;
 use hid_access::hid_gadget::HidgNodes;
 use log_audit::AuditService;
 use storage::Storage;
@@ -159,11 +160,30 @@ fn build_orchestrator(
     device_manager: Arc<RwLock<DeviceManager>>,
     storage_session: Arc<MockStorageSessionController>,
 ) -> DeviceOrchestrator {
+    build_orchestrator_with_runtime(
+        rx,
+        whitelist,
+        audit,
+        device_manager,
+        Arc::new(DeviceRuntimeRegistry::new()),
+        storage_session,
+    )
+}
+
+fn build_orchestrator_with_runtime(
+    rx: mpsc::UnboundedReceiver<DeviceEvent>,
+    whitelist: Arc<WhitelistManager>,
+    audit: Arc<AuditService>,
+    device_manager: Arc<RwLock<DeviceManager>>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
+    storage_session: Arc<MockStorageSessionController>,
+) -> DeviceOrchestrator {
     DeviceOrchestrator::new(
         rx,
         whitelist,
         audit,
         device_manager,
+        runtime_registry,
         storage_session,
         test_hidg_nodes(),
     )
@@ -225,9 +245,17 @@ async fn test_storage_whitelist_denied() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
     let storage_session = Arc::new(MockStorageSessionController::default());
     let storage_session_assert = Arc::clone(&storage_session);
-    let orchestrator = build_orchestrator(rx, whitelist, audit, device_manager, storage_session);
+    let orchestrator = build_orchestrator_with_runtime(
+        rx,
+        whitelist,
+        audit,
+        device_manager,
+        Arc::clone(&runtime_registry),
+        storage_session,
+    );
 
     tx.send(DeviceEvent::StorageAdded(test_storage_info(
         "SN-NOT-IN-WHITELIST",
@@ -238,6 +266,7 @@ async fn test_storage_whitelist_denied() {
     orchestrator.run().await;
 
     assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 0);
+    assert!(runtime_registry.list().is_empty());
 }
 
 #[tokio::test]
@@ -249,9 +278,17 @@ async fn whitelisted_storage_is_routed_to_storage_session_manager() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
     let storage_session = Arc::new(MockStorageSessionController::default());
     let storage_session_assert = Arc::clone(&storage_session);
-    let orchestrator = build_orchestrator(rx, whitelist, audit, device_manager, storage_session);
+    let orchestrator = build_orchestrator_with_runtime(
+        rx,
+        whitelist,
+        audit,
+        device_manager,
+        Arc::clone(&runtime_registry),
+        storage_session,
+    );
 
     tx.send(DeviceEvent::StorageAdded(test_storage_info("SN-ALLOW")))
         .unwrap();
@@ -265,6 +302,15 @@ async fn whitelisted_storage_is_routed_to_storage_session_manager() {
     assert_eq!(device.serial_number, "SN-ALLOW");
     assert_eq!(device.dev_path, "/dev/sda1");
     assert_eq!(device.permission, 1);
+    assert_eq!(device.runtime_id, "runtime__/sys/devices/test_SN-ALLOW");
+
+    let snapshots = runtime_registry.list();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].serial_number, "SN-ALLOW");
+    assert_eq!(snapshots[0].device_type, "storage");
+    assert_eq!(snapshots[0].interface_type, "mass_storage");
+    assert_eq!(snapshots[0].status, "accepted");
+    assert_eq!(snapshots[0].stage, "admission");
 }
 
 #[tokio::test]
@@ -275,11 +321,13 @@ async fn test_keyboard_added() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-    let orchestrator = build_orchestrator(
+    let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
+    let orchestrator = build_orchestrator_with_runtime(
         rx,
         whitelist,
         audit,
         device_manager,
+        Arc::clone(&runtime_registry),
         Arc::new(MockStorageSessionController::default()),
     );
 
@@ -288,6 +336,13 @@ async fn test_keyboard_added() {
     drop(tx);
 
     orchestrator.run().await;
+
+    let snapshots = runtime_registry.list();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].device_type, "keyboard");
+    assert_eq!(snapshots[0].status, "failed");
+    assert_eq!(snapshots[0].stage, "keyboard_evdev_bind");
+    assert_eq!(snapshots[0].fail_code, "evdev_not_found");
 }
 
 #[tokio::test]
@@ -298,11 +353,13 @@ async fn test_mouse_added() {
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-    let orchestrator = build_orchestrator(
+    let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
+    let orchestrator = build_orchestrator_with_runtime(
         rx,
         whitelist,
         audit,
         device_manager,
+        Arc::clone(&runtime_registry),
         Arc::new(MockStorageSessionController::default()),
     );
 
@@ -310,6 +367,13 @@ async fn test_mouse_added() {
     drop(tx);
 
     orchestrator.run().await;
+
+    let snapshots = runtime_registry.list();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].device_type, "mouse");
+    assert_eq!(snapshots[0].status, "failed");
+    assert_eq!(snapshots[0].stage, "mouse_evdev_bind");
+    assert_eq!(snapshots[0].fail_code, "evdev_not_found");
 }
 
 #[tokio::test]

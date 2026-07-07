@@ -16,10 +16,14 @@ use tokio::sync::{mpsc, watch, Mutex};
 use tracing::{debug, error, info, warn};
 
 use crate::descriptor::UsbDeviceInfo;
-use crate::monitor::{DeviceManager, InterfaceAddResult, InterfaceRemoveResult};
+use crate::monitor::{
+    interface_session_key, parent_device_path, DeviceManager, InterfaceAddResult,
+    InterfaceRemoveResult,
+};
 use crate::traits::{AuthorizedStorageDevice, StorageSessionController};
 
 use common::audit_const::event_type;
+use device_runtime::{DeviceRuntimeCreate, DeviceRuntimeRegistry, DeviceRuntimeUpdate};
 use log_audit::AuditService;
 use storage::model::UsbAuditLogInsert;
 use whitelist::WhitelistManager;
@@ -35,6 +39,7 @@ pub enum SessionKind {
 struct ActiveSession {
     info: UsbDeviceInfo,
     kind: SessionKind,
+    runtime_id: String,
     cancel_tx: watch::Sender<bool>,
     audit_detail: String,
 }
@@ -102,6 +107,32 @@ fn find_evdev_path_with_retry(usb_iface_syspath: &str) -> Option<PathBuf> {
     None
 }
 
+fn runtime_id(info: &UsbDeviceInfo) -> String {
+    format!("runtime__{}", interface_session_key(&info.sys_path))
+}
+
+fn create_runtime_input(
+    info: &UsbDeviceInfo,
+    status: &str,
+    stage: &str,
+    fail_code: &str,
+    fail_reason: &str,
+) -> DeviceRuntimeCreate {
+    DeviceRuntimeCreate {
+        runtime_id: runtime_id(info),
+        parent_path: parent_device_path(&info.sys_path),
+        interface_path: info.sys_path.clone(),
+        serial_number: info.serial_number.clone(),
+        device_name: info.device_name.clone(),
+        device_type: device_type_str(info.device_type).to_string(),
+        interface_type: crate::descriptor::interface_type_str(info).to_string(),
+        status: status.to_string(),
+        stage: stage.to_string(),
+        fail_code: fail_code.to_string(),
+        fail_reason: fail_reason.to_string(),
+    }
+}
+
 /// 主编排器。
 ///
 /// 持有所有服务引用，接收 udev 事件并按类型路由。
@@ -111,6 +142,7 @@ pub struct DeviceOrchestrator {
     whitelist: Arc<WhitelistManager>,
     audit: Arc<AuditService>,
     device_manager: Arc<RwLock<DeviceManager>>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
 
     storage_session: Arc<dyn StorageSessionController>,
     hidg_nodes: hid_access::hid_gadget::HidgNodes,
@@ -121,6 +153,7 @@ pub struct DeviceOrchestrator {
 #[derive(Clone)]
 pub struct DeviceOrchestratorCleanupHandle {
     storage_session: Arc<dyn StorageSessionController>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
     active_sessions: Arc<Mutex<HashMap<String, ActiveSession>>>,
 }
 
@@ -141,6 +174,8 @@ impl DeviceOrchestratorCleanupHandle {
 
         for session in sessions {
             let _ = session.cancel_tx.send(true);
+            self.runtime_registry
+                .mark_removed(&session.runtime_id, reason.to_string());
             info!(
                 kind = ?session.kind,
                 reason = %reason,
@@ -157,6 +192,7 @@ impl DeviceOrchestrator {
         whitelist: Arc<WhitelistManager>,
         audit: Arc<AuditService>,
         device_manager: Arc<RwLock<DeviceManager>>,
+        runtime_registry: Arc<DeviceRuntimeRegistry>,
         storage_session: Arc<dyn StorageSessionController>,
         hidg_nodes: hid_access::hid_gadget::HidgNodes,
     ) -> Self {
@@ -165,6 +201,7 @@ impl DeviceOrchestrator {
             whitelist,
             audit,
             device_manager,
+            runtime_registry,
             storage_session,
             hidg_nodes,
             active_sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -174,6 +211,7 @@ impl DeviceOrchestrator {
     pub fn cleanup_handle(&self) -> DeviceOrchestratorCleanupHandle {
         DeviceOrchestratorCleanupHandle {
             storage_session: Arc::clone(&self.storage_session),
+            runtime_registry: Arc::clone(&self.runtime_registry),
             active_sessions: Arc::clone(&self.active_sessions),
         }
     }
@@ -231,12 +269,11 @@ impl DeviceOrchestrator {
         let whitelist_entry = match self.whitelist.is_whitelisted(&serial) {
             Some(e) => e,
             None => {
-                debug!(serial = %serial, "U 盘不在白名单中");
-                let mut log = build_audit_log(&info, event_type::INSERT_SUCCESS);
-                log.detail = Some("未授权设备".into());
-                if let Err(e) = self.audit.log_usb_audit(&mut log) {
-                    error!(error = %e, "审计日志写入失败");
-                }
+                info!(
+                    serial = %serial,
+                    dev = %info.device_name,
+                    "storage 未加入白名单，禁止映射"
+                );
                 return;
             }
         };
@@ -265,11 +302,20 @@ impl DeviceOrchestrator {
         };
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
+        let runtime_id = runtime_id(&info);
+        self.runtime_registry.create(create_runtime_input(
+            &info,
+            "accepted",
+            "admission",
+            "",
+            "",
+        ));
         self.register_session(
             add_result.session_key.clone(),
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Storage,
+                runtime_id: runtime_id.clone(),
                 cancel_tx,
                 audit_detail: "授权设备".into(),
             },
@@ -277,6 +323,7 @@ impl DeviceOrchestrator {
         .await;
 
         let device = AuthorizedStorageDevice {
+            runtime_id,
             parent_path: add_result.parent_path,
             sys_path: info.sys_path.clone(),
             dev_path,
@@ -329,13 +376,41 @@ impl DeviceOrchestrator {
             error!(error = %e, "审计日志写入失败");
         }
 
+        let runtime_id = runtime_id(&info);
+        self.runtime_registry.create(create_runtime_input(
+            &info,
+            "accepted",
+            "admission",
+            "",
+            "",
+        ));
+
         let evdev_path = match find_evdev_path_with_retry(&info.sys_path) {
             Some(p) => p,
             None => {
+                self.runtime_registry.update(
+                    &runtime_id,
+                    DeviceRuntimeUpdate {
+                        status: "failed".to_string(),
+                        stage: "keyboard_evdev_bind".to_string(),
+                        fail_code: "evdev_not_found".to_string(),
+                        fail_reason: "找不到键盘 evdev 设备".to_string(),
+                    },
+                );
                 warn!(dev = %info.device_name, sys_path = %info.sys_path, "键盘: 找不到对应 evdev 设备");
                 return;
             }
         };
+
+        self.runtime_registry.update(
+            &runtime_id,
+            DeviceRuntimeUpdate {
+                status: "processing".to_string(),
+                stage: "keyboard_verify".to_string(),
+                fail_code: String::new(),
+                fail_reason: String::new(),
+            },
+        );
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
@@ -343,6 +418,7 @@ impl DeviceOrchestrator {
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Keyboard,
+                runtime_id: runtime_id.clone(),
                 cancel_tx,
                 audit_detail: "键盘".into(),
             },
@@ -351,6 +427,8 @@ impl DeviceOrchestrator {
 
         let hidg_kb = self.hidg_nodes.keyboard.clone();
         let device_name = info.device_name.clone();
+        let sys_path = info.sys_path.clone();
+        let registry = Arc::clone(&self.runtime_registry);
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "键盘: 启动拦截器");
 
@@ -359,19 +437,47 @@ impl DeviceOrchestrator {
             let mut interceptor = KeyboardInterceptor::new(hidg_kb);
             match interceptor.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(KeyboardRunResult::VerifiedThenRemoved) => {
+                    registry.update(
+                        &runtime_id,
+                        DeviceRuntimeUpdate {
+                            status: "mapped".to_string(),
+                            stage: "keyboard_publish".to_string(),
+                            fail_code: String::new(),
+                            fail_reason: String::new(),
+                        },
+                    );
                     info!(dev = %device_name, "键盘拦截器正常退出");
                 }
                 Ok(KeyboardRunResult::RemovedDuringVerify) => {
+                    registry.mark_removed(&runtime_id, "键盘验证阶段设备拔出");
                     info!(dev = %device_name, "键盘验证阶段设备拔出");
                 }
                 Ok(KeyboardRunResult::VerificationFailed) => {
+                    registry.update(
+                        &runtime_id,
+                        DeviceRuntimeUpdate {
+                            status: "failed".to_string(),
+                            stage: "keyboard_verify".to_string(),
+                            fail_code: "verify_failed".to_string(),
+                            fail_reason: "键盘验证码错误，本次映射已拒绝；请重新插拔键盘后再输入 1234".to_string(),
+                        },
+                    );
                     warn!(
                         dev = %device_name,
                         "键盘验证码错误，本次映射已拒绝；请重新插拔键盘后再输入 1234"
                     );
                 }
                 Err(e) => {
-                    warn!(dev = %device_name, sys_path = %info.sys_path, error = %e, "键盘拦截器异常退出");
+                    registry.update(
+                        &runtime_id,
+                        DeviceRuntimeUpdate {
+                            status: "failed".to_string(),
+                            stage: "keyboard_publish".to_string(),
+                            fail_code: "publish_failed".to_string(),
+                            fail_reason: e.to_string(),
+                        },
+                    );
+                    warn!(dev = %device_name, sys_path = %sys_path, error = %e, "键盘拦截器异常退出");
                 }
             }
         });
@@ -395,13 +501,41 @@ impl DeviceOrchestrator {
             error!(error = %e, "审计日志写入失败");
         }
 
+        let runtime_id = runtime_id(&info);
+        self.runtime_registry.create(create_runtime_input(
+            &info,
+            "accepted",
+            "admission",
+            "",
+            "",
+        ));
+
         let evdev_path = match find_evdev_path_with_retry(&info.sys_path) {
             Some(p) => p,
             None => {
+                self.runtime_registry.update(
+                    &runtime_id,
+                    DeviceRuntimeUpdate {
+                        status: "failed".to_string(),
+                        stage: "mouse_evdev_bind".to_string(),
+                        fail_code: "evdev_not_found".to_string(),
+                        fail_reason: "找不到鼠标 evdev 设备".to_string(),
+                    },
+                );
                 warn!(dev = %info.device_name, sys_path = %info.sys_path, "鼠标: 找不到对应 evdev 设备");
                 return;
             }
         };
+
+        self.runtime_registry.update(
+            &runtime_id,
+            DeviceRuntimeUpdate {
+                status: "processing".to_string(),
+                stage: "mouse_publish".to_string(),
+                fail_code: String::new(),
+                fail_reason: String::new(),
+            },
+        );
 
         let (cancel_tx, cancel_rx) = watch::channel(false);
         self.register_session(
@@ -409,6 +543,7 @@ impl DeviceOrchestrator {
             ActiveSession {
                 info: info.clone(),
                 kind: SessionKind::Mouse,
+                runtime_id: runtime_id.clone(),
                 cancel_tx,
                 audit_detail: "鼠标".into(),
             },
@@ -417,6 +552,7 @@ impl DeviceOrchestrator {
 
         let hidg_mouse = self.hidg_nodes.mouse.clone();
         let device_name = info.device_name.clone();
+        let registry = Arc::clone(&self.runtime_registry);
 
         info!(dev = %device_name, evdev = %evdev_path.display(), "鼠标: 启动转发器");
 
@@ -425,7 +561,18 @@ impl DeviceOrchestrator {
             let mut forwarder = MouseForwarder::new(hidg_mouse);
             match forwarder.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
-                Err(e) => warn!(dev = %device_name, error = %e, "鼠标转发器异常退出"),
+                Err(e) => {
+                    registry.update(
+                        &runtime_id,
+                        DeviceRuntimeUpdate {
+                            status: "failed".to_string(),
+                            stage: "mouse_publish".to_string(),
+                            fail_code: "publish_failed".to_string(),
+                            fail_reason: e.to_string(),
+                        },
+                    );
+                    warn!(dev = %device_name, error = %e, "鼠标转发器异常退出");
+                }
             }
         });
     }
@@ -468,6 +615,8 @@ impl DeviceOrchestrator {
         };
 
         let _ = session.cancel_tx.send(true);
+        self.runtime_registry
+            .mark_removed(&session.runtime_id, reason.to_string());
 
         if session.kind == SessionKind::Storage {
             if let Err(e) = self

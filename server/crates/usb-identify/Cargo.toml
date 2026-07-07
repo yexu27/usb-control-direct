@@ -12,6 +12,7 @@ storage = { workspace = true }
 whitelist = { path = "../whitelist" }
 hid-access = { path = "../hid-access" }
 log-audit = { path = "../log-audit" }
+device-runtime = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 udev = { workspace = true }
