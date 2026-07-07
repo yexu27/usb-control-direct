@@ -9,7 +9,7 @@ use tracing::{debug, info, warn};
 
 use crate::error::FileAccessError;
 
-const MOUNT_BASE: &str = "/mnt/usb_raw";
+const MOUNT_BASE: &str = "/mnt/usb-control/raw";
 
 /// `/proc/mounts` 中的一条挂载记录。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,8 +69,8 @@ pub fn mount_entries_from(contents: &str) -> Vec<MountEntry> {
         .collect()
 }
 
-/// 选择本服务原始 U 盘挂载目录下的残留挂载点。
-pub fn planned_usb_raw_unmounts(entries: &[MountEntry], mount_base: &str) -> Vec<String> {
+/// 选择本服务 storage raw mount 目录下的残留挂载点。
+pub fn planned_project_raw_unmounts(entries: &[MountEntry], mount_base: &str) -> Vec<String> {
     let normalized = mount_base.trim_end_matches('/');
     let prefix = format!("{normalized}/");
     entries
@@ -219,14 +219,9 @@ impl MountOperations for RealMountOps {
     }
 }
 
-/// 为设备生成挂载路径。
-pub fn mount_path_for(dev_name: &str) -> PathBuf {
-    PathBuf::from(MOUNT_BASE).join(dev_name)
-}
-
-/// 从块设备路径提取设备名。
-pub fn dev_name_from_path(dev_path: &str) -> &str {
-    dev_path.rsplit('/').next().unwrap_or(dev_path)
+/// 为 StorageSession 生成项目独占 raw mount 路径。
+pub fn mount_path_for(session_id: &str) -> PathBuf {
+    PathBuf::from(MOUNT_BASE).join(session_id)
 }
 
 /// mount 三步递进:

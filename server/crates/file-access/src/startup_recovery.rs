@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 use crate::nbd::{read_nbd_partition_scan_status, NbdDeviceManager, NbdPartitionScanStatus};
-use crate::raw_mount::{mount_entries_from, planned_usb_raw_unmounts, MountOperations};
+use crate::raw_mount::{mount_entries_from, planned_project_raw_unmounts, MountOperations};
 use crate::FileAccessError;
 
 /// storage 启动恢复配置。
@@ -22,7 +22,7 @@ impl StartupRecoveryConfig {
     /// 生产环境启动恢复配置。
     pub fn production(lun_file: PathBuf) -> Self {
         Self {
-            mount_base: PathBuf::from("/mnt/usb_raw"),
+            mount_base: PathBuf::from("/mnt/usb-control/raw"),
             nbd_pool_size: 4,
             lun_file,
         }
@@ -58,16 +58,16 @@ pub fn recover_raw_mounts_under(
     let mount_base = mount_base.to_string_lossy();
     let mut report = StartupRecoveryReport::default();
 
-    for target in planned_usb_raw_unmounts(&entries, &mount_base) {
+    for target in planned_project_raw_unmounts(&entries, &mount_base) {
         match mount_ops.umount(&target) {
             Ok(()) => {
                 report.recovered_mounts += 1;
-                info!(mount_point = %target, "启动恢复: 清理残留 U 盘挂载");
+                info!(mount_point = %target, "启动恢复: 清理残留 storage raw 挂载");
             }
             Err(e) => warn!(
                 mount_point = %target,
                 error = %e,
-                "启动恢复: 清理残留 U 盘挂载失败"
+                "启动恢复: 清理残留 storage raw 挂载失败"
             ),
         }
     }

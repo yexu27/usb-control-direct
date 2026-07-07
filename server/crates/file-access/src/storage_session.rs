@@ -21,8 +21,7 @@ use crate::gadget::GadgetRuntime;
 use crate::media_builder::VirtualMediaBuilder;
 use crate::publisher::{PublishedStorageRuntime, StoragePublisher, StorageRuntimePublisher};
 use crate::raw_mount::{
-    dev_name_from_path, mount_partition, mount_path_for, mount_target_exists, MountOperations,
-    RealMountOps,
+    mount_partition, mount_path_for, mount_target_exists, MountOperations, RealMountOps,
 };
 
 const DEFAULT_NBD_POOL_SIZE: u32 = 4;
@@ -143,6 +142,18 @@ pub struct StorageSessionManager {
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 }
 
+fn stable_hash64(value: &str) -> u64 {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    value
+        .as_bytes()
+        .iter()
+        .fold(FNV_OFFSET_BASIS, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
+        })
+}
+
 impl StorageSessionManager {
     /// 创建生产环境 manager。
     pub fn new(
@@ -181,7 +192,7 @@ impl StorageSessionManager {
     }
 
     fn session_id(device: &AuthorizedStorageDevice) -> String {
-        format!("storage_{}", device.parent_path.replace('/', "_"))
+        format!("storage_{:016x}", stable_hash64(&device.parent_path))
     }
 }
 
@@ -243,9 +254,11 @@ impl StorageSessionController for StorageSessionManager {
             let runtime_registry = Arc::clone(&self.runtime_registry);
             let sessions = Arc::clone(&self.sessions);
             let nbd_pool = Arc::clone(&self.nbd_pool);
+            let pipeline_session_id = session_id.clone();
 
             tokio::spawn(async move {
                 run_storage_pipeline(
+                    pipeline_session_id,
                     device,
                     nbd_index,
                     cancel_rx,
@@ -322,6 +335,7 @@ impl StorageSessionController for StorageSessionManager {
 }
 
 async fn run_storage_pipeline(
+    session_id: String,
     device: AuthorizedStorageDevice,
     nbd_index: u32,
     mut cancel_rx: watch::Receiver<bool>,
@@ -334,8 +348,7 @@ async fn run_storage_pipeline(
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
     let parent_path = device.parent_path.clone();
-    let dev_name = dev_name_from_path(&device.dev_path);
-    let mount_point = mount_path_for(dev_name);
+    let mount_point = mount_path_for(&session_id);
     let mount_path_str = mount_point.to_string_lossy().to_string();
     let read_only = device.permission == 0;
 
@@ -703,7 +716,7 @@ mod tests {
     use std::path::Path;
     use std::pin::Pin;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex as StdMutex};
 
     use device_runtime::{DeviceRuntimeCreate, DeviceRuntimeRegistry};
     use tempfile::tempdir;
@@ -748,16 +761,18 @@ mod tests {
         umount_count: AtomicUsize,
         fail_mount: AtomicBool,
         mounted: AtomicBool,
+        last_mount_point: StdMutex<Option<String>>,
     }
 
     impl StorageSessionMountOps for FakeMountOps {
         fn mount_partition(
             &self,
             _dev_path: &str,
-            _mount_point: &str,
+            mount_point: &str,
             _read_only: bool,
         ) -> Result<(), StorageSessionError> {
             self.mount_count.fetch_add(1, Ordering::SeqCst);
+            *self.last_mount_point.lock().unwrap() = Some(mount_point.to_string());
             if self.fail_mount.load(Ordering::SeqCst) {
                 return Err(StorageSessionError::Failed("mount failed".into()));
             }
@@ -956,6 +971,53 @@ mod tests {
         assert_eq!(runtime.status, "mapped");
         assert_eq!(runtime.stage, "publish");
         assert!(runtime.fail_code.is_empty());
+    }
+
+    #[tokio::test]
+    async fn storage_session_mount_path_is_owned_by_session_id() {
+        let ctx = test_manager(4);
+        let device = test_device("SN-SESSION-MOUNT");
+        create_runtime(&ctx.runtime_registry, &device);
+
+        let handle = ctx
+            .manager
+            .start_authorized_storage(device.clone())
+            .await
+            .unwrap();
+
+        wait_until(|| ctx.mount_ops.mount_count.load(Ordering::SeqCst) == 1).await;
+
+        let mount_point = ctx
+            .mount_ops
+            .last_mount_point
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("mount point should be recorded");
+
+        assert_eq!(
+            mount_point,
+            format!("/mnt/usb-control/raw/{}", handle.session_id)
+        );
+        assert_ne!(mount_point, "/mnt/usb-control/raw/sda1");
+    }
+
+    #[tokio::test]
+    async fn storage_session_id_is_short_and_does_not_expose_sysfs_path() {
+        let ctx = test_manager(4);
+        let device = test_device("SN-SHORT-ID");
+        create_runtime(&ctx.runtime_registry, &device);
+
+        let handle = ctx
+            .manager
+            .start_authorized_storage(device)
+            .await
+            .unwrap();
+
+        assert!(handle.session_id.starts_with("storage_"));
+        assert_eq!(handle.session_id.len(), "storage_".len() + 16);
+        assert!(!handle.session_id.contains("/sys/"));
+        assert!(!handle.session_id.contains("devices"));
     }
 
     #[tokio::test]
