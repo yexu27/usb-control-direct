@@ -14,6 +14,7 @@ use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
 use config::AppConfig;
+use device_runtime::DeviceRuntimeRegistry;
 use file_access::StorageSessionManager;
 use license_upgrade::{
     LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
@@ -59,6 +60,7 @@ async fn main() {
     let whitelist_manager =
         Arc::new(WhitelistManager::new(Arc::clone(&storage)).expect("白名单管理器初始化失败"));
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
+    let device_runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
 
     let key_provider = Arc::new(FileKeyProvider::new(&config.policy_key_dir));
     let policy_service = Arc::new(PolicyService::new(
@@ -117,6 +119,7 @@ async fn main() {
         audit_service,
         whitelist_manager,
         device_manager,
+        device_runtime_registry,
         storage,
         policy_service,
         license_validator,

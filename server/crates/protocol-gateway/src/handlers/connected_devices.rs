@@ -162,6 +162,7 @@ mod tests {
                 audit_service: audit,
                 whitelist_manager: Some(whitelist),
                 device_manager: Some(Arc::new(RwLock::new(manager))),
+                device_runtime_registry: None,
                 storage: None,
                 policy_service: None,
                 license_validator: None,

@@ -19,6 +19,7 @@ whitelist = { path = "../whitelist" }
 file-access = { path = "../file-access" }
 hid-access = { path = "../hid-access" }
 malware-scan = { path = "../malware-scan" }
+device-runtime = { workspace = true }
 usb-identify = { path = "../usb-identify" }
 policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }

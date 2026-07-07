@@ -4,6 +4,7 @@ pub mod audit_helper;
 pub mod auth_status;
 pub mod change_password;
 pub mod connected_devices;
+pub mod device_runtime;
 pub mod file_access;
 pub mod license;
 pub(crate) mod license_state;

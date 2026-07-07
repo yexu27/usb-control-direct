@@ -188,6 +188,7 @@ pub async fn handle_connection(
                         audit_service: Arc::clone(&state.audit_service),
                         whitelist_manager: Some(Arc::clone(&state.whitelist_manager)),
                         device_manager: Some(Arc::clone(&state.device_manager)),
+                        device_runtime_registry: Some(Arc::clone(&state.device_runtime_registry)),
                         storage: Some(Arc::clone(&state.storage)),
                         policy_service: Some(Arc::clone(&state.policy_service)),
                         license_validator: Some(Arc::clone(&state.license_validator)),

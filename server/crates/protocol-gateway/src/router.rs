@@ -140,6 +140,7 @@ mod tests {
             audit_service: audit,
             whitelist_manager: None,
             device_manager: None,
+            device_runtime_registry: None,
             storage: None,
             policy_service: None,
             license_validator: None,

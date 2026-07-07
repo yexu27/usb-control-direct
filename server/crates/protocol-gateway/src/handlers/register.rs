@@ -39,6 +39,7 @@ const CMD_UPDATE_DEVICE_DESC: u32 = 0x0504;
 const CMD_QUERY_LOGS: u32 = 0x0400;
 const CMD_EXPORT_LOGS: u32 = 0x0402;
 const CMD_DELETE_LOGS: u32 = 0x0404;
+const CMD_GET_DEVICE_RUNTIME_STATUS: u32 = 0x0406;
 
 /// CMD 常量（用户管理）。
 const CMD_LIST_USERS: u32 = 0x0600;
@@ -222,6 +223,13 @@ pub fn register_log_handlers(router: &mut Router) {
     router.register_with_roles(
         CMD_DELETE_LOGS,
         Box::new(super::logs::handle_delete_logs),
+        vec![2],
+    );
+
+    // 受控设备运行态查询（审计员可查看）
+    router.register_with_roles(
+        CMD_GET_DEVICE_RUNTIME_STATUS,
+        Box::new(super::device_runtime::handle_get_device_runtime_status),
         vec![2],
     );
 }

@@ -8,6 +8,7 @@ use common::code::ResultCode;
 
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
+use device_runtime::DeviceRuntimeRegistry;
 use license_upgrade::{LicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
 use log_audit::AuditService;
 use policy_import_export::PolicyService;
@@ -24,6 +25,7 @@ pub struct AppState {
     pub audit_service: Arc<AuditService>,
     pub whitelist_manager: Arc<WhitelistManager>,
     pub device_manager: Arc<RwLock<DeviceManager>>,
+    pub device_runtime_registry: Arc<DeviceRuntimeRegistry>,
     pub storage: Arc<Storage>,
     pub policy_service: Arc<PolicyService>,
     pub license_validator: Arc<dyn LicenseValidator>,
@@ -47,6 +49,8 @@ pub struct RequestContext {
     pub whitelist_manager: Option<Arc<WhitelistManager>>,
     /// 设备管理器（共享）。
     pub device_manager: Option<Arc<RwLock<DeviceManager>>>,
+    /// 受控设备运行态登记中心（共享）。
+    pub device_runtime_registry: Option<Arc<DeviceRuntimeRegistry>>,
     /// 数据库存储（共享）。
     pub storage: Option<Arc<Storage>>,
     /// 策略导入导出服务。
