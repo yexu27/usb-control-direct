@@ -1,7 +1,7 @@
 //! 受控文件树构建器。
 //!
 //! 遍历真实 U 盘挂载目录，对每个文件进行：
-//! - L1: 根据 scan_result 标记病毒文件（加 [病毒禁止访问] 前缀，size=0）
+//! - L1: 根据 scan_result 标记病毒文件（加 [病毒禁止访问] 前缀）
 //! - L2: 预读 magic bytes 检测可执行文件类型
 //! - L4: 解析根目录 autorun.inf 提取引用的可执行文件路径
 
@@ -98,7 +98,7 @@ fn build_directory(
         let is_dir = metadata.is_dir();
 
         let is_virus = infected_set.contains(&normalize_path(&relative));
-        let file_size = if is_virus { 0 } else { metadata.len() };
+        let file_size = metadata.len();
 
         let virtual_name = if is_virus {
             format!("{}{}", VIRUS_PREFIX, file_name)

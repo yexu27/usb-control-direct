@@ -3,6 +3,21 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+/// 被策略阻断文件在受控主机侧读取到的固定占位文本。
+pub const BLOCKED_PLACEHOLDER_TEXT: &str =
+    "该文件已被 USB 安全策略禁止访问。\n如需使用该文件，请联系管理员确认策略配置。\n";
+
+/// UTF-8 BOM，保证 Windows 记事本稳定识别中文。
+pub const UTF8_BOM: &[u8; 3] = b"\xEF\xBB\xBF";
+
+/// 返回阻断文件占位内容字节。
+pub fn blocked_placeholder_bytes() -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(UTF8_BOM.len() + BLOCKED_PLACEHOLDER_TEXT.len());
+    bytes.extend_from_slice(UTF8_BOM);
+    bytes.extend_from_slice(BLOCKED_PLACEHOLDER_TEXT.as_bytes());
+    bytes
+}
+
 /// 可执行文件类型（L2 检测结果）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecFileType {
@@ -61,7 +76,7 @@ pub struct PolicySnapshot {
 pub enum AccessDecision {
     /// 允许访问。
     Allow,
-    /// 拒绝访问（返回 I/O error），附带命中的策略级别描述。
+    /// 拒绝访问，附带命中的策略级别描述。
     Deny(String),
 }
 

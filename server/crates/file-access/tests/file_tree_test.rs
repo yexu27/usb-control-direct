@@ -66,6 +66,10 @@ fn build_tree_marks_virus_files() {
     let setup = tree.iter().find(|e| e.virtual_name.contains("setup.exe")).unwrap();
     assert!(setup.is_virus);
     assert!(setup.virtual_name.starts_with("[病毒禁止访问]"));
+    assert_eq!(
+        setup.file_size,
+        std::fs::metadata(tmp.path().join("setup.exe")).unwrap().len()
+    );
 }
 
 #[test]
