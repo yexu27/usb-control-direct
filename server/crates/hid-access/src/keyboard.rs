@@ -95,9 +95,7 @@ impl KeyboardChallenge {
         match self.state {
             KeyboardState::KbDetected => self.handle_detected(event),
             KeyboardState::KbWaiting => self.handle_waiting(event),
-            KeyboardState::KbMapped
-            | KeyboardState::KbRejected
-            | KeyboardState::KbRemoved => {
+            KeyboardState::KbMapped | KeyboardState::KbRejected | KeyboardState::KbRemoved => {
                 // 终态不接受除 Unplug 外的任何事件（Unplug 已在上方处理）。
                 Err(HidAccessError::InvalidTransition {
                     from: format!("{:?}", self.state),
@@ -156,10 +154,7 @@ impl KeyboardChallenge {
     ///   - 若序列完整（4位全部匹配）：迁移到 KbMapped。
     ///   - 否则：继续等待，返回 Unchanged。
     /// - 按键不匹配：迁移到 KbRejected，拒绝本次键盘映射。
-    fn handle_key_press(
-        &mut self,
-        key: u8,
-    ) -> Result<KeyboardTransitionResult, HidAccessError> {
+    fn handle_key_press(&mut self, key: u8) -> Result<KeyboardTransitionResult, HidAccessError> {
         let expected_pos = self.input_buffer.len();
 
         // 防御：缓冲区长度不应超过挑战码长度（正常流程下不会发生）。
