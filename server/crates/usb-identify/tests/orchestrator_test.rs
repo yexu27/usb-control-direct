@@ -377,23 +377,28 @@ async fn test_mouse_added() {
 }
 
 #[tokio::test]
-async fn test_unsupported_device_blocked() {
+async fn unsupported_device_only_records_runtime_log_scope() {
     let dir = tempdir().unwrap();
     let db_path = dir.path().join("test.db");
     let (audit, whitelist) = setup_services(&db_path);
+    let audit_assert = Arc::clone(&audit);
 
     let (tx, rx) = mpsc::unbounded_channel();
     let device_manager = Arc::new(RwLock::new(DeviceManager::new()));
-    let orchestrator = build_orchestrator(
+    let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
+    let storage_session = Arc::new(MockStorageSessionController::default());
+    let storage_session_assert = Arc::clone(&storage_session);
+    let orchestrator = build_orchestrator_with_runtime(
         rx,
         whitelist,
         audit,
-        device_manager,
-        Arc::new(MockStorageSessionController::default()),
+        Arc::clone(&device_manager),
+        Arc::clone(&runtime_registry),
+        storage_session,
     );
 
     let info = UsbDeviceInfo {
-        sys_path: "/sys/devices/test_unknown".into(),
+        sys_path: "/sys/devices/platform/fd880000.usb/usb2/2-1/2-1.8/2-1.8:1.0".into(),
         dev_path: None,
         serial_number: "".into(),
         vid: "0000".into(),
@@ -405,11 +410,21 @@ async fn test_unsupported_device_blocked() {
         interface_protocol: 0xFF,
         capacity_bytes: None,
     };
-    tx.send(DeviceEvent::UnsupportedAdded(info, "未知设备类型".into()))
-        .unwrap();
+    tx.send(DeviceEvent::UnsupportedAdded(
+        info.clone(),
+        "未知设备类型".into(),
+    ))
+    .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(info.sys_path)).unwrap();
     drop(tx);
 
     orchestrator.run().await;
+
+    assert_eq!(storage_session_assert.started.load(Ordering::SeqCst), 0);
+    assert_eq!(storage_session_assert.stopped.load(Ordering::SeqCst), 0);
+    assert_eq!(audit_assert.storage().usb_audit_count().unwrap(), 0);
+    assert!(runtime_registry.list().is_empty());
+    assert_eq!(device_manager.read().unwrap().count(), 0);
 }
 
 #[tokio::test]
