@@ -1,0 +1,10 @@
+[package]
+name = "device-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "USB 受控设备运行态登记中心"
+
+[dependencies]
+common = { workspace = true }

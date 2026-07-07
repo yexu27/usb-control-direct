@@ -10,6 +10,7 @@ members = [
     "crates/hid-access",
     "crates/malware-scan",
     "crates/file-access",
+    "crates/device-runtime",
     "crates/whitelist",
     "crates/policy-import-export",
     "crates/license-upgrade",
@@ -83,6 +84,7 @@ hex = "0.4"
 common = { path = "crates/common" }
 storage = { path = "crates/storage" }
 clamav-status = { path = "crates/clamav-status" }
+device-runtime = { path = "crates/device-runtime" }
 
 [profile.release]
 opt-level = 3
