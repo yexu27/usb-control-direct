@@ -8,6 +8,7 @@ description = "S02 键鼠准入控制引擎"
 
 [dependencies]
 common = { workspace = true }
+device-runtime = { workspace = true }
 evdev = "0.12"
 libc = { workspace = true }
 thiserror = { workspace = true }

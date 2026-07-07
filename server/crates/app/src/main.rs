@@ -112,6 +112,7 @@ async fn main() {
         scanner_for_storage,
         Arc::clone(&storage),
         gadget_runtime.clone(),
+        Arc::clone(&device_runtime_registry),
     ));
 
     let state = Arc::new(AppState {

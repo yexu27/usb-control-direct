@@ -238,7 +238,10 @@ impl DeviceOrchestrator {
     }
 
     async fn register_session(&self, session_key: String, session: ActiveSession) {
-        self.active_sessions.lock().await.insert(session_key, session);
+        self.active_sessions
+            .lock()
+            .await
+            .insert(session_key, session);
     }
 
     fn add_interface_record(&self, info: UsbDeviceInfo) -> InterfaceAddResult {
@@ -303,13 +306,8 @@ impl DeviceOrchestrator {
 
         let (cancel_tx, _cancel_rx) = watch::channel(false);
         let runtime_id = runtime_id(&info);
-        self.runtime_registry.create(create_runtime_input(
-            &info,
-            "accepted",
-            "admission",
-            "",
-            "",
-        ));
+        self.runtime_registry
+            .create(create_runtime_input(&info, "accepted", "admission", "", ""));
         self.register_session(
             add_result.session_key.clone(),
             ActiveSession {
@@ -323,7 +321,7 @@ impl DeviceOrchestrator {
         .await;
 
         let device = AuthorizedStorageDevice {
-            runtime_id,
+            runtime_id: runtime_id.clone(),
             parent_path: add_result.parent_path,
             sys_path: info.sys_path.clone(),
             dev_path,
@@ -348,6 +346,15 @@ impl DeviceOrchestrator {
                     .lock()
                     .await
                     .remove(&add_result.session_key);
+                self.runtime_registry.update(
+                    &runtime_id,
+                    DeviceRuntimeUpdate {
+                        status: "failed".to_string(),
+                        stage: "admission".to_string(),
+                        fail_code: "internal_error".to_string(),
+                        fail_reason: e.to_string(),
+                    },
+                );
                 warn!(
                     serial = %serial,
                     dev = %info.device_name,
@@ -377,13 +384,8 @@ impl DeviceOrchestrator {
         }
 
         let runtime_id = runtime_id(&info);
-        self.runtime_registry.create(create_runtime_input(
-            &info,
-            "accepted",
-            "admission",
-            "",
-            "",
-        ));
+        self.runtime_registry
+            .create(create_runtime_input(&info, "accepted", "admission", "", ""));
 
         let evdev_path = match find_evdev_path_with_retry(&info.sys_path) {
             Some(p) => p,
@@ -434,7 +436,8 @@ impl DeviceOrchestrator {
 
         tokio::task::spawn_blocking(move || {
             use hid_access::evdev_interceptor::{KeyboardInterceptor, KeyboardRunResult};
-            let mut interceptor = KeyboardInterceptor::new(hidg_kb);
+            let mut interceptor = KeyboardInterceptor::new(hidg_kb)
+                .with_runtime(Arc::clone(&registry), runtime_id.clone());
             match interceptor.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(KeyboardRunResult::VerifiedThenRemoved) => {
                     registry.update(
@@ -459,7 +462,9 @@ impl DeviceOrchestrator {
                             status: "failed".to_string(),
                             stage: "keyboard_verify".to_string(),
                             fail_code: "verify_failed".to_string(),
-                            fail_reason: "键盘验证码错误，本次映射已拒绝；请重新插拔键盘后再输入 1234".to_string(),
+                            fail_reason:
+                                "键盘验证码错误，本次映射已拒绝；请重新插拔键盘后再输入 1234"
+                                    .to_string(),
                         },
                     );
                     warn!(
@@ -502,13 +507,8 @@ impl DeviceOrchestrator {
         }
 
         let runtime_id = runtime_id(&info);
-        self.runtime_registry.create(create_runtime_input(
-            &info,
-            "accepted",
-            "admission",
-            "",
-            "",
-        ));
+        self.runtime_registry
+            .create(create_runtime_input(&info, "accepted", "admission", "", ""));
 
         let evdev_path = match find_evdev_path_with_retry(&info.sys_path) {
             Some(p) => p,
@@ -558,7 +558,8 @@ impl DeviceOrchestrator {
 
         tokio::task::spawn_blocking(move || {
             use hid_access::mouse_forwarder::MouseForwarder;
-            let mut forwarder = MouseForwarder::new(hidg_mouse);
+            let mut forwarder = MouseForwarder::new(hidg_mouse)
+                .with_runtime(Arc::clone(&registry), runtime_id.clone());
             match forwarder.run_with_cancel(&evdev_path, cancel_rx) {
                 Ok(()) => info!(dev = %device_name, "鼠标转发器正常退出"),
                 Err(e) => {
@@ -601,7 +602,11 @@ impl DeviceOrchestrator {
     }
 
     async fn cleanup_removed_interface(&mut self, removed: InterfaceRemoveResult, reason: &str) {
-        let session = self.active_sessions.lock().await.remove(&removed.session_key);
+        let session = self
+            .active_sessions
+            .lock()
+            .await
+            .remove(&removed.session_key);
 
         let Some(session) = session else {
             info!(

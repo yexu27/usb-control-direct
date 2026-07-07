@@ -680,7 +680,8 @@ async fn removing_storage_interface_stops_storage_even_when_unsupported_interfac
         "不支持的设备类型".into(),
     ))
     .unwrap();
-    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path)).unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path))
+        .unwrap();
     drop(tx);
 
     orchestrator.run().await;
@@ -718,7 +719,8 @@ async fn removing_unsupported_interface_does_not_stop_storage() {
         "不支持的设备类型".into(),
     ))
     .unwrap();
-    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path)).unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path))
+        .unwrap();
     drop(tx);
 
     orchestrator.run().await;
@@ -756,8 +758,10 @@ async fn removing_all_composite_interfaces_clears_parent_and_stops_storage_once(
         "不支持的设备类型".into(),
     ))
     .unwrap();
-    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path)).unwrap();
-    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path)).unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(vendor.sys_path))
+        .unwrap();
+    tx.send(DeviceEvent::DeviceRemoved(storage.sys_path))
+        .unwrap();
     drop(tx);
 
     orchestrator.run().await;

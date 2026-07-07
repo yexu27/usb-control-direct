@@ -7,8 +7,10 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
+use device_runtime::{DeviceRuntimeRegistry, DeviceRuntimeUpdate};
 use evdev::{Device, InputEventKind, Key, RelativeAxisType};
 use tokio::sync::watch;
 use tracing::{info, trace, warn};
@@ -22,12 +24,28 @@ const EVDEV_POLL_TIMEOUT: Duration = Duration::from_millis(100);
 /// 鼠标 evdev 转发器。
 pub struct MouseForwarder {
     hidg_device: std::path::PathBuf,
+    runtime: Option<(Arc<DeviceRuntimeRegistry>, String)>,
 }
 
 impl MouseForwarder {
     /// 创建鼠标转发器。
     pub fn new(hidg_device: std::path::PathBuf) -> Self {
-        Self { hidg_device }
+        Self {
+            hidg_device,
+            runtime: None,
+        }
+    }
+
+    /// 注入运行态上下文。
+    ///
+    /// 本模块只上报鼠标发布阶段，不执行准入决策。
+    pub fn with_runtime(
+        mut self,
+        registry: Arc<DeviceRuntimeRegistry>,
+        runtime_id: String,
+    ) -> Self {
+        self.runtime = Some((registry, runtime_id));
+        self
     }
 
     /// 在 spawn_blocking 中运行鼠标转发。
@@ -58,6 +76,7 @@ impl MouseForwarder {
         })?;
 
         info!(dev = %input_dev_path.display(), "鼠标映射成功，开始转发");
+        self.update_runtime("mapped", "mouse_publish", "", "");
 
         let mut buttons: u8 = 0;
         let cancel_rx = cancel_rx.as_ref();
@@ -124,6 +143,20 @@ impl MouseForwarder {
                     return Ok(());
                 }
             }
+        }
+    }
+
+    fn update_runtime(&self, status: &str, stage: &str, fail_code: &str, fail_reason: &str) {
+        if let Some((registry, runtime_id)) = self.runtime.as_ref() {
+            registry.update(
+                runtime_id,
+                DeviceRuntimeUpdate {
+                    status: status.to_string(),
+                    stage: stage.to_string(),
+                    fail_code: fail_code.to_string(),
+                    fail_reason: fail_reason.to_string(),
+                },
+            );
         }
     }
 }

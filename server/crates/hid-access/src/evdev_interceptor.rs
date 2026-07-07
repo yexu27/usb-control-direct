@@ -11,8 +11,10 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
+use device_runtime::{DeviceRuntimeRegistry, DeviceRuntimeUpdate};
 use evdev::{Device, InputEventKind};
 use tokio::sync::watch;
 use tracing::{error, info, warn};
@@ -40,6 +42,7 @@ pub enum KeyboardRunResult {
 pub struct KeyboardInterceptor {
     challenge: KeyboardChallenge,
     hidg_device: std::path::PathBuf,
+    runtime: Option<(Arc<DeviceRuntimeRegistry>, String)>,
 }
 
 impl KeyboardInterceptor {
@@ -48,7 +51,20 @@ impl KeyboardInterceptor {
         Self {
             challenge: KeyboardChallenge::new(),
             hidg_device,
+            runtime: None,
         }
+    }
+
+    /// 注入运行态上下文。
+    ///
+    /// 本模块只上报键盘验证和发布阶段，不执行准入决策。
+    pub fn with_runtime(
+        mut self,
+        registry: Arc<DeviceRuntimeRegistry>,
+        runtime_id: String,
+    ) -> Self {
+        self.runtime = Some((registry, runtime_id));
+        self
     }
 
     /// 在 spawn_blocking 中运行键盘拦截与验证。
@@ -120,6 +136,7 @@ impl KeyboardInterceptor {
                     .map_err(|e| HidAccessError::Internal(format!("键盘状态机转换失败: {}", e)))?
                 {
                     KeyboardTransitionResult::Transitioned(KeyboardState::KbMapped) => {
+                        self.update_runtime("mapped", "keyboard_publish", "", "");
                         info!(dev = %input_dev_path.display(), hidg = %self.hidg_device.display(),
                               "键盘 1234 验证通过，开始转发");
                         break 'auth; // 进入转发阶段
@@ -239,6 +256,20 @@ impl KeyboardInterceptor {
                     return Ok(KeyboardRunResult::VerifiedThenRemoved);
                 }
             }
+        }
+    }
+
+    fn update_runtime(&self, status: &str, stage: &str, fail_code: &str, fail_reason: &str) {
+        if let Some((registry, runtime_id)) = self.runtime.as_ref() {
+            registry.update(
+                runtime_id,
+                DeviceRuntimeUpdate {
+                    status: status.to_string(),
+                    stage: stage.to_string(),
+                    fail_code: fail_code.to_string(),
+                    fail_reason: fail_reason.to_string(),
+                },
+            );
         }
     }
 }

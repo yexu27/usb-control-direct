@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use device_runtime::{DeviceRuntimeRegistry, DeviceRuntimeUpdate};
 use storage::Storage;
 use tokio::sync::{watch, Mutex};
 use tracing::{info, warn};
@@ -137,18 +138,25 @@ pub struct StorageSessionManager {
     media_builder: Arc<dyn StorageMediaBuilder>,
     publisher: Arc<dyn StorageRuntimePublisher>,
     mount_ops: Arc<dyn StorageSessionMountOps>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
     sessions: Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 }
 
 impl StorageSessionManager {
     /// 创建生产环境 manager。
-    pub fn new(scanner: Arc<dyn Scanner>, storage: Arc<Storage>, gadget: GadgetRuntime) -> Self {
+    pub fn new(
+        scanner: Arc<dyn Scanner>,
+        storage: Arc<Storage>,
+        gadget: GadgetRuntime,
+        runtime_registry: Arc<DeviceRuntimeRegistry>,
+    ) -> Self {
         Self::with_components(
             scanner,
             Arc::new(VirtualMediaBuilder::new(storage)),
             Arc::new(StoragePublisher::new(gadget)),
             Arc::new(RealStorageSessionMountOps),
+            runtime_registry,
             NbdIndexPool::default(),
         )
     }
@@ -158,6 +166,7 @@ impl StorageSessionManager {
         media_builder: Arc<dyn StorageMediaBuilder>,
         publisher: Arc<dyn StorageRuntimePublisher>,
         mount_ops: Arc<dyn StorageSessionMountOps>,
+        runtime_registry: Arc<DeviceRuntimeRegistry>,
         nbd_pool: NbdIndexPool,
     ) -> Self {
         Self {
@@ -165,6 +174,7 @@ impl StorageSessionManager {
             media_builder,
             publisher,
             mount_ops,
+            runtime_registry,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             nbd_pool: Arc::new(Mutex::new(nbd_pool)),
         }
@@ -230,6 +240,7 @@ impl StorageSessionController for StorageSessionManager {
             let media_builder = Arc::clone(&self.media_builder);
             let publisher = Arc::clone(&self.publisher);
             let mount_ops = Arc::clone(&self.mount_ops);
+            let runtime_registry = Arc::clone(&self.runtime_registry);
             let sessions = Arc::clone(&self.sessions);
             let nbd_pool = Arc::clone(&self.nbd_pool);
 
@@ -242,6 +253,7 @@ impl StorageSessionController for StorageSessionManager {
                     media_builder,
                     publisher,
                     mount_ops,
+                    runtime_registry,
                     sessions,
                     nbd_pool,
                 )
@@ -269,6 +281,7 @@ impl StorageSessionController for StorageSessionManager {
                     session,
                     reason,
                     Arc::clone(&self.mount_ops),
+                    Arc::clone(&self.runtime_registry),
                     Arc::clone(&self.nbd_pool),
                 )
                 .await;
@@ -297,6 +310,7 @@ impl StorageSessionController for StorageSessionManager {
                     session,
                     reason.clone(),
                     Arc::clone(&self.mount_ops),
+                    Arc::clone(&self.runtime_registry),
                     Arc::clone(&self.nbd_pool),
                 )
                 .await;
@@ -315,6 +329,7 @@ async fn run_storage_pipeline(
     media_builder: Arc<dyn StorageMediaBuilder>,
     publisher: Arc<dyn StorageRuntimePublisher>,
     mount_ops: Arc<dyn StorageSessionMountOps>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
     sessions: Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
@@ -337,8 +352,24 @@ async fn run_storage_pipeline(
         mount_point = %mount_path_str,
         "Storage session 进入挂载阶段"
     );
+    update_runtime(
+        &runtime_registry,
+        &device.runtime_id,
+        "processing",
+        "mount",
+        "",
+        "",
+    );
 
     if let Err(e) = mount_ops.mount_partition(&device.dev_path, &mount_path_str, read_only) {
+        update_runtime(
+            &runtime_registry,
+            &device.runtime_id,
+            "failed",
+            "mount",
+            "mount_failed",
+            &e.to_string(),
+        );
         warn!(
             serial = %device.serial_number,
             dev = %device.device_name,
@@ -354,6 +385,7 @@ async fn run_storage_pipeline(
     } else {
         let _ = mount_ops.umount(&mount_path_str);
         nbd_pool.lock().await.release(nbd_index);
+        runtime_registry.mark_removed(&device.runtime_id, "session_removed_before_mount_record");
         return;
     }
 
@@ -362,6 +394,14 @@ async fn run_storage_pipeline(
         dev = %device.device_name,
         mount = %mount_point.display(),
         "Storage session 进入扫描阶段"
+    );
+    update_runtime(
+        &runtime_registry,
+        &device.runtime_id,
+        "processing",
+        "scan",
+        "",
+        "",
     );
 
     let scan_result = tokio::select! {
@@ -373,6 +413,7 @@ async fn run_storage_pipeline(
                 &parent_path,
                 "scan_cancelled".to_string(),
                 Arc::clone(&mount_ops),
+                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             ).await;
             return;
@@ -382,6 +423,14 @@ async fn run_storage_pipeline(
     let scan_result = match scan_result {
         Ok(result) => result,
         Err(e) => {
+            update_runtime(
+                &runtime_registry,
+                &device.runtime_id,
+                "failed",
+                "scan",
+                "scan_failed",
+                &e.to_string(),
+            );
             warn!(
                 serial = %device.serial_number,
                 dev = %device.device_name,
@@ -393,6 +442,7 @@ async fn run_storage_pipeline(
                 &parent_path,
                 "scan_failed".to_string(),
                 Arc::clone(&mount_ops),
+                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             )
             .await;
@@ -410,6 +460,14 @@ async fn run_storage_pipeline(
         dev = %device.device_name,
         "Storage session 进入虚拟介质构建阶段"
     );
+    update_runtime(
+        &runtime_registry,
+        &device.runtime_id,
+        "processing",
+        "media_build",
+        "",
+        "",
+    );
 
     let media = match media_builder.build(
         &mount_point,
@@ -419,6 +477,14 @@ async fn run_storage_pipeline(
     ) {
         Ok(media) => media,
         Err(e) => {
+            update_runtime(
+                &runtime_registry,
+                &device.runtime_id,
+                "failed",
+                "media_build",
+                "media_build_failed",
+                &e.to_string(),
+            );
             warn!(
                 serial = %device.serial_number,
                 dev = %device.device_name,
@@ -430,6 +496,7 @@ async fn run_storage_pipeline(
                 &parent_path,
                 "media_build_failed".to_string(),
                 Arc::clone(&mount_ops),
+                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             )
             .await;
@@ -443,6 +510,14 @@ async fn run_storage_pipeline(
         nbd = nbd_index,
         "Storage session 进入发布阶段"
     );
+    update_runtime(
+        &runtime_registry,
+        &device.runtime_id,
+        "processing",
+        "publish",
+        "",
+        "",
+    );
 
     let published = tokio::select! {
         result = publisher.publish(media, nbd_index, read_only) => result,
@@ -453,6 +528,7 @@ async fn run_storage_pipeline(
                 &parent_path,
                 "publish_cancelled".to_string(),
                 Arc::clone(&mount_ops),
+                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             ).await;
             return;
@@ -463,10 +539,19 @@ async fn run_storage_pipeline(
         Ok(published) => {
             if let Some(session) = sessions.lock().await.get_mut(&parent_path) {
                 session.published = Some(published);
+                update_runtime(
+                    &runtime_registry,
+                    &device.runtime_id,
+                    "mapped",
+                    "publish",
+                    "",
+                    "",
+                );
                 info!(serial = %device.serial_number, "Storage session 映射成功");
             } else {
                 published.stop().await;
                 nbd_pool.lock().await.release(nbd_index);
+                runtime_registry.mark_removed(&device.runtime_id, "session_removed_after_publish");
                 warn!(
                     serial = %device.serial_number,
                     "Storage session 已移除，发布资源已回滚"
@@ -474,6 +559,14 @@ async fn run_storage_pipeline(
             }
         }
         Err(e) => {
+            update_runtime(
+                &runtime_registry,
+                &device.runtime_id,
+                "failed",
+                "publish",
+                "publish_failed",
+                &e.to_string(),
+            );
             warn!(
                 serial = %device.serial_number,
                 dev = %device.device_name,
@@ -485,6 +578,7 @@ async fn run_storage_pipeline(
                 &parent_path,
                 "publish_failed".to_string(),
                 Arc::clone(&mount_ops),
+                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             )
             .await;
@@ -497,11 +591,12 @@ async fn cleanup_removed_session(
     parent_path: &str,
     reason: String,
     mount_ops: Arc<dyn StorageSessionMountOps>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
     let session = sessions.lock().await.remove(parent_path);
     if let Some(session) = session {
-        cleanup_session(session, reason, mount_ops, nbd_pool).await;
+        cleanup_session(session, reason, mount_ops, runtime_registry, nbd_pool).await;
     }
 }
 
@@ -509,6 +604,7 @@ async fn cleanup_session(
     mut session: ActiveStorageSession,
     reason: String,
     mount_ops: Arc<dyn StorageSessionMountOps>,
+    runtime_registry: Arc<DeviceRuntimeRegistry>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
     let _ = session.cancel_tx.send(true);
@@ -545,6 +641,7 @@ async fn cleanup_session(
     }
 
     nbd_pool.lock().await.release(session.nbd_index);
+    runtime_registry.mark_removed(&session.device.runtime_id, reason.clone());
     info!(
         serial = %session.device.serial_number,
         reason = %reason,
@@ -560,6 +657,25 @@ async fn remove_failed_session(
 ) {
     sessions.lock().await.remove(parent_path);
     nbd_pool.lock().await.release(nbd_index);
+}
+
+fn update_runtime(
+    registry: &DeviceRuntimeRegistry,
+    runtime_id: &str,
+    status: &str,
+    stage: &str,
+    fail_code: &str,
+    fail_reason: &str,
+) {
+    registry.update(
+        runtime_id,
+        DeviceRuntimeUpdate {
+            status: status.to_string(),
+            stage: stage.to_string(),
+            fail_code: fail_code.to_string(),
+            fail_reason: fail_reason.to_string(),
+        },
+    );
 }
 
 fn block_device_size_bytes(dev_path: &str) -> u64 {
@@ -589,6 +705,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    use device_runtime::{DeviceRuntimeCreate, DeviceRuntimeRegistry};
     use tempfile::tempdir;
     use usb_identify::traits::{ScanError, ScanResult};
 
@@ -742,6 +859,7 @@ mod tests {
 
     fn test_device(serial: &str) -> AuthorizedStorageDevice {
         AuthorizedStorageDevice {
+            runtime_id: format!("runtime__{serial}"),
             parent_path: format!("/sys/devices/{serial}"),
             sys_path: format!("/sys/devices/{serial}/1-1:1.0"),
             dev_path: "/dev/sda1".into(),
@@ -760,6 +878,7 @@ mod tests {
         media_builder: Arc<FakeMediaBuilder>,
         publisher: Arc<FakePublisher>,
         mount_ops: Arc<FakeMountOps>,
+        runtime_registry: Arc<DeviceRuntimeRegistry>,
     }
 
     fn test_manager(pool_size: u32) -> TestManager {
@@ -767,11 +886,13 @@ mod tests {
         let media_builder = Arc::new(FakeMediaBuilder::default());
         let publisher = Arc::new(FakePublisher::default());
         let mount_ops = Arc::new(FakeMountOps::default());
+        let runtime_registry = Arc::new(DeviceRuntimeRegistry::new());
         let manager = StorageSessionManager::with_components(
             scanner.clone(),
             media_builder.clone(),
             publisher.clone(),
             mount_ops.clone(),
+            Arc::clone(&runtime_registry),
             NbdIndexPool::new(pool_size),
         );
 
@@ -781,6 +902,7 @@ mod tests {
             media_builder,
             publisher,
             mount_ops,
+            runtime_registry,
         }
     }
 
@@ -793,13 +915,31 @@ mod tests {
         }
     }
 
+    fn create_runtime(registry: &DeviceRuntimeRegistry, device: &AuthorizedStorageDevice) {
+        registry.create(DeviceRuntimeCreate {
+            runtime_id: device.runtime_id.clone(),
+            parent_path: device.parent_path.clone(),
+            interface_path: device.sys_path.clone(),
+            serial_number: device.serial_number.clone(),
+            device_name: device.device_name.clone(),
+            device_type: "storage".to_string(),
+            interface_type: "mass_storage".to_string(),
+            status: "accepted".to_string(),
+            stage: "admission".to_string(),
+            fail_code: String::new(),
+            fail_reason: String::new(),
+        });
+    }
+
     #[tokio::test]
     async fn storage_session_starts_mount_scan_media_and_publish_pipeline() {
         let ctx = test_manager(4);
+        let device = test_device("SN-1");
+        create_runtime(&ctx.runtime_registry, &device);
 
         let handle = ctx
             .manager
-            .start_authorized_storage(test_device("SN-1"))
+            .start_authorized_storage(device.clone())
             .await
             .unwrap();
 
@@ -811,6 +951,11 @@ mod tests {
         assert_eq!(ctx.media_builder.build_count.load(Ordering::SeqCst), 1);
         assert_eq!(ctx.publisher.publish_count.load(Ordering::SeqCst), 1);
         assert!(ctx.manager.has_active_storage().await);
+
+        let runtime = ctx.runtime_registry.get(&device.runtime_id).unwrap();
+        assert_eq!(runtime.status, "mapped");
+        assert_eq!(runtime.stage, "publish");
+        assert!(runtime.fail_code.is_empty());
     }
 
     #[tokio::test]
@@ -832,9 +977,11 @@ mod tests {
     #[tokio::test]
     async fn stop_by_parent_stops_published_storage_and_umounts() {
         let ctx = test_manager(4);
+        let device = test_device("SN-2");
+        create_runtime(&ctx.runtime_registry, &device);
 
         ctx.manager
-            .start_authorized_storage(test_device("SN-2"))
+            .start_authorized_storage(device.clone())
             .await
             .unwrap();
         wait_until(|| ctx.publisher.publish_count.load(Ordering::SeqCst) == 1).await;
@@ -847,6 +994,11 @@ mod tests {
         assert_eq!(ctx.publisher.stop_count.load(Ordering::SeqCst), 1);
         assert_eq!(ctx.mount_ops.umount_count.load(Ordering::SeqCst), 1);
         assert!(!ctx.manager.has_active_storage().await);
+
+        let runtime = ctx.runtime_registry.get(&device.runtime_id).unwrap();
+        assert_eq!(runtime.status, "removed");
+        assert_eq!(runtime.stage, "cleanup");
+        assert_eq!(runtime.fail_code, "device_removed");
     }
 
     #[tokio::test]
@@ -876,9 +1028,11 @@ mod tests {
     async fn mount_failure_releases_session_and_nbd_index() {
         let ctx = test_manager(1);
         ctx.mount_ops.fail_mount.store(true, Ordering::SeqCst);
+        let device = test_device("SN-4");
+        create_runtime(&ctx.runtime_registry, &device);
 
         ctx.manager
-            .start_authorized_storage(test_device("SN-4"))
+            .start_authorized_storage(device.clone())
             .await
             .unwrap();
 
@@ -891,6 +1045,10 @@ mod tests {
         }
         assert!(!ctx.manager.has_active_storage().await);
         assert_eq!(ctx.publisher.publish_count.load(Ordering::SeqCst), 0);
+        let runtime = ctx.runtime_registry.get(&device.runtime_id).unwrap();
+        assert_eq!(runtime.status, "failed");
+        assert_eq!(runtime.stage, "mount");
+        assert_eq!(runtime.fail_code, "mount_failed");
 
         ctx.mount_ops.fail_mount.store(false, Ordering::SeqCst);
         ctx.manager
