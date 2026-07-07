@@ -12,7 +12,7 @@ use crate::exfat::layout::{
     SECTORS_PER_CLUSTER,
 };
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
-use crate::exfat::transaction::PendingTransaction;
+use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
 use crate::exfat::transaction_resolver::TransactionResolver;
 use crate::exfat::volume::{FileDataRangeInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
@@ -362,7 +362,6 @@ impl ExfatRuntimeState {
         }
         let start_sector = offset / SECTOR_SIZE as u64;
         let mut recorded_transaction_write = false;
-        let mut pending_metadata_overlays = Vec::<(u64, Vec<u8>)>::new();
         for (i, chunk) in data.chunks(SECTOR_SIZE as usize).enumerate() {
             let sector = start_sector + i as u64;
             let owner = self.sector_owner(sector);
@@ -413,15 +412,6 @@ impl ExfatRuntimeState {
                     })?;
                 }
                 _ => {
-                    if matches!(
-                        owner,
-                        SectorOwner::Fat
-                            | SectorOwner::AllocationBitmap
-                            | SectorOwner::RootDirectory
-                            | SectorOwner::DirectoryData { .. }
-                    ) {
-                        pending_metadata_overlays.push((sector, padded_sector(chunk)));
-                    }
                     WriteInterpreter::new().record_sector_write(
                         &mut self.pending_tx,
                         sector,
@@ -434,13 +424,24 @@ impl ExfatRuntimeState {
         }
         if recorded_transaction_write {
             let tx = self.pending_tx.clone();
-            let mutations = self.try_commit_closed_transaction(&tx)?;
-            for (sector, data) in pending_metadata_overlays {
-                self.metadata_overlays.insert(sector, data);
-            }
-            if !mutations.is_empty() {
-                self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                self.next_tx_id += 1;
+            match self.try_commit_closed_transaction(&tx) {
+                Ok(mutations) => {
+                    if !mutations.is_empty() {
+                        self.apply_metadata_overlays_from_transaction(&tx);
+                        self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                        self.next_tx_id += 1;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        tx_id = tx.id(),
+                        error = %e,
+                        "exFAT 写事务提交失败，丢弃未提交的虚拟 metadata"
+                    );
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                    return Err(e);
+                }
             }
         }
         Ok(())
@@ -449,10 +450,24 @@ impl ExfatRuntimeState {
     pub fn flush(&mut self) -> Result<(), std::io::Error> {
         if !self.pending_tx.writes().is_empty() {
             let tx = self.pending_tx.clone();
-            let mutations = self.try_commit_closed_transaction(&tx)?;
-            if !mutations.is_empty() {
-                self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                self.next_tx_id += 1;
+            match self.try_commit_closed_transaction(&tx) {
+                Ok(mutations) => {
+                    if !mutations.is_empty() {
+                        self.apply_metadata_overlays_from_transaction(&tx);
+                    }
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        tx_id = tx.id(),
+                        error = %e,
+                        "exFAT flush 提交失败，丢弃未提交的虚拟 metadata"
+                    );
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                    return Err(e);
+                }
             }
         }
         self.committer.sync_mount_root()
@@ -598,6 +613,19 @@ impl ExfatRuntimeState {
         self.refresh_runtime_metadata_after_mutation(&mutation)?;
         self.validate_consistency()?;
         Ok(())
+    }
+
+    fn apply_metadata_overlays_from_transaction(&mut self, tx: &PendingTransaction) {
+        for write in tx.writes() {
+            match write {
+                TransactionWrite::Fat { sector, data }
+                | TransactionWrite::Bitmap { sector, data }
+                | TransactionWrite::Directory { sector, data, .. } => {
+                    self.metadata_overlays.insert(*sector, padded_sector(data));
+                }
+                TransactionWrite::FileData { .. } | TransactionWrite::FreeCluster { .. } => {}
+            }
+        }
     }
 
     pub fn parent_path_for_directory_owner(&self, owner: &SectorOwner) -> Option<String> {

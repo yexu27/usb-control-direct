@@ -195,6 +195,26 @@ fn facade_write_at_commits_file_created_inside_existing_empty_directory_without_
 }
 
 #[test]
+fn metadata_write_without_committed_mutation_is_not_exposed_to_virtual_reads() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fs = VirtualExfatFs::build(tmp.path(), &[], rw_snapshot(), 16 * 1024 * 1024).unwrap();
+
+    let original = fs.read_at(fs.root_dir_offset_for_test(), 512).unwrap();
+    let mut unknown_directory_update = vec![0u8; 512];
+    unknown_directory_update[0] = 0xab;
+    unknown_directory_update[1..5].copy_from_slice(b"junk");
+
+    fs.write_at(fs.root_dir_offset_for_test(), &unknown_directory_update)
+        .unwrap();
+
+    assert_eq!(
+        fs.read_at(fs.root_dir_offset_for_test(), 512).unwrap(),
+        original,
+        "metadata writes that do not resolve to committed mutations must not create virtual-only state"
+    );
+}
+
+#[test]
 fn facade_write_at_commits_deep_empty_directory_and_zero_byte_file_without_flush() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(tmp.path().join("1/2/3")).unwrap();
