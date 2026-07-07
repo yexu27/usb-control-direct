@@ -332,12 +332,13 @@ fn write_at_sequence_renames_file_from_directory_entry_change() {
             .unwrap(),
     );
 
+    let old_cluster = state.lookup_path("/old.txt").unwrap().first_cluster.unwrap();
     let mut tx = PendingTransaction::new(6);
     write_directory_entry(
         &state,
         &mut tx,
         root_sector,
-        build_file_entry_set("renamed.txt", false, 0, 8, false),
+        build_file_entry_set("renamed.txt", false, old_cluster, 8, false),
     );
     let mutations = state.try_commit_closed_transaction(&tx).unwrap();
 
@@ -372,12 +373,13 @@ fn write_at_sequence_truncates_existing_file_from_directory_entry_length() {
             .unwrap(),
     );
 
+    let data_cluster = state.lookup_path("/data.txt").unwrap().first_cluster.unwrap();
     let mut tx = PendingTransaction::new(7);
     write_directory_entry(
         &state,
         &mut tx,
         root_sector,
-        build_file_entry_set("data.txt", false, 0, 2, false),
+        build_file_entry_set("data.txt", false, data_cluster, 2, false),
     );
     let mutations = state.try_commit_closed_transaction(&tx).unwrap();
 

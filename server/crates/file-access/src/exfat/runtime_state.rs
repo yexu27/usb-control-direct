@@ -46,9 +46,10 @@ impl ExfatRuntimeState {
         snapshot: PolicySnapshot,
         source_size_bytes: u64,
     ) -> Result<Self, std::io::Error> {
-        let index = VfsIndex::from_controlled_tree(mount_root, entries, &snapshot)?;
+        let mut index = VfsIndex::from_controlled_tree(mount_root, entries, &snapshot)?;
         let volume = VirtualVolume::build_with_capacity(entries, &snapshot, source_size_bytes)?;
         let layout = volume.layout().clone();
+        sync_vfs_clusters_from_volume(&mut index, &volume)?;
         let mut directory_store = DirectoryStore::default();
         let mut fat = FatState::new(layout.cluster_count);
         let mut bitmap = BitmapState::new(layout.cluster_count);
@@ -430,6 +431,12 @@ impl ExfatRuntimeState {
                         self.apply_metadata_overlays_from_transaction(&tx);
                         self.pending_tx = PendingTransaction::new(self.next_tx_id);
                         self.next_tx_id += 1;
+                    } else {
+                        self.pending_tx.retain_deferred_data_writes();
+                        if self.pending_tx.is_empty() {
+                            self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                            self.next_tx_id += 1;
+                        }
                     }
                 }
                 Err(e) => {
@@ -680,6 +687,29 @@ fn mark_file_range(
 
 fn normalize_path(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+fn sync_vfs_clusters_from_volume(
+    index: &mut VfsIndex,
+    volume: &VirtualVolume,
+) -> Result<(), std::io::Error> {
+    for (path, clusters) in volume.directory_cluster_entries() {
+        index.set_first_cluster(&path, clusters.first().copied())?;
+    }
+
+    let real_to_path = index
+        .iter_nodes()
+        .map(|node| (normalize_path(&node.real_path), node.virtual_path.clone()))
+        .collect::<HashMap<_, _>>();
+    for info in volume.file_data_range_entries() {
+        let Some(first_cluster) = volume.layout().sector_to_cluster(info.start_sector) else {
+            continue;
+        };
+        if let Some(path) = real_to_path.get(&normalize_path(&info.real_path)) {
+            index.set_first_cluster(path, Some(first_cluster))?;
+        }
+    }
+    Ok(())
 }
 
 fn padded_sector(data: &[u8]) -> Vec<u8> {

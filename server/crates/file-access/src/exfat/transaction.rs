@@ -75,4 +75,18 @@ impl PendingTransaction {
         self.writes.clear();
         self.state = MutationCommitState::PendingWrite;
     }
+
+    pub fn retain_deferred_data_writes(&mut self) {
+        self.writes.retain(|write| {
+            matches!(
+                write,
+                TransactionWrite::FileData { .. } | TransactionWrite::FreeCluster { .. }
+            )
+        });
+        self.state = MutationCommitState::PendingWrite;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.writes.is_empty()
+    }
 }

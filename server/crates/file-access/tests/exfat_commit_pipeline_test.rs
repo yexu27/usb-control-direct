@@ -6,7 +6,7 @@ use file_access::exfat::directory_parser::parse_entry_sets;
 use file_access::exfat::fs::VirtualExfatFs;
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::sector_owner::SectorOwner;
-use file_access::types::{ControlledEntry, PolicySnapshot};
+use file_access::types::{ControlledEntry, ExecFileType, PolicySnapshot};
 use file_access::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation};
 
 fn rw_snapshot() -> PolicySnapshot {
@@ -22,6 +22,13 @@ fn rw_snapshot() -> PolicySnapshot {
 fn readonly_snapshot() -> PolicySnapshot {
     PolicySnapshot {
         permission: 0,
+        ..rw_snapshot()
+    }
+}
+
+fn exec_control_snapshot() -> PolicySnapshot {
+    PolicySnapshot {
+        exec_control_enabled: true,
         ..rw_snapshot()
     }
 }
@@ -48,6 +55,30 @@ fn dir(path: PathBuf, name: &str, children: Vec<ControlledEntry>) -> ControlledE
         is_autorun_inf: false,
         is_root_shell_script: false,
         children,
+    }
+}
+
+fn controlled_file(
+    path: PathBuf,
+    name: &str,
+    size: u64,
+    exec_type: Option<ExecFileType>,
+) -> ControlledEntry {
+    ControlledEntry {
+        real_path: path,
+        virtual_name: name.to_string(),
+        file_size: size,
+        is_dir: false,
+        is_virus: false,
+        exec_type,
+        extension: name
+            .rsplit_once('.')
+            .map(|(_, ext)| ext.to_ascii_lowercase())
+            .unwrap_or_default(),
+        is_autorun_target: false,
+        is_autorun_inf: false,
+        is_root_shell_script: false,
+        children: vec![],
     }
 }
 
@@ -212,6 +243,49 @@ fn metadata_write_without_committed_mutation_is_not_exposed_to_virtual_reads() {
         original,
         "metadata writes that do not resolve to committed mutations must not create virtual-only state"
     );
+}
+
+#[test]
+fn root_directory_rewrite_with_existing_blocked_placeholder_allows_new_regular_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("blocked.exe"), b"blocked-real-content").unwrap();
+    let tree = vec![controlled_file(
+        tmp.path().join("blocked.exe"),
+        "blocked.exe",
+        20,
+        Some(ExecFileType::Pe),
+    )];
+    let fs = VirtualExfatFs::build(
+        tmp.path(),
+        &tree,
+        exec_control_snapshot(),
+        16 * 1024 * 1024,
+    )
+    .unwrap();
+
+    let mut root = fs.read_at(fs.root_dir_offset_for_test(), 4096).unwrap();
+    let existing_entries = parse_entry_sets(&root).unwrap();
+    let blocked = existing_entries
+        .iter()
+        .find(|entry| entry.name == "blocked.exe")
+        .unwrap();
+    assert_ne!(blocked.first_cluster, 0);
+
+    let new_cluster = 700;
+    write_file_data(&fs, new_cluster, b"ok");
+    let insert_at = existing_entries
+        .iter()
+        .map(|entry| entry.entry_offset + entry.set_len)
+        .max()
+        .unwrap();
+    let new_entry = build_file_entry_set("created.txt", false, new_cluster, 2, false);
+    root[insert_at..insert_at + new_entry.len()].copy_from_slice(&new_entry);
+
+    fs.write_at(fs.root_dir_offset_for_test(), &root).unwrap();
+
+    assert_eq!(std::fs::read(tmp.path().join("created.txt")).unwrap(), b"ok");
+    assert!(fs.lookup_path("/created.txt").is_some());
+    assert!(fs.lookup_path("/blocked.exe").is_some());
 }
 
 #[test]

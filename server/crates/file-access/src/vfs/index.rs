@@ -80,6 +80,18 @@ impl VfsIndex {
         self.nodes.values()
     }
 
+    pub fn set_first_cluster(
+        &mut self,
+        virtual_path: &str,
+        first_cluster: Option<u32>,
+    ) -> Result<(), std::io::Error> {
+        let id = self.lookup_path(virtual_path).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "node not found")
+        })?;
+        self.nodes.get_mut(&id).unwrap().first_cluster = first_cluster;
+        Ok(())
+    }
+
     pub fn apply_mutation(&mut self, mutation: &FsMutation) -> Result<(), std::io::Error> {
         match mutation {
             FsMutation::CreateDir { parent, name, chain } => {
