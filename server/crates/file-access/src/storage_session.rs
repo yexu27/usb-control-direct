@@ -1008,11 +1008,7 @@ mod tests {
         let device = test_device("SN-SHORT-ID");
         create_runtime(&ctx.runtime_registry, &device);
 
-        let handle = ctx
-            .manager
-            .start_authorized_storage(device)
-            .await
-            .unwrap();
+        let handle = ctx.manager.start_authorized_storage(device).await.unwrap();
 
         assert!(handle.session_id.starts_with("storage_"));
         assert_eq!(handle.session_id.len(), "storage_".len() + 16);

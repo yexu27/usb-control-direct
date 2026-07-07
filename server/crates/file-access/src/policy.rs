@@ -31,10 +31,7 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
     if snapshot.exec_control_enabled {
         if let Some(exec_type) = &entry.exec_type {
             debug!(file = %entry.virtual_name, level = "L2", exec_type = ?exec_type, "文件被识别为可执行文件");
-            return AccessDecision::Deny(format!(
-                "L2:可执行文件控制({:?})",
-                exec_type
-            ));
+            return AccessDecision::Deny(format!("L2:可执行文件控制({:?})", exec_type));
         }
     }
 
@@ -44,10 +41,7 @@ pub fn evaluate_access(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> Ac
         if let Ok(normalized) = storage::normalize_extension(&extension_with_dot) {
             if snapshot.blacklist_extensions.contains(&normalized) {
                 debug!(file = %entry.virtual_name, level = "L3", ext = %normalized, "文件后缀在黑名单中");
-                return AccessDecision::Deny(format!(
-                    "L3:文件类型黑名单({})",
-                    normalized
-                ));
+                return AccessDecision::Deny(format!("L3:文件类型黑名单({})", normalized));
             }
         }
     }

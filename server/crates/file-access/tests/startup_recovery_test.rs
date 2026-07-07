@@ -54,7 +54,7 @@ fn recovers_only_project_raw_mounts_from_mount_table_text() {
         &ops,
         Path::new("/mnt/usb-control/raw"),
         "/dev/sda1 /mnt/usb-control/raw/storage__one vfat rw 0 0\n\
-         /dev/sdb1 /mnt/usb_raw/sdb1 vfat rw 0 0\n\
+         /dev/sdb1 /media/legacy_raw/sdb1 vfat rw 0 0\n\
          /dev/sdc1 /media/user/disk vfat rw 0 0\n",
     )
     .unwrap();

@@ -28,15 +28,18 @@ pub const VIRUS_PREFIX: &str = "[病毒禁止访问]";
 pub fn build_file_tree(mount_path: &Path, infected_files: &[String]) -> Vec<ControlledEntry> {
     debug!("开始遍历目录: {}", mount_path.display());
 
-    let infected_set: HashSet<String> = infected_files
-        .iter()
-        .map(|p| normalize_path(p))
-        .collect();
+    let infected_set: HashSet<String> = infected_files.iter().map(|p| normalize_path(p)).collect();
 
     // 先解析 autorun.inf（如果存在）
     let autorun_targets = parse_root_autorun(mount_path);
 
-    let roots = build_directory(mount_path, mount_path, &infected_set, &autorun_targets, true);
+    let roots = build_directory(
+        mount_path,
+        mount_path,
+        &infected_set,
+        &autorun_targets,
+        true,
+    );
     info!(root_count = roots.len(), "文件树构建完成");
     roots
 }
@@ -195,9 +198,7 @@ fn relative_path(full_path: &Path, mount_path: &Path) -> String {
 
 /// 规范化路径（统一斜杠、去掉前导斜杠）。
 fn normalize_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim_start_matches('/')
-        .to_string()
+    path.replace('\\', "/").trim_start_matches('/').to_string()
 }
 
 /// 提取文件后缀（小写，不含点号）。

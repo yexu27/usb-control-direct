@@ -183,14 +183,18 @@ impl MountOperations for RealMountOps {
             ))
         })?;
 
-        info!(dev = dev_path, mount_point = mount_point, fs_type = fs_type, "挂载设备成功");
+        info!(
+            dev = dev_path,
+            mount_point = mount_point,
+            fs_type = fs_type,
+            "挂载设备成功"
+        );
         Ok(())
     }
 
     fn umount(&self, mount_point: &str) -> Result<(), FileAccessError> {
-        nix::mount::umount2(mount_point, nix::mount::MntFlags::MNT_DETACH).map_err(|e| {
-            FileAccessError::UmountFailed(format!("卸载 {mount_point} 失败: {e}"))
-        })?;
+        nix::mount::umount2(mount_point, nix::mount::MntFlags::MNT_DETACH)
+            .map_err(|e| FileAccessError::UmountFailed(format!("卸载 {mount_point} 失败: {e}")))?;
 
         info!(mount_point = mount_point, "卸载设备成功（懒卸载）");
         Ok(())
@@ -233,9 +237,8 @@ pub fn mount_partition(
     mount_point: &str,
     read_only: bool,
 ) -> Result<(), FileAccessError> {
-    std::fs::create_dir_all(mount_point).map_err(|e| {
-        FileAccessError::MountFailed(format!("创建挂载点 {mount_point} 失败: {e}"))
-    })?;
+    std::fs::create_dir_all(mount_point)
+        .map_err(|e| FileAccessError::MountFailed(format!("创建挂载点 {mount_point} 失败: {e}")))?;
 
     let entries = current_mount_entries()?;
     ensure_mount_available_from(&entries, dev_path, mount_point)
@@ -249,8 +252,20 @@ pub fn mount_partition(
         nix::mount::MsFlags::MS_NOEXEC | nix::mount::MsFlags::MS_NOSUID
     };
 
-    if nix::mount::mount(Some(dev_path), mount_point, None::<&str>, flags, None::<&str>).is_ok() {
-        info!(dev = dev_path, mount_point = mount_point, "自动检测挂载成功");
+    if nix::mount::mount(
+        Some(dev_path),
+        mount_point,
+        None::<&str>,
+        flags,
+        None::<&str>,
+    )
+    .is_ok()
+    {
+        info!(
+            dev = dev_path,
+            mount_point = mount_point,
+            "自动检测挂载成功"
+        );
         return Ok(());
     }
 
@@ -261,7 +276,12 @@ pub fn mount_partition(
     cmd.arg(dev_path).arg(mount_point);
     match cmd.output() {
         Ok(out) if out.status.success() => {
-            info!(dev = dev_path, mount_point = mount_point, read_only, "ntfs-3g 挂载成功");
+            info!(
+                dev = dev_path,
+                mount_point = mount_point,
+                read_only,
+                "ntfs-3g 挂载成功"
+            );
             return Ok(());
         }
         Ok(out) => {
@@ -283,7 +303,11 @@ pub fn mount_partition(
     )
     .is_ok()
     {
-        warn!(dev = dev_path, mount_point = mount_point, "回退到内核 ntfs 只读挂载");
+        warn!(
+            dev = dev_path,
+            mount_point = mount_point,
+            "回退到内核 ntfs 只读挂载"
+        );
         return Ok(());
     }
 

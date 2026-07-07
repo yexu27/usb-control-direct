@@ -20,7 +20,7 @@ fn parses_mount_table_entries() {
 fn selects_only_project_raw_mounts_for_recovery() {
     let entries = mount_entries_from(
         "/dev/sda1 /mnt/usb-control/raw/storage__one vfat rw 0 0\n\
-         /dev/sdb1 /mnt/usb_raw/sdb1 vfat rw 0 0\n\
+         /dev/sdb1 /media/legacy_raw/sdb1 vfat rw 0 0\n\
          /dev/sdc1 /media/user/disk vfat rw 0 0\n\
          /dev/root / ext4 rw 0 0\n",
     );
