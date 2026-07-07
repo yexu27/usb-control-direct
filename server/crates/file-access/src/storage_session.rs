@@ -441,21 +441,21 @@ async fn run_storage_pipeline(
                 &device.runtime_id,
                 "failed",
                 "scan",
-                "scan_failed",
-                &e.to_string(),
+                e.fail_code(),
+                e.reason(),
             );
             warn!(
                 serial = %device.serial_number,
                 dev = %device.device_name,
+                scan_error_kind = %e.fail_code(),
                 error = %e,
                 "Storage session 扫描失败"
             );
-            cleanup_removed_session(
+            cleanup_failed_session_resources(
                 &sessions,
                 &parent_path,
-                "scan_failed".to_string(),
+                e.fail_code(),
                 Arc::clone(&mount_ops),
-                Arc::clone(&runtime_registry),
                 Arc::clone(&nbd_pool),
             )
             .await;
@@ -613,6 +613,57 @@ async fn cleanup_removed_session(
     }
 }
 
+async fn cleanup_failed_session_resources(
+    sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
+    parent_path: &str,
+    reason: &str,
+    mount_ops: Arc<dyn StorageSessionMountOps>,
+    nbd_pool: Arc<Mutex<NbdIndexPool>>,
+) {
+    let session = sessions.lock().await.remove(parent_path);
+    if let Some(mut session) = session {
+        let _ = session.cancel_tx.send(true);
+
+        if let Some(published) = session.published.take() {
+            published.stop().await;
+        }
+
+        if let Some(mount_path) = session.mount_path.take() {
+            let mount_path_str = mount_path.to_string_lossy().to_string();
+            let should_umount = match mount_ops.mount_target_exists(&mount_path_str) {
+                Ok(active) => active,
+                Err(e) => {
+                    warn!(
+                        mount_point = %mount_path_str,
+                        error = %e,
+                        reason = %reason,
+                        "Storage session 读取挂载状态失败，继续尝试卸载"
+                    );
+                    true
+                }
+            };
+
+            if should_umount {
+                if let Err(e) = mount_ops.umount(&mount_path_str) {
+                    warn!(
+                        mount_point = %mount_path_str,
+                        error = %e,
+                        reason = %reason,
+                        "Storage session 卸载失败"
+                    );
+                }
+            }
+        }
+
+        nbd_pool.lock().await.release(session.nbd_index);
+        info!(
+            serial = %session.device.serial_number,
+            reason = %reason,
+            "Storage session 失败资源清理完成"
+        );
+    }
+}
+
 async fn cleanup_session(
     mut session: ActiveStorageSession,
     reason: String,
@@ -720,7 +771,7 @@ mod tests {
 
     use device_runtime::{DeviceRuntimeCreate, DeviceRuntimeRegistry};
     use tempfile::tempdir;
-    use usb_identify::traits::{ScanError, ScanResult};
+    use usb_identify::traits::{ScanError, ScanErrorKind, ScanResult};
 
     use super::*;
     use crate::types::PolicySnapshot;
@@ -728,7 +779,7 @@ mod tests {
     #[derive(Default)]
     struct FakeScanner {
         scan_count: AtomicUsize,
-        fail: AtomicBool,
+        error_kind: StdMutex<Option<ScanErrorKind>>,
     }
 
     impl Scanner for FakeScanner {
@@ -739,10 +790,10 @@ mod tests {
             _device_name: &str,
         ) -> Pin<Box<dyn Future<Output = Result<ScanResult, ScanError>> + Send + '_>> {
             self.scan_count.fetch_add(1, Ordering::SeqCst);
-            let fail = self.fail.load(Ordering::SeqCst);
+            let error_kind = *self.error_kind.lock().unwrap();
             Box::pin(async move {
-                if fail {
-                    Err(ScanError::Failed("scan failed".into()))
+                if let Some(kind) = error_kind {
+                    Err(ScanError::new(kind, kind.default_reason()))
                 } else {
                     Ok(ScanResult {
                         is_clean: true,
@@ -1113,6 +1164,69 @@ mod tests {
             .start_authorized_storage(test_device("SN-5"))
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn scan_service_unavailable_updates_runtime_fail_code_and_cleans_session() {
+        let ctx = test_manager(1);
+        *ctx.scanner.error_kind.lock().unwrap() = Some(ScanErrorKind::ServiceUnavailable);
+        let device = test_device("SN-SCAN-UNAVAILABLE");
+        create_runtime(&ctx.runtime_registry, &device);
+
+        ctx.manager
+            .start_authorized_storage(device.clone())
+            .await
+            .unwrap();
+
+        wait_until(|| ctx.scanner.scan_count.load(Ordering::SeqCst) == 1).await;
+        for _ in 0..50 {
+            if !ctx.manager.has_active_storage().await {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        assert!(!ctx.manager.has_active_storage().await);
+        assert_eq!(ctx.media_builder.build_count.load(Ordering::SeqCst), 0);
+        assert_eq!(ctx.publisher.publish_count.load(Ordering::SeqCst), 0);
+        assert_eq!(ctx.mount_ops.umount_count.load(Ordering::SeqCst), 1);
+
+        let runtime = ctx.runtime_registry.get(&device.runtime_id).unwrap();
+        assert_eq!(runtime.status, "failed");
+        assert_eq!(runtime.stage, "scan");
+        assert_eq!(runtime.fail_code, "scan_service_unavailable");
+        assert!(runtime.fail_reason.contains("病毒库不可用"));
+    }
+
+    #[tokio::test]
+    async fn scan_engine_failed_updates_runtime_fail_code() {
+        let ctx = test_manager(1);
+        *ctx.scanner.error_kind.lock().unwrap() = Some(ScanErrorKind::EngineFailed);
+        let device = test_device("SN-SCAN-ENGINE");
+        create_runtime(&ctx.runtime_registry, &device);
+
+        ctx.manager
+            .start_authorized_storage(device.clone())
+            .await
+            .unwrap();
+
+        wait_until(|| ctx.scanner.scan_count.load(Ordering::SeqCst) == 1).await;
+        for _ in 0..50 {
+            if !ctx.manager.has_active_storage().await {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        assert!(!ctx.manager.has_active_storage().await);
+        assert_eq!(ctx.media_builder.build_count.load(Ordering::SeqCst), 0);
+        assert_eq!(ctx.publisher.publish_count.load(Ordering::SeqCst), 0);
+
+        let runtime = ctx.runtime_registry.get(&device.runtime_id).unwrap();
+        assert_eq!(runtime.status, "failed");
+        assert_eq!(runtime.stage, "scan");
+        assert_eq!(runtime.fail_code, "scan_engine_failed");
+        assert!(runtime.fail_reason.contains("病毒扫描引擎异常"));
     }
 
     #[tokio::test]
