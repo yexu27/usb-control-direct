@@ -29,16 +29,19 @@ fn file_entry_set_data_length() {
 }
 
 #[test]
-fn virus_file_has_zero_data_length() {
+fn read_only_file_preserves_data_length_and_cluster() {
     let data = build_file_entry_set("[病毒禁止访问]virus.exe", false, 5, 1024, true);
 
     // Stream Extension DataLength
     let data_len = u64::from_le_bytes(data[56..64].try_into().unwrap());
-    assert_eq!(data_len, 0);
+    assert_eq!(data_len, 1024);
 
     // Stream Extension FirstCluster
     let first_cluster = u32::from_le_bytes(data[52..56].try_into().unwrap());
-    assert_eq!(first_cluster, 0);
+    assert_eq!(first_cluster, 5);
+
+    let attrs = u16::from_le_bytes(data[4..6].try_into().unwrap());
+    assert_eq!(attrs & ATTR_READ_ONLY, ATTR_READ_ONLY);
 }
 
 #[test]

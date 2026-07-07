@@ -14,7 +14,9 @@ use crate::exfat::fat::FatBuilder;
 use crate::exfat::layout::*;
 use crate::exfat::upcase::generate_upcase_table;
 use crate::policy::evaluate_access;
-use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot, SectorContent};
+use crate::types::{
+    blocked_placeholder_bytes, AccessDecision, ControlledEntry, PolicySnapshot, SectorContent,
+};
 
 /// 虚拟 exFAT 卷。
 #[derive(Debug, Clone)]
@@ -41,7 +43,6 @@ struct FileDataMapping {
     real_path: PathBuf,
     offset: u64,
     byte_len: u64,
-    blocked: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +51,6 @@ pub struct FileDataSectorInfo {
     pub real_path: PathBuf,
     pub offset: u64,
     pub valid_bytes: u32,
-    pub blocked: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +60,6 @@ pub struct FileDataRangeInfo {
     pub real_path: PathBuf,
     pub offset: u64,
     pub byte_len: u64,
-    pub blocked: bool,
 }
 
 impl VirtualVolume {
@@ -109,7 +108,6 @@ impl VirtualVolume {
                 real_path: mapping.real_path.clone(),
                 offset,
                 valid_bytes,
-                blocked: mapping.blocked,
             });
         }
 
@@ -171,7 +169,6 @@ impl VirtualVolume {
                     real_path: mapping.real_path.clone(),
                     offset,
                     valid_bytes: remaining.min(SECTOR_SIZE as u64) as u32,
-                    blocked: mapping.blocked,
                 }
             })
         })
@@ -184,7 +181,6 @@ impl VirtualVolume {
             real_path: mapping.real_path.clone(),
             offset: mapping.offset,
             byte_len: mapping.byte_len,
-            blocked: mapping.blocked,
         })
     }
 }
@@ -233,7 +229,6 @@ struct FileMapping {
     real_path: PathBuf,
     start_cluster: u32,
     file_size: u64,
-    blocked: bool,
 }
 
 /// 计算文件所需簇数（安全处理大文件）。
@@ -245,6 +240,16 @@ fn file_clusters(file_size: u64) -> u32 {
 fn bitmap_clusters_for(cluster_count: u32) -> u32 {
     let bitmap_bytes = (cluster_count as u64).div_ceil(8);
     bitmap_bytes.div_ceil(CLUSTER_SIZE as u64).max(1) as u32
+}
+
+fn virtual_file_size(entry: &ControlledEntry, snapshot: &PolicySnapshot) -> u64 {
+    if entry.is_dir {
+        return 0;
+    }
+    match evaluate_access(entry, snapshot) {
+        AccessDecision::Allow => entry.file_size,
+        AccessDecision::Deny(_) => blocked_placeholder_bytes().len() as u64,
+    }
 }
 
 fn write_cluster_data(
@@ -329,9 +334,6 @@ impl<'a> VolumeBuilder<'a> {
     fn build_directory_entries(&mut self, parent_path: &str, entries: &[ControlledEntry]) -> Vec<u8> {
         let mut directory_data = Vec::new();
         for entry in entries {
-            let decision = evaluate_access(entry, self.snapshot);
-            let blocked = matches!(decision, AccessDecision::Deny(_));
-
             if entry.is_dir {
                 let virtual_path = join_virtual_path(parent_path, &entry.virtual_name);
                 let mut child_dir_data = self.build_directory_entries(&virtual_path, &entry.children);
@@ -357,10 +359,13 @@ impl<'a> VolumeBuilder<'a> {
                 });
             } else {
                 // 文件
-                let (file_cluster, file_clusters) = if entry.is_virus || entry.file_size == 0 {
+                let is_blocked =
+                    matches!(evaluate_access(entry, self.snapshot), AccessDecision::Deny(_));
+                let display_size = virtual_file_size(entry, self.snapshot);
+                let (file_cluster, file_clusters) = if display_size == 0 {
                     (0, 0)
                 } else {
-                    let clusters = file_clusters(entry.file_size);
+                    let clusters = file_clusters(display_size);
                     let start = self.allocate_clusters(clusters);
                     (start, clusters)
                 };
@@ -369,8 +374,8 @@ impl<'a> VolumeBuilder<'a> {
                     &entry.virtual_name,
                     false,
                     file_cluster,
-                    entry.file_size,
-                    entry.is_virus,
+                    display_size,
+                    is_blocked,
                 );
                 directory_data.extend(file_entry);
 
@@ -379,8 +384,7 @@ impl<'a> VolumeBuilder<'a> {
                         name: entry.virtual_name.clone(),
                         real_path: entry.real_path.clone(),
                         start_cluster: file_cluster,
-                        file_size: entry.file_size,
-                        blocked,
+                        file_size: display_size,
                     });
                 }
             }
@@ -607,7 +611,6 @@ impl<'a> VolumeBuilder<'a> {
                     real_path: mapping.real_path.clone(),
                     offset: 0,
                     byte_len: mapping.file_size,
-                    blocked: mapping.blocked,
                 });
             }
 
@@ -641,10 +644,12 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::types::{ControlledEntry, ExecFileType, PolicySnapshot, SectorContent};
+    use crate::types::{
+        blocked_placeholder_bytes, ControlledEntry, ExecFileType, PolicySnapshot, SectorContent,
+    };
 
     #[test]
-    fn blocked_file_data_sector_is_marked_blocked() {
+    fn blocked_file_uses_placeholder_size_and_file_data_sector() {
         let dir = tempfile::tempdir().unwrap();
         let real = dir.path().join("tool.bin");
         std::fs::write(&real, vec![1u8; 512]).unwrap();
@@ -673,7 +678,12 @@ mod tests {
         let sectors = volume.find_file_data_sectors("tool.bin");
         assert!(!sectors.is_empty());
         match volume.read_sector(sectors[0]).unwrap() {
-            SectorContent::FileData { blocked, .. } => assert!(blocked),
+            SectorContent::FileData { valid_bytes, .. } => {
+                assert_eq!(
+                    valid_bytes as usize,
+                    blocked_placeholder_bytes().len().min(SECTOR_SIZE as usize)
+                );
+            }
             other => panic!("expected file data sector, got {other:?}"),
         }
     }

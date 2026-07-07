@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::types::ControlledEntry;
+use crate::policy::evaluate_access;
+use crate::types::{blocked_placeholder_bytes, AccessDecision, ControlledEntry, PolicySnapshot};
 use crate::vfs::mutation::FsMutation;
-use crate::vfs::node::{NodeId, VfsNode, VfsNodeKind};
+use crate::vfs::node::{NodeId, VfsFileView, VfsNode, VfsNodeKind};
 
 #[derive(Debug, Clone)]
 pub struct VfsIndex {
@@ -20,6 +21,7 @@ impl VfsIndex {
     pub fn from_controlled_tree(
         mount_root: &Path,
         entries: &[ControlledEntry],
+        snapshot: &PolicySnapshot,
     ) -> Result<Self, std::io::Error> {
         let root_id = NodeId(1);
         let mut index = VfsIndex {
@@ -39,6 +41,7 @@ impl VfsIndex {
                 real_path: mount_root.to_path_buf(),
                 kind: VfsNodeKind::Directory,
                 size: 0,
+                file_view: None,
                 first_cluster: Some(2),
                 is_virus: false,
                 exec_type: None,
@@ -52,7 +55,7 @@ impl VfsIndex {
         index.path_index.insert("/".to_string(), root_id);
 
         for entry in entries {
-            index.insert_controlled_entry(root_id, "/", entry)?;
+            index.insert_controlled_entry(root_id, "/", entry, snapshot)?;
         }
         Ok(index)
     }
@@ -151,6 +154,11 @@ impl VfsIndex {
         let id = NodeId(self.next_id);
         self.next_id += 1;
         let real_path = real_path_for_virtual(&self.mount_root, &virtual_path);
+        let file_view = if kind == VfsNodeKind::File {
+            Some(VfsFileView::RealFile)
+        } else {
+            None
+        };
         self.nodes.insert(
             id,
             VfsNode {
@@ -161,6 +169,7 @@ impl VfsIndex {
                 real_path,
                 kind,
                 size,
+                file_view,
                 first_cluster,
                 is_virus: false,
                 exec_type: None,
@@ -283,6 +292,7 @@ impl VfsIndex {
         parent: NodeId,
         parent_path: &str,
         entry: &ControlledEntry,
+        snapshot: &PolicySnapshot,
     ) -> Result<NodeId, std::io::Error> {
         let id = NodeId(self.next_id);
         self.next_id += 1;
@@ -300,6 +310,28 @@ impl VfsIndex {
             ));
         }
 
+        let decision = if entry.is_dir {
+            AccessDecision::Allow
+        } else {
+            evaluate_access(entry, snapshot)
+        };
+        let placeholder_size = blocked_placeholder_bytes().len() as u64;
+        let (size, file_view) = if entry.is_dir {
+            (0, None)
+        } else {
+            match decision {
+                AccessDecision::Allow => (entry.file_size, Some(VfsFileView::RealFile)),
+                AccessDecision::Deny(reason) => (
+                    placeholder_size,
+                    Some(VfsFileView::BlockedPlaceholder {
+                        reason,
+                        real_size: entry.file_size,
+                        placeholder_size,
+                    }),
+                ),
+            }
+        };
+
         let node = VfsNode {
             id,
             parent: Some(parent),
@@ -311,7 +343,8 @@ impl VfsIndex {
             } else {
                 VfsNodeKind::File
             },
-            size: if entry.is_virus { 0 } else { entry.file_size },
+            size,
+            file_view,
             first_cluster: None,
             is_virus: entry.is_virus,
             exec_type: entry.exec_type,
@@ -327,7 +360,7 @@ impl VfsIndex {
         self.nodes.get_mut(&parent).unwrap().children.push(id);
 
         for child in &entry.children {
-            self.insert_controlled_entry(id, &virtual_path, child)?;
+            self.insert_controlled_entry(id, &virtual_path, child, snapshot)?;
         }
 
         Ok(id)

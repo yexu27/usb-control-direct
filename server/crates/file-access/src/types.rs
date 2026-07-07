@@ -91,8 +91,6 @@ pub enum SectorContent {
         offset: u64,
         /// 该扇区中的有效字节数（最后一个扇区可能不满 512）。
         valid_bytes: u32,
-        /// 是否被策略阻断。
-        blocked: bool,
     },
     /// 零填充（空闲区域）。
     Zero,

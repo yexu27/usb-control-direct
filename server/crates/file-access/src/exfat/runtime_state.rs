@@ -47,7 +47,7 @@ impl ExfatRuntimeState {
         snapshot: PolicySnapshot,
         source_size_bytes: u64,
     ) -> Result<Self, std::io::Error> {
-        let index = VfsIndex::from_controlled_tree(mount_root, entries)?;
+        let index = VfsIndex::from_controlled_tree(mount_root, entries, &snapshot)?;
         let volume = VirtualVolume::build_with_capacity(entries, &snapshot, source_size_bytes)?;
         let layout = volume.layout().clone();
         let mut directory_store = DirectoryStore::default();
@@ -265,14 +265,7 @@ impl ExfatRuntimeState {
                         real_path,
                         offset,
                         valid_bytes,
-                        blocked,
                     } => {
-                        if blocked {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::PermissionDenied,
-                                "文件被策略阻断，禁止读取",
-                            ));
-                        }
                         let available = valid_bytes.saturating_sub(sector_offset as u32) as usize;
                         let read_len = take.min(available);
                         let mut file = std::fs::File::open(real_path)?;

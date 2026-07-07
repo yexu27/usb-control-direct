@@ -1,12 +1,15 @@
 use std::fs;
 
+use file_access::exfat::directory_parser::parse_entry_sets;
 use file_access::exfat::layout::{
     CLUSTER_SIZE, EXFAT_SIGNATURE, FAT_END_OF_CHAIN, MIN_VIRTUAL_VOLUME_BYTES,
     PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
 };
 use file_access::exfat::volume::VirtualVolume;
 use file_access::file_tree::build_file_tree;
-use file_access::types::{ControlledEntry, PolicySnapshot, SectorContent};
+use file_access::types::{
+    blocked_placeholder_bytes, ControlledEntry, ExecFileType, PolicySnapshot, SectorContent,
+};
 
 fn make_snapshot() -> PolicySnapshot {
     PolicySnapshot {
@@ -93,14 +96,58 @@ fn volume_file_data_maps_to_real_path() {
             real_path,
             offset,
             valid_bytes: _,
-            blocked,
         } => {
             assert_eq!(real_path, tmp.path().join("data.bin"));
             assert_eq!(offset, 0);
-            assert!(!blocked);
         }
         _ => panic!("File data sector should be FileData"),
     }
+}
+
+#[test]
+fn blocked_file_directory_entry_uses_placeholder_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("setup.exe");
+    std::fs::write(&real, b"MZ real executable content").unwrap();
+
+    let entry = ControlledEntry {
+        real_path: real,
+        virtual_name: "setup.exe".to_string(),
+        file_size: 26,
+        is_dir: false,
+        is_virus: false,
+        exec_type: Some(ExecFileType::Pe),
+        extension: "exe".to_string(),
+        is_autorun_target: false,
+        is_autorun_inf: false,
+        is_root_shell_script: false,
+        children: Vec::new(),
+    };
+
+    let mut snapshot = make_snapshot();
+    snapshot.exec_control_enabled = true;
+
+    let volume = VirtualVolume::build(&[entry], &snapshot).unwrap();
+    let root_sector = volume.layout().cluster_to_sector(2);
+    let root = match volume.read_sector(root_sector).unwrap() {
+        SectorContent::Metadata(data) => data,
+        other => panic!("root directory sector should be metadata, got {other:?}"),
+    };
+    let entries = parse_entry_sets(&root).unwrap();
+    let setup = entries
+        .iter()
+        .find(|entry| entry.name == "setup.exe")
+        .unwrap();
+
+    assert_eq!(
+        setup.data_length,
+        blocked_placeholder_bytes().len() as u64
+    );
+    assert_eq!(
+        setup.valid_data_length,
+        blocked_placeholder_bytes().len() as u64
+    );
+    assert_ne!(setup.first_cluster, 0);
 }
 
 #[test]

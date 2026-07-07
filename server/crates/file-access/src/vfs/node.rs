@@ -13,6 +13,18 @@ pub enum VfsNodeKind {
     Directory,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VfsFileView {
+    /// 普通真实文件，读写允许时映射到真实 U 盘文件。
+    RealFile,
+    /// 被策略阻断的占位文件，读路径只能返回占位内容。
+    BlockedPlaceholder {
+        reason: String,
+        real_size: u64,
+        placeholder_size: u64,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct VfsNode {
     pub id: NodeId,
@@ -22,6 +34,7 @@ pub struct VfsNode {
     pub real_path: PathBuf,
     pub kind: VfsNodeKind,
     pub size: u64,
+    pub file_view: Option<VfsFileView>,
     pub first_cluster: Option<u32>,
     pub is_virus: bool,
     pub exec_type: Option<ExecFileType>,
@@ -35,5 +48,19 @@ pub struct VfsNode {
 impl VfsNode {
     pub fn is_dir(&self) -> bool {
         self.kind == VfsNodeKind::Directory
+    }
+
+    pub fn is_blocked_placeholder(&self) -> bool {
+        matches!(
+            self.file_view,
+            Some(VfsFileView::BlockedPlaceholder { .. })
+        )
+    }
+
+    pub fn blocked_reason(&self) -> Option<&str> {
+        match &self.file_view {
+            Some(VfsFileView::BlockedPlaceholder { reason, .. }) => Some(reason.as_str()),
+            _ => None,
+        }
     }
 }

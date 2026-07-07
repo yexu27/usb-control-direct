@@ -1,12 +1,23 @@
 use std::path::PathBuf;
 
+use file_access::types::PolicySnapshot;
 use file_access::vfs::mutation::{FsMutation, NodeKind};
 use file_access::vfs::VfsIndex;
+
+fn snapshot() -> PolicySnapshot {
+    PolicySnapshot {
+        exec_control_enabled: true,
+        file_type_blacklist_enabled: true,
+        auto_read_control_enabled: true,
+        blacklist_extensions: std::collections::HashSet::new(),
+        permission: 1,
+    }
+}
 
 #[test]
 fn vfs_index_applies_create_empty_file_and_directory() {
     let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
-    let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
+    let mut index = VfsIndex::from_controlled_tree(&root, &[], &snapshot()).unwrap();
 
     index
         .apply_mutation(&FsMutation::CreateDir {
@@ -38,7 +49,7 @@ fn vfs_index_applies_create_empty_file_and_directory() {
 #[test]
 fn vfs_index_applies_rename_and_delete() {
     let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
-    let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
+    let mut index = VfsIndex::from_controlled_tree(&root, &[], &snapshot()).unwrap();
     index
         .apply_mutation(&FsMutation::CreateDir {
             parent: "/".to_string(),
@@ -82,7 +93,7 @@ fn vfs_index_applies_rename_and_delete() {
 #[test]
 fn vfs_index_applies_truncate() {
     let root = PathBuf::from("/mnt/usb-control/raw/<session-id>/sdc2");
-    let mut index = VfsIndex::from_controlled_tree(&root, &[]).unwrap();
+    let mut index = VfsIndex::from_controlled_tree(&root, &[], &snapshot()).unwrap();
     index
         .apply_mutation(&FsMutation::CreateFile {
             parent: "/".to_string(),

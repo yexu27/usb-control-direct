@@ -74,7 +74,7 @@ pub fn build_upcase_entry(start_cluster: u32, data_length: u64, checksum: u32) -
 ///   - is_dir: 是否为目录。
 ///   - start_cluster: 起始簇号（0 表示无数据）。
 ///   - data_length: 数据长度（字节）。
-///   - is_virus: 是否为病毒文件（DataLength=0）。
+///   - is_read_only: 是否以只读属性呈现。
 ///
 /// 返回:
 ///   - 目录项字节序列。
@@ -83,14 +83,11 @@ pub fn build_file_entry_set(
     is_dir: bool,
     start_cluster: u32,
     data_length: u64,
-    is_virus: bool,
+    is_read_only: bool,
 ) -> Vec<u8> {
     let utf16_name: Vec<u16> = name.encode_utf16().collect();
     let name_entry_count = utf16_name.len().div_ceil(CHARS_PER_NAME_ENTRY);
     let secondary_count = 1 + name_entry_count; // Stream + FileName entries
-
-    let actual_data_length = if is_virus { 0 } else { data_length };
-    let actual_start_cluster = if is_virus { 0 } else { start_cluster };
 
     let mut entries = Vec::new();
 
@@ -102,7 +99,7 @@ pub fn build_file_entry_set(
 
     let attrs = if is_dir {
         ATTR_DIRECTORY
-    } else if is_virus {
+    } else if is_read_only {
         ATTR_READ_ONLY | ATTR_ARCHIVE
     } else {
         ATTR_ARCHIVE
@@ -128,7 +125,7 @@ pub fn build_file_entry_set(
     // GeneralSecondaryFlags at offset 1
     // Bit 0: AllocationPossible = 1
     // Bit 1: NoFatChain = 1（连续分配时可设置）
-    let flags = if actual_data_length > 0 { 0x03u8 } else { 0x01u8 };
+    let flags = if data_length > 0 { 0x03u8 } else { 0x01u8 };
     stream_entry[1] = flags;
 
     // NameLength at offset 3
@@ -138,13 +135,13 @@ pub fn build_file_entry_set(
     stream_entry[4..6].copy_from_slice(&name_hash.to_le_bytes());
 
     // ValidDataLength at offset 8 (u64 LE)
-    stream_entry[8..16].copy_from_slice(&actual_data_length.to_le_bytes());
+    stream_entry[8..16].copy_from_slice(&data_length.to_le_bytes());
 
     // FirstCluster at offset 20 (u32 LE)
-    stream_entry[20..24].copy_from_slice(&actual_start_cluster.to_le_bytes());
+    stream_entry[20..24].copy_from_slice(&start_cluster.to_le_bytes());
 
     // DataLength at offset 24 (u64 LE)
-    stream_entry[24..32].copy_from_slice(&actual_data_length.to_le_bytes());
+    stream_entry[24..32].copy_from_slice(&data_length.to_le_bytes());
 
     entries.extend_from_slice(&stream_entry);
 
