@@ -16,11 +16,10 @@ use crate::exfat::transaction::PendingTransaction;
 use crate::exfat::transaction_resolver::TransactionResolver;
 use crate::exfat::volume::{FileDataRangeInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
-use crate::policy::evaluate_access;
-use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
+use crate::types::{blocked_placeholder_bytes, ControlledEntry, PolicySnapshot};
 use crate::vfs::committer::RealFsCommitter;
-use crate::vfs::index::node_to_controlled_entry;
 use crate::vfs::mutation::{FsMutation, NodeKind};
+use crate::vfs::node::VfsFileView;
 use crate::vfs::operation_guard::{FsOperation, OperationGuard};
 use crate::vfs::VfsNodeKind;
 use crate::vfs::{NodeId, VfsIndex, VfsNode};
@@ -185,21 +184,10 @@ impl ExfatRuntimeState {
         self.volume.layout().cluster_to_sector(cluster)
     }
 
-    fn ensure_file_read_allowed(&self, node_id: u64) -> Result<&VfsNode, std::io::Error> {
-        let node = self.index.node(NodeId(node_id)).ok_or_else(|| {
+    fn file_node(&self, node_id: u64) -> Result<&VfsNode, std::io::Error> {
+        self.index.node(NodeId(node_id)).ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::NotFound, "file data owner not found in VFS")
-        })?;
-        if let AccessDecision::Deny(reason) =
-            evaluate_access(&node_to_controlled_entry(node), &self.snapshot)
-        {
-            tracing::warn!(
-                virtual_path = %node.virtual_path,
-                reason = %reason,
-                "文件访问控制阻断块读"
-            );
-            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason));
-        }
-        Ok(node)
+        })
     }
 
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, std::io::Error> {
@@ -226,14 +214,27 @@ impl ExfatRuntimeState {
                     if read_len == 0 {
                         out.resize(out.len() + take, 0);
                     } else {
-                        let node = self.ensure_file_read_allowed(node_id)?;
-                        let mut file = std::fs::File::open(&node.real_path)?;
-                        file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
-                        let mut data = vec![0u8; read_len];
-                        let actual = file.read(&mut data)?;
-                        out.extend_from_slice(&data[..actual]);
-                        if actual < take {
-                            out.resize(out.len() + take - actual, 0);
+                        let node = self.file_node(node_id)?;
+                        match &node.file_view {
+                            Some(VfsFileView::BlockedPlaceholder { reason, .. }) => {
+                                tracing::debug!(
+                                    virtual_path = %node.virtual_path,
+                                    reason = %reason,
+                                    "阻断文件读取返回策略占位内容"
+                                );
+                                let data = read_placeholder_slice(file_offset, sector_offset, take);
+                                out.extend_from_slice(&data);
+                            }
+                            _ => {
+                                let mut file = std::fs::File::open(&node.real_path)?;
+                                file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
+                                let mut data = vec![0u8; read_len];
+                                let actual = file.read(&mut data)?;
+                                out.extend_from_slice(&data[..actual]);
+                                if actual < take {
+                                    out.resize(out.len() + take - actual, 0);
+                                }
+                            }
                         }
                     }
                 }
@@ -241,14 +242,26 @@ impl ExfatRuntimeState {
                     node_id,
                     file_offset,
                 } => {
-                    let node = self.ensure_file_read_allowed(node_id)?;
-                    let mut file = std::fs::File::open(&node.real_path)?;
-                    file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
-                    let mut data = vec![0u8; take];
-                    let actual = file.read(&mut data)?;
-                    out.extend_from_slice(&data[..actual]);
-                    if actual < take {
-                        out.resize(out.len() + take - actual, 0);
+                    let node = self.file_node(node_id)?;
+                    match &node.file_view {
+                        Some(VfsFileView::BlockedPlaceholder { reason, .. }) => {
+                            tracing::debug!(
+                                virtual_path = %node.virtual_path,
+                                reason = %reason,
+                                "阻断文件零填充区域读取返回 0"
+                            );
+                            out.resize(out.len() + take, 0);
+                        }
+                        _ => {
+                            let mut file = std::fs::File::open(&node.real_path)?;
+                            file.seek(SeekFrom::Start(file_offset + sector_offset as u64))?;
+                            let mut data = vec![0u8; take];
+                            let actual = file.read(&mut data)?;
+                            out.extend_from_slice(&data[..actual]);
+                            if actual < take {
+                                out.resize(out.len() + take - actual, 0);
+                            }
+                        }
                     }
                 }
                 SectorOwner::OutOfRange => {
@@ -645,6 +658,23 @@ fn padded_sector(data: &[u8]) -> Vec<u8> {
     let mut out = vec![0u8; SECTOR_SIZE as usize];
     let copy_len = data.len().min(SECTOR_SIZE as usize);
     out[..copy_len].copy_from_slice(&data[..copy_len]);
+    out
+}
+
+fn read_placeholder_slice(file_offset: u64, sector_offset: usize, take: usize) -> Vec<u8> {
+    let placeholder = blocked_placeholder_bytes();
+    let Some(start_u64) = file_offset.checked_add(sector_offset as u64) else {
+        return vec![0u8; take];
+    };
+    let Ok(start) = usize::try_from(start_u64) else {
+        return vec![0u8; take];
+    };
+    let mut out = Vec::with_capacity(take);
+    if start < placeholder.len() {
+        let end = (start + take).min(placeholder.len());
+        out.extend_from_slice(&placeholder[start..end]);
+    }
+    out.resize(take, 0);
     out
 }
 

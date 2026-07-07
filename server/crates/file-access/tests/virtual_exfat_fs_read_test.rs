@@ -4,7 +4,9 @@ use std::fs;
 use file_access::exfat::directory_parser::parse_entry_sets;
 use file_access::exfat::fs::VirtualExfatFs;
 use file_access::exfat::layout::SECTOR_SIZE;
-use file_access::types::{ControlledEntry, ExecFileType, PolicySnapshot};
+use file_access::types::{
+    blocked_placeholder_bytes, ControlledEntry, ExecFileType, PolicySnapshot,
+};
 
 fn snapshot() -> PolicySnapshot {
     PolicySnapshot {
@@ -62,7 +64,7 @@ fn read_at_allows_unblocked_file_data_from_real_mount() {
 }
 
 #[test]
-fn read_at_denies_blacklisted_file_data_without_hiding_node() {
+fn read_at_returns_placeholder_for_blacklisted_file_data_without_hiding_node() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("bad.blocked"), b"secret").unwrap();
     let tree = vec![entry(tmp.path(), "bad.blocked", 6, "blocked")];
@@ -70,12 +72,15 @@ fn read_at_denies_blacklisted_file_data_without_hiding_node() {
 
     assert!(fs.lookup_path("/bad.blocked").is_some());
     let offset = root_file_data_offset(&fs, "bad.blocked");
-    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
-    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    let data = fs.read_at(offset, SECTOR_SIZE as usize).unwrap();
+    let placeholder = blocked_placeholder_bytes();
+
+    assert_eq!(&data[..placeholder.len()], placeholder.as_slice());
+    assert!(data[placeholder.len()..].iter().all(|byte| *byte == 0));
 }
 
 #[test]
-fn read_at_denies_executable_file_data_when_exec_control_enabled() {
+fn read_at_returns_placeholder_for_executable_file_data_when_exec_control_enabled() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("setup.exe"), b"MZ executable").unwrap();
     let mut executable = entry(tmp.path(), "setup.exe", 13, "exe");
@@ -85,12 +90,15 @@ fn read_at_denies_executable_file_data_when_exec_control_enabled() {
 
     assert!(fs.lookup_path("/setup.exe").is_some());
     let offset = root_file_data_offset(&fs, "setup.exe");
-    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
-    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    let data = fs.read_at(offset, SECTOR_SIZE as usize).unwrap();
+    let placeholder = blocked_placeholder_bytes();
+
+    assert_eq!(&data[..placeholder.len()], placeholder.as_slice());
+    assert_ne!(&data[..2], b"MZ");
 }
 
 #[test]
-fn read_at_denies_autorun_file_data_when_auto_read_control_enabled() {
+fn read_at_returns_placeholder_for_autorun_file_data_when_auto_read_control_enabled() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(tmp.path().join("autorun.inf"), b"[autorun]").unwrap();
     let mut autorun = entry(tmp.path(), "autorun.inf", 9, "inf");
@@ -99,8 +107,10 @@ fn read_at_denies_autorun_file_data_when_auto_read_control_enabled() {
 
     assert!(fs.lookup_path("/autorun.inf").is_some());
     let offset = root_file_data_offset(&fs, "autorun.inf");
-    let err = fs.read_at(offset, SECTOR_SIZE as usize).unwrap_err();
-    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    let data = fs.read_at(offset, SECTOR_SIZE as usize).unwrap();
+    let placeholder = blocked_placeholder_bytes();
+
+    assert_eq!(&data[..placeholder.len()], placeholder.as_slice());
 }
 
 #[test]
