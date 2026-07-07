@@ -13,7 +13,7 @@ VM 自动化必须先覆盖以下 S04 runtime 场景，再进入 RK3568 + Window
 - 目录 entry data length 缩短解析为 truncate，真实文件 size 和内容同步。
 - 父目录 entry 删除解析为目录树删除，真实 U 盘整棵目录消失。
 - 只读权限拒绝 create/write/delete/rename/truncate，真实 U 盘和 runtime 不产生稳定变更。
-- 策略阻断和病毒文件禁止操作不修改真实 U 盘。
+- 策略阻断和病毒文件读取返回占位内容，写改删禁止且不修改真实 U 盘。
 
 ## 环境
 
@@ -50,8 +50,8 @@ VM 自动化必须先覆盖以下 S04 runtime 场景，再进入 RK3568 + Window
 | V13 | 删除目录 | `Remove-Item G:\dir -Recurse` | `test ! -e` | 真实目录删除 |
 | V14 | 重命名文件 | `Rename-Item` | `test -e new; test ! -e old` | 新名存在，旧名不存在 |
 | V15 | 重命名目录 | `Rename-Item` | `test -d new; test ! -e old` | 新目录存在，旧目录不存在 |
-| V16 | 病毒文件 | 文件可见、size=0、打开失败 | 真实文件名和内容不变 | 符合 PRD |
-| V17 | 黑名单/可执行读取 | 打开时报 I/O error | 真实文件不变 | 普通文件不受影响 |
+| V16 | 病毒文件 | 文件可见、大小为占位内容字节长度、读取返回占位内容、写改删失败 | 真实文件名和内容不变 | 不暴露真实内容，不返回策略读 EIO |
+| V17 | 黑名单/可执行/autorun 读取 | 文件可见、大小为占位内容字节长度、读取返回占位内容、复制只能得到占位内容 | 真实文件不变 | 普通文件不受影响，不返回策略读 EIO |
 | V18 | 只读权限 | Windows 写入失败 | `find` 无新增/修改 | 真实 U 盘无变更 |
 | V19 | Windows 卷健康 | `Get-Volume` | RK 无 nbdp1 循环 | 不出现 `Full Repair Needed` |
 | V20 | 停服务/拔出 | 盘符移除 | LUN/NBD/mount 清理 | 设备级日志完整 |

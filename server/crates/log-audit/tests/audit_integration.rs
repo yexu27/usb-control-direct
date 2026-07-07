@@ -34,10 +34,6 @@ fn log_usb_audit_inserts_record() {
         event_type: "device_insert".into(),
         permission: None,
         capacity_bytes: None,
-        file_path: None,
-        matched_policy: None,
-        result: "allowed".into(),
-        fail_reason: None,
         detail: None,
     };
     let id = service.log_usb_audit(&mut item).unwrap();

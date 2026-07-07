@@ -13,7 +13,9 @@ use usb_identify::traits::ScanResult;
 use crate::exfat::fs::VirtualExfatFs;
 use crate::file_tree::build_file_tree;
 use crate::policy::{evaluate_access, load_policy_snapshot};
-use crate::types::{AccessDecision, ControlledEntry, PolicySnapshot};
+use crate::types::{
+    blocked_placeholder_bytes, AccessDecision, ControlledEntry, PolicySnapshot,
+};
 
 /// 受控虚拟介质构建器。
 pub struct VirtualMediaBuilder {
@@ -58,10 +60,31 @@ fn log_blocked_entries(entries: &[ControlledEntry], snapshot: &PolicySnapshot) {
     for entry in entries {
         let decision = evaluate_access(entry, snapshot);
         if let AccessDecision::Deny(ref reason) = decision {
-            warn!(file = %entry.virtual_name, reason = %reason, "文件被策略阻断");
+            warn!(
+                file = %entry.virtual_name,
+                reason = %reason,
+                placeholder_size = blocked_placeholder_bytes().len(),
+                real_size = entry.file_size,
+                policy_level = %policy_level(reason),
+                "文件被策略阻断，构建占位文件视图"
+            );
         }
         if entry.is_dir && !entry.children.is_empty() {
             log_blocked_entries(&entry.children, snapshot);
         }
+    }
+}
+
+fn policy_level(reason: &str) -> &'static str {
+    if reason.starts_with("L1") {
+        "L1"
+    } else if reason.starts_with("L2") {
+        "L2"
+    } else if reason.starts_with("L3") {
+        "L3"
+    } else if reason.starts_with("L4") {
+        "L4"
+    } else {
+        "unknown"
     }
 }
