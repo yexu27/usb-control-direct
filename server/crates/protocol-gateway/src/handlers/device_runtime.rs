@@ -51,12 +51,8 @@ pub fn handle_get_device_runtime_status(ctx: &RequestContext, payload: &[u8]) ->
     debug!(count = devices.len(), "设备运行态查询成功");
 
     let rsp = RspDeviceRuntimeStatus { devices };
-    codec::encode_frame(
-        RSP_DEVICE_RUNTIME_STATUS,
-        ctx.seq_id,
-        &rsp.encode_to_vec(),
-    )
-    .unwrap_or_default()
+    codec::encode_frame(RSP_DEVICE_RUNTIME_STATUS, ctx.seq_id, &rsp.encode_to_vec())
+        .unwrap_or_default()
 }
 
 fn error_response(seq_id: u32, code: ResultCode, msg: &str) -> Vec<u8> {
