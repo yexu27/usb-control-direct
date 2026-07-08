@@ -52,10 +52,12 @@ fn virtual_exfat_facade_write_path_does_not_use_legacy_overlay_or_diff() {
         );
     }
     assert!(
-        write_at.contains("try_commit_closed_transaction")
-            || write_at.contains(".write_at(offset, data)")
-            || write_at.contains("commit_closed"),
-        "VirtualExfatFs::write_at must route to Runtime exFAT commit path"
+        !write_at.contains("try_commit_closed_transaction"),
+        "VirtualExfatFs::write_at must not route through removed low-level transaction API"
+    );
+    assert!(
+        write_at.contains(".write_at(offset, data)"),
+        "VirtualExfatFs::write_at must delegate to runtime block write path"
     );
 }
 

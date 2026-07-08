@@ -19,10 +19,6 @@ impl MetadataOverlay {
         self.sectors.get(&sector).map(Vec::as_slice)
     }
 
-    pub fn insert_sector(&mut self, sector: u64, data: &[u8]) {
-        self.sectors.insert(sector, padded_sector(data));
-    }
-
     pub fn apply_committed(
         &mut self,
         updates: &[CommittedMetadataUpdate],
@@ -42,11 +38,18 @@ impl MetadataOverlay {
         }
         Ok(())
     }
-}
 
-fn padded_sector(data: &[u8]) -> Vec<u8> {
-    let mut out = vec![0u8; SECTOR_SIZE as usize];
-    let copy_len = data.len().min(SECTOR_SIZE as usize);
-    out[..copy_len].copy_from_slice(&data[..copy_len]);
-    out
+    pub(crate) fn apply_committed_sector(
+        &mut self,
+        sector: u64,
+        data: &[u8],
+    ) -> Result<(), std::io::Error> {
+        let mut padded = vec![0u8; SECTOR_SIZE as usize];
+        let copy_len = data.len().min(SECTOR_SIZE as usize);
+        padded[..copy_len].copy_from_slice(&data[..copy_len]);
+        self.apply_committed(&[CommittedMetadataUpdate::Sector {
+            sector,
+            data: padded,
+        }])
+    }
 }

@@ -8,8 +8,7 @@ use tracing::debug;
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::exfat::runtime_state::ExfatRuntimeState;
 use crate::types::{ControlledEntry, PolicySnapshot};
-use crate::vfs::mutation::{FsMutation, NodeKind};
-use crate::vfs::{NodeId, VfsNodeKind};
+use crate::vfs::NodeId;
 
 pub struct VirtualExfatFs {
     runtime: Mutex<ExfatRuntimeState>,
@@ -58,76 +57,6 @@ impl VirtualExfatFs {
         self.runtime.lock().unwrap().write_at(offset, data)
     }
 
-    pub fn create_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        let (parent, name) = split_virtual_path(virtual_path)?;
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::CreateFile {
-            parent,
-            name,
-            size: 0,
-            valid_data_len: 0,
-            chain: None,
-            data_patches: Vec::new(),
-        })
-    }
-
-    pub fn create_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        let (parent, name) = split_virtual_path(virtual_path)?;
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::CreateDir {
-            parent,
-            name,
-            chain: None,
-        })
-    }
-
-    pub fn write_file(
-        &self,
-        virtual_path: &str,
-        offset: u64,
-        data: &[u8],
-    ) -> Result<(), std::io::Error> {
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::WriteFile {
-            virtual_path: virtual_path.to_string(),
-            offset,
-            data: data.to_vec(),
-        })
-    }
-
-    pub fn truncate(&self, virtual_path: &str, len: u64) -> Result<(), std::io::Error> {
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::Truncate {
-            virtual_path: virtual_path.to_string(),
-            len,
-        })
-    }
-
-    pub fn rename(&self, from: &str, to: &str) -> Result<(), std::io::Error> {
-        let kind = {
-            let runtime = self.runtime.lock().unwrap();
-            let node = runtime.lookup_path(from).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "rename source not found")
-            })?;
-            node_kind(node.kind)
-        };
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::Rename {
-            from: from.to_string(),
-            to: to.to_string(),
-            kind,
-        })
-    }
-
-    pub fn delete_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        let kind = {
-            let runtime = self.runtime.lock().unwrap();
-            let node = runtime.lookup_path(virtual_path).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "delete target not found")
-            })?;
-            node_kind(node.kind)
-        };
-        self.runtime.lock().unwrap().commit_mutation(FsMutation::Delete {
-            virtual_path: virtual_path.to_string(),
-            kind,
-        })
-    }
-
     pub fn flush(&self) -> Result<(), std::io::Error> {
         self.runtime.lock().unwrap().flush()
     }
@@ -135,34 +64,6 @@ impl VirtualExfatFs {
     pub fn shutdown(&self) -> Result<(), std::io::Error> {
         self.runtime.lock().unwrap().shutdown()
     }
-}
-
-fn node_kind(kind: VfsNodeKind) -> NodeKind {
-    match kind {
-        VfsNodeKind::File => NodeKind::File,
-        VfsNodeKind::Directory => NodeKind::Directory,
-    }
-}
-
-fn split_virtual_path(path: &str) -> Result<(String, String), std::io::Error> {
-    if !path.starts_with('/') || path == "/" {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "virtual path must be an absolute non-root path",
-        ));
-    }
-    let trimmed = path.trim_end_matches('/');
-    let (parent, name) = trimmed.rsplit_once('/').ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid virtual path")
-    })?;
-    if name.is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "virtual path name is empty",
-        ));
-    }
-    let parent = if parent.is_empty() { "/" } else { parent };
-    Ok((parent.to_string(), name.to_string()))
 }
 
 impl crate::block_backend::BlockBackend for VirtualExfatFs {

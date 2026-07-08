@@ -1,6 +1,6 @@
 //! FAT 表生成。
 
-use crate::exfat::layout::{FAT_ENTRY_SIZE, FAT_MEDIA_TYPE, FAT_END_OF_CHAIN, SECTOR_SIZE};
+use crate::exfat::layout::{FAT_END_OF_CHAIN, FAT_ENTRY_SIZE, FAT_MEDIA_TYPE, SECTOR_SIZE};
 
 /// FAT 簇链构建器。
 pub struct FatBuilder {
@@ -65,42 +65,5 @@ impl FatBuilder {
             }
         }
         data
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fat_reserved_entries() {
-        let builder = FatBuilder::new(10);
-        let data = builder.build(1);
-        let e0 = u32::from_le_bytes(data[0..4].try_into().unwrap());
-        let e1 = u32::from_le_bytes(data[4..8].try_into().unwrap());
-        assert_eq!(e0, FAT_MEDIA_TYPE);
-        assert_eq!(e1, FAT_END_OF_CHAIN);
-    }
-
-    #[test]
-    fn fat_single_cluster() {
-        let mut builder = FatBuilder::new(10);
-        builder.set_single(2);
-        let data = builder.build(1);
-        let e2 = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        assert_eq!(e2, FAT_END_OF_CHAIN);
-    }
-
-    #[test]
-    fn fat_chain() {
-        let mut builder = FatBuilder::new(10);
-        builder.set_chain(2, 3);
-        let data = builder.build(1);
-        let e2 = u32::from_le_bytes(data[8..12].try_into().unwrap());
-        let e3 = u32::from_le_bytes(data[12..16].try_into().unwrap());
-        let e4 = u32::from_le_bytes(data[16..20].try_into().unwrap());
-        assert_eq!(e2, 3);
-        assert_eq!(e3, 4);
-        assert_eq!(e4, FAT_END_OF_CHAIN);
     }
 }

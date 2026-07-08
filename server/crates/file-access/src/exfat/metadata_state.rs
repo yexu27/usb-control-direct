@@ -59,6 +59,10 @@ impl ExfatMetadataState {
         self.fat.entry_for(cluster)
     }
 
+    pub(crate) fn chain_from(&self, first_cluster: u32) -> Result<Vec<u32>, std::io::Error> {
+        self.fat.chain_from(first_cluster)
+    }
+
     pub fn fat_cluster_count(&self) -> u32 {
         self.fat.cluster_count()
     }

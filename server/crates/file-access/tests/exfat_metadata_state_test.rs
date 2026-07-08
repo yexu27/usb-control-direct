@@ -1,98 +1,65 @@
-use std::collections::HashSet;
+use file_access::exfat::bitmap_state::BitmapState;
+use file_access::exfat::directory_store::DirectoryStore;
+use file_access::exfat::fat_state::FatState;
+use file_access::exfat::layout::{DiskLayout, FAT_END_OF_CHAIN};
+use file_access::exfat::metadata_state::ExfatMetadataState;
+use file_access::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
+use file_access::vfs::mutation::ClusterChain;
+use file_access::vfs::NodeId;
 
-use file_access::exfat::layout::{
-    BOOT_REGION_SECTORS, FAT_END_OF_CHAIN, PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
-};
-use file_access::exfat::runtime_state::ExfatRuntimeState;
-use file_access::exfat::sector_owner::SectorOwner;
-use file_access::types::PolicySnapshot;
-use file_access::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation};
-
-fn rw_snapshot() -> PolicySnapshot {
-    PolicySnapshot {
-        exec_control_enabled: false,
-        file_type_blacklist_enabled: false,
-        auto_read_control_enabled: false,
-        blacklist_extensions: HashSet::new(),
-        permission: 1,
-    }
-}
-
-fn first_free_cluster(state: &ExfatRuntimeState) -> u32 {
-    for sector in 0..state.total_sectors() {
-        if let SectorOwner::FreeCluster { cluster } = state.sector_owner(sector) {
-            return cluster;
-        }
-    }
-    panic!("expected free cluster");
+fn metadata_state() -> (DiskLayout, ExfatMetadataState) {
+    let layout = DiskLayout::new_with_min_total_bytes(32, 16 * 1024 * 1024);
+    let metadata = ExfatMetadataState::new(
+        FatState::new(layout.cluster_count),
+        BitmapState::new(layout.cluster_count),
+        DirectoryStore::default(),
+        SectorOwnerMap::new(layout.total_sectors),
+    );
+    (layout, metadata)
 }
 
 #[test]
 fn metadata_state_registers_directory_chain_in_all_indexes() {
-    let tmp = tempfile::tempdir().unwrap();
-    let mut state =
-        ExfatRuntimeState::from_controlled_tree(tmp.path(), &[], rw_snapshot(), 16 * 1024 * 1024)
-            .unwrap();
+    let (layout, mut metadata) = metadata_state();
+    let node_id = NodeId(1);
+    let cluster = 10;
 
-    let cluster = first_free_cluster(&state);
-    state
-        .commit_mutation(FsMutation::CreateDir {
-            parent: "/".to_string(),
-            name: "dir".to_string(),
-            chain: Some(ClusterChain {
-                first_cluster: cluster,
-                clusters: vec![cluster],
-            }),
-        })
+    metadata
+        .set_directory_chain(&layout, node_id, "/dir".to_string(), vec![cluster])
         .unwrap();
 
-    let node = state.lookup_path("/dir").unwrap();
-    assert!(state.directory_store().directory_clusters("/dir").is_some());
+    assert_eq!(metadata.directory_clusters("/dir").unwrap(), &[cluster]);
+    assert!(metadata.is_allocated(cluster));
     assert!(matches!(
-        state.sector_owner(state.cluster_to_sector(cluster)),
-        SectorOwner::DirectoryData { node_id } if node_id == node.id.0
+        metadata.owner_of(layout.cluster_to_sector(cluster)),
+        SectorOwner::DirectoryData { node_id: 1 }
     ));
-    state.validate_consistency().unwrap();
+    assert_eq!(metadata.fat_entry_for(cluster), Some(FAT_END_OF_CHAIN));
 }
 
 #[test]
-fn committed_file_chain_is_rendered_to_fat_and_bitmap_overlay() {
-    let tmp = tempfile::tempdir().unwrap();
-    let mut state =
-        ExfatRuntimeState::from_controlled_tree(tmp.path(), &[], rw_snapshot(), 16 * 1024 * 1024)
-            .unwrap();
+fn metadata_state_registers_file_chain_in_fat_bitmap_and_sector_owners() {
+    let (layout, mut metadata) = metadata_state();
+    let node_id = NodeId(2);
+    let chain = ClusterChain {
+        first_cluster: 20,
+        clusters: vec![20, 21],
+    };
 
-    let cluster = first_free_cluster(&state);
-    state
-        .commit_mutation(FsMutation::CreateFile {
-            parent: "/".to_string(),
-            name: "created.txt".to_string(),
-            size: 4,
-            valid_data_len: 4,
-            chain: Some(ClusterChain {
-                first_cluster: cluster,
-                clusters: vec![cluster],
-            }),
-            data_patches: vec![FileDataPatch {
-                virtual_path: "/created.txt".to_string(),
-                offset: 0,
-                data: b"data".to_vec(),
-            }],
-        })
+    metadata
+        .set_file_chain(&layout, node_id, &chain, layout.cluster_size() as u64 + 4)
         .unwrap();
 
-    let fat_entry_offset = (PARTITION_OFFSET_SECTORS + BOOT_REGION_SECTORS * 2)
-        * SECTOR_SIZE as u64
-        + cluster as u64 * 4;
-    let fat_entry = state.read_at(fat_entry_offset, 4).unwrap();
-    assert_eq!(
-        u32::from_le_bytes(fat_entry.try_into().unwrap()),
-        FAT_END_OF_CHAIN
-    );
-
-    let bitmap_bit = (cluster - 2) as usize;
-    let bitmap_byte_offset =
-        state.cluster_to_sector(3) * SECTOR_SIZE as u64 + (bitmap_bit / 8) as u64;
-    let bitmap_byte = state.read_at(bitmap_byte_offset, 1).unwrap()[0];
-    assert_ne!(bitmap_byte & (1 << (bitmap_bit % 8)), 0);
+    assert!(metadata.is_allocated(20));
+    assert!(metadata.is_allocated(21));
+    assert_eq!(metadata.fat_entry_for(20), Some(21));
+    assert_eq!(metadata.fat_entry_for(21), Some(FAT_END_OF_CHAIN));
+    assert!(matches!(
+        metadata.owner_of(layout.cluster_to_sector(20)),
+        SectorOwner::FileData { node_id: 2, .. }
+    ));
+    assert!(matches!(
+        metadata.owner_of(layout.cluster_to_sector(21)),
+        SectorOwner::FileData { node_id: 2, .. }
+    ));
 }

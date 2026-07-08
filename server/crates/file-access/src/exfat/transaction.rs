@@ -3,18 +3,6 @@
 use crate::exfat::sector_owner::SectorOwner;
 use crate::vfs::mutation::FsMutation;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MutationCommitState {
-    PendingWrite,
-    ParsedMutation,
-    PolicyChecked,
-    RealFsCommitting,
-    RealFsCommitted,
-    RuntimeCommitted,
-    Failed,
-    RebuildRuntimeIfNeeded,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionWrite {
     Fat {
@@ -45,15 +33,27 @@ pub enum TransactionWrite {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingReason {
     WaitingForDirectoryData { sector: u64 },
-    WaitingForMetadata { sector: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionError {
-    UnknownDirectoryOwner { sector: u64 },
-    MissingDirectoryImage { parent: String },
-    DirectoryWriteBeforeStart { parent: String, sector: u64 },
-    UnsupportedDirectoryRewrite { parent: String },
+    UnknownDirectoryOwner {
+        sector: u64,
+    },
+    MissingDirectoryImage {
+        parent: String,
+    },
+    DirectoryWriteBeforeStart {
+        parent: String,
+        sector: u64,
+    },
+    UnsupportedDirectoryRewrite {
+        parent: String,
+    },
+    UnresolvedClusterChain {
+        first_cluster: u32,
+        data_length: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +64,6 @@ pub enum CommittedMetadataUpdate {
 #[derive(Debug, Clone)]
 pub struct ResolvedTransaction {
     pub mutations: Vec<FsMutation>,
-    pub metadata_updates: Vec<CommittedMetadataUpdate>,
 }
 
 #[derive(Debug, Clone)]
@@ -89,7 +88,6 @@ impl TransactionWrite {
 #[derive(Debug, Clone)]
 pub struct PendingTransaction {
     id: u64,
-    state: MutationCommitState,
     writes: Vec<TransactionWrite>,
 }
 
@@ -97,17 +95,12 @@ impl PendingTransaction {
     pub fn new(id: u64) -> Self {
         Self {
             id,
-            state: MutationCommitState::PendingWrite,
             writes: Vec::new(),
         }
     }
 
     pub fn id(&self) -> u64 {
         self.id
-    }
-
-    pub fn state(&self) -> MutationCommitState {
-        self.state
     }
 
     pub fn writes(&self) -> &[TransactionWrite] {
@@ -118,15 +111,6 @@ impl PendingTransaction {
         self.writes.push(write);
     }
 
-    pub fn transition(&mut self, state: MutationCommitState) {
-        self.state = state;
-    }
-
-    pub fn clear(&mut self) {
-        self.writes.clear();
-        self.state = MutationCommitState::PendingWrite;
-    }
-
     pub fn retain_deferred_data_writes(&mut self) {
         self.writes.retain(|write| {
             matches!(
@@ -134,7 +118,6 @@ impl PendingTransaction {
                 TransactionWrite::FileData { .. } | TransactionWrite::FreeCluster { .. }
             )
         });
-        self.state = MutationCommitState::PendingWrite;
     }
 
     pub fn is_empty(&self) -> bool {

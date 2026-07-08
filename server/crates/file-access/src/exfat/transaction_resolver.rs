@@ -101,7 +101,14 @@ impl TransactionResolver {
                     kind: *kind,
                 });
                 if !new_entries[0].is_dir {
-                    let chain = entry_chain(new_entries[0].first_cluster);
+                    let chain = match resolve_entry_chain(
+                        state,
+                        new_entries[0].first_cluster,
+                        new_entries[0].data_length,
+                    ) {
+                        Ok(chain) => chain,
+                        Err(err) => return Ok(ResolveStatus::Invalid(err)),
+                    };
                     mutations.push(FsMutation::RewriteFile {
                         virtual_path: to,
                         size: new_entries[0].data_length,
@@ -148,10 +155,14 @@ impl TransactionResolver {
                                 len: entry.data_length,
                             });
                         } else if entry_first_cluster != node.first_cluster {
-                            let chain = entry_first_cluster.map(|first_cluster| ClusterChain {
-                                first_cluster,
-                                clusters: vec![first_cluster],
-                            });
+                            let chain = match resolve_entry_chain(
+                                state,
+                                entry.first_cluster,
+                                entry.data_length,
+                            ) {
+                                Ok(chain) => chain,
+                                Err(err) => return Ok(ResolveStatus::Invalid(err)),
+                            };
                             let data_patches = collect_data_patches(
                                 tx,
                                 &virtual_path,
@@ -169,7 +180,11 @@ impl TransactionResolver {
                     }
                     continue;
                 }
-                let chain = entry_chain(entry.first_cluster);
+                let chain = match resolve_entry_chain(state, entry.first_cluster, entry.data_length)
+                {
+                    Ok(chain) => chain,
+                    Err(err) => return Ok(ResolveStatus::Invalid(err)),
+                };
                 if entry.is_dir {
                     mutations.push(FsMutation::CreateDir {
                         parent: parent.clone(),
@@ -177,7 +192,16 @@ impl TransactionResolver {
                         chain: chain.clone(),
                     });
                     if let Some(data) = free_cluster_data(tx, entry.first_cluster) {
-                        resolve_new_directory_entries(&virtual_path, &data, tx, &mut mutations)?;
+                        match resolve_new_directory_entries(
+                            state,
+                            &virtual_path,
+                            &data,
+                            tx,
+                            &mut mutations,
+                        ) {
+                            Ok(()) => {}
+                            Err(err) => return Ok(ResolveStatus::Invalid(err)),
+                        }
                     }
                 } else {
                     let data_patches = collect_data_patches(
@@ -197,21 +221,23 @@ impl TransactionResolver {
                 }
             }
         }
-        Ok(ResolveStatus::Complete(ResolvedTransaction {
-            mutations,
-            metadata_updates: Vec::new(),
-        }))
+        Ok(ResolveStatus::Complete(ResolvedTransaction { mutations }))
     }
 }
 
 fn resolve_new_directory_entries(
+    state: &ExfatRuntimeState,
     parent: &str,
     data: &[u8],
     tx: &PendingTransaction,
     mutations: &mut Vec<FsMutation>,
-) -> Result<(), std::io::Error> {
-    for entry in parse_entry_sets(data)? {
-        let chain = entry_chain(entry.first_cluster);
+) -> Result<(), TransactionError> {
+    for entry in
+        parse_entry_sets(data).map_err(|_| TransactionError::UnsupportedDirectoryRewrite {
+            parent: parent.to_string(),
+        })?
+    {
+        let chain = resolve_entry_chain(state, entry.first_cluster, entry.data_length)?;
         let virtual_path = join_virtual_path(parent, &entry.name);
         if entry.is_dir {
             mutations.push(FsMutation::CreateDir {
@@ -220,7 +246,7 @@ fn resolve_new_directory_entries(
                 chain: chain.clone(),
             });
             if let Some(data) = free_cluster_data(tx, entry.first_cluster) {
-                resolve_new_directory_entries(&virtual_path, &data, tx, mutations)?;
+                resolve_new_directory_entries(state, &virtual_path, &data, tx, mutations)?;
             }
         } else {
             let data_patches =
@@ -269,11 +295,38 @@ fn entry_first_cluster(first_cluster: u32) -> Option<u32> {
     }
 }
 
-fn entry_chain(first_cluster: u32) -> Option<ClusterChain> {
-    entry_first_cluster(first_cluster).map(|first_cluster| ClusterChain {
+fn resolve_entry_chain(
+    state: &ExfatRuntimeState,
+    first_cluster: u32,
+    data_length: u64,
+) -> Result<Option<ClusterChain>, TransactionError> {
+    let Some(first_cluster) = entry_first_cluster(first_cluster) else {
+        return Ok(None);
+    };
+    let cluster_size = state.cluster_size() as u64;
+    let required_clusters = data_length.div_ceil(cluster_size).max(1) as usize;
+    if required_clusters == 1 {
+        return Ok(Some(ClusterChain {
+            first_cluster,
+            clusters: vec![first_cluster],
+        }));
+    }
+    let chain = state.metadata_chain_from(first_cluster).map_err(|_| {
+        TransactionError::UnresolvedClusterChain {
+            first_cluster,
+            data_length,
+        }
+    })?;
+    if chain.len() < required_clusters {
+        return Err(TransactionError::UnresolvedClusterChain {
+            first_cluster,
+            data_length,
+        });
+    }
+    Ok(Some(ClusterChain {
         first_cluster,
-        clusters: vec![first_cluster],
-    })
+        clusters: chain.into_iter().take(required_clusters).collect(),
+    }))
 }
 
 fn free_cluster_data(tx: &PendingTransaction, cluster: u32) -> Option<Vec<u8>> {

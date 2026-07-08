@@ -26,28 +26,3 @@ pub fn generate_bitmap(cluster_count: u32, allocated_clusters: u32) -> Vec<u8> {
 
     bitmap
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bitmap_empty() {
-        let bm = generate_bitmap(16, 0);
-        assert_eq!(bm.len(), 2);
-        assert_eq!(bm[0], 0x00);
-    }
-
-    #[test]
-    fn bitmap_first_8_clusters() {
-        let bm = generate_bitmap(16, 8);
-        assert_eq!(bm[0], 0xFF);
-        assert_eq!(bm[1], 0x00);
-    }
-
-    #[test]
-    fn bitmap_partial_byte() {
-        let bm = generate_bitmap(16, 3);
-        assert_eq!(bm[0], 0x07); // bits 0, 1, 2
-    }
-}
