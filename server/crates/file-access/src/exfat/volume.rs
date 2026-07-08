@@ -102,7 +102,9 @@ impl VirtualVolume {
         }) {
             let sector_delta = sector - mapping.start_sector;
             let offset = mapping.offset + sector_delta * SECTOR_SIZE as u64;
-            let remaining = mapping.byte_len.saturating_sub(sector_delta * SECTOR_SIZE as u64);
+            let remaining = mapping
+                .byte_len
+                .saturating_sub(sector_delta * SECTOR_SIZE as u64);
             let valid_bytes = remaining.min(SECTOR_SIZE as u64) as u32;
             return Ok(SectorContent::FileData {
                 real_path: mapping.real_path.clone(),
@@ -134,10 +136,7 @@ impl VirtualVolume {
         self.directory_sector_paths.contains_key(&sector)
     }
 
-    pub fn directory_path_for_sector(
-        &self,
-        sector: u64,
-    ) -> Result<Option<String>, std::io::Error> {
+    pub fn directory_path_for_sector(&self, sector: u64) -> Result<Option<String>, std::io::Error> {
         Ok(self.directory_sector_paths.get(&sector).cloned())
     }
 
@@ -175,13 +174,15 @@ impl VirtualVolume {
     }
 
     pub fn file_data_range_entries(&self) -> impl Iterator<Item = FileDataRangeInfo> + '_ {
-        self.file_data_ranges.iter().map(|mapping| FileDataRangeInfo {
-            start_sector: mapping.start_sector,
-            sector_count: mapping.sector_count,
-            real_path: mapping.real_path.clone(),
-            offset: mapping.offset,
-            byte_len: mapping.byte_len,
-        })
+        self.file_data_ranges
+            .iter()
+            .map(|mapping| FileDataRangeInfo {
+                start_sector: mapping.start_sector,
+                sector_count: mapping.sector_count,
+                real_path: mapping.real_path.clone(),
+                offset: mapping.offset,
+                byte_len: mapping.byte_len,
+            })
     }
 }
 
@@ -331,12 +332,17 @@ impl<'a> VolumeBuilder<'a> {
         self.root_dir_entries.extend(entries_data);
     }
 
-    fn build_directory_entries(&mut self, parent_path: &str, entries: &[ControlledEntry]) -> Vec<u8> {
+    fn build_directory_entries(
+        &mut self,
+        parent_path: &str,
+        entries: &[ControlledEntry],
+    ) -> Vec<u8> {
         let mut directory_data = Vec::new();
         for entry in entries {
             if entry.is_dir {
                 let virtual_path = join_virtual_path(parent_path, &entry.virtual_name);
-                let mut child_dir_data = self.build_directory_entries(&virtual_path, &entry.children);
+                let mut child_dir_data =
+                    self.build_directory_entries(&virtual_path, &entry.children);
                 let dir_clusters_needed = if child_dir_data.is_empty() {
                     1
                 } else {
@@ -344,9 +350,14 @@ impl<'a> VolumeBuilder<'a> {
                 };
                 let dir_cluster = self.allocate_clusters(dir_clusters_needed);
 
-                // 生成目录项（放入父目录，即 root_dir_entries）
-                let dir_entry_data =
-                    build_file_entry_set(&entry.virtual_name, true, dir_cluster, 0, false);
+                let dir_data_length = dir_clusters_needed as u64 * CLUSTER_SIZE as u64;
+                let dir_entry_data = build_file_entry_set(
+                    &entry.virtual_name,
+                    true,
+                    dir_cluster,
+                    dir_data_length,
+                    false,
+                );
                 directory_data.extend(dir_entry_data);
 
                 // 填充到簇对齐大小
@@ -359,8 +370,10 @@ impl<'a> VolumeBuilder<'a> {
                 });
             } else {
                 // 文件
-                let is_blocked =
-                    matches!(evaluate_access(entry, self.snapshot), AccessDecision::Deny(_));
+                let is_blocked = matches!(
+                    evaluate_access(entry, self.snapshot),
+                    AccessDecision::Deny(_)
+                );
                 let display_size = virtual_file_size(entry, self.snapshot);
                 let (file_cluster, file_clusters) = if display_size == 0 {
                     (0, 0)

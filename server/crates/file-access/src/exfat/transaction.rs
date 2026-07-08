@@ -1,6 +1,7 @@
 //! Runtime exFAT write transactions.
 
 use crate::exfat::sector_owner::SectorOwner;
+use crate::vfs::mutation::FsMutation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MutationCommitState {
@@ -16,11 +17,61 @@ pub enum MutationCommitState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionWrite {
-    Fat { sector: u64, data: Vec<u8> },
-    Bitmap { sector: u64, data: Vec<u8> },
-    Directory { sector: u64, owner: SectorOwner, data: Vec<u8> },
-    FileData { sector: u64, owner: SectorOwner, data: Vec<u8> },
-    FreeCluster { sector: u64, owner: SectorOwner, data: Vec<u8> },
+    Fat {
+        sector: u64,
+        data: Vec<u8>,
+    },
+    Bitmap {
+        sector: u64,
+        data: Vec<u8>,
+    },
+    Directory {
+        sector: u64,
+        owner: SectorOwner,
+        data: Vec<u8>,
+    },
+    FileData {
+        sector: u64,
+        owner: SectorOwner,
+        data: Vec<u8>,
+    },
+    FreeCluster {
+        sector: u64,
+        owner: SectorOwner,
+        data: Vec<u8>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PendingReason {
+    WaitingForDirectoryData { sector: u64 },
+    WaitingForMetadata { sector: u64 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransactionError {
+    UnknownDirectoryOwner { sector: u64 },
+    MissingDirectoryImage { parent: String },
+    DirectoryWriteBeforeStart { parent: String, sector: u64 },
+    UnsupportedDirectoryRewrite { parent: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommittedMetadataUpdate {
+    Sector { sector: u64, data: Vec<u8> },
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedTransaction {
+    pub mutations: Vec<FsMutation>,
+    pub metadata_updates: Vec<CommittedMetadataUpdate>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ResolveStatus {
+    Complete(ResolvedTransaction),
+    Incomplete(PendingReason),
+    Invalid(TransactionError),
 }
 
 impl TransactionWrite {

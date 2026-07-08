@@ -28,8 +28,23 @@ impl FatState {
         for pair in chain.windows(2) {
             self.entries.insert(pair[0], pair[1]);
         }
-        self.entries.insert(*chain.last().unwrap(), FAT_END_OF_CHAIN);
+        self.entries
+            .insert(*chain.last().unwrap(), FAT_END_OF_CHAIN);
         Ok(())
+    }
+
+    pub fn mark_free(&mut self, cluster: u32) -> Result<(), std::io::Error> {
+        self.validate_cluster(cluster)?;
+        self.entries.remove(&cluster);
+        Ok(())
+    }
+
+    pub fn entry_for(&self, cluster: u32) -> Option<u32> {
+        self.entries.get(&cluster).copied()
+    }
+
+    pub fn cluster_count(&self) -> u32 {
+        self.cluster_count
     }
 
     pub fn chain_from(&self, start: u32) -> Result<Vec<u32>, std::io::Error> {

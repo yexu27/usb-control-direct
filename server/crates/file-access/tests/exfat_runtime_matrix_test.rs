@@ -7,7 +7,7 @@ use file_access::exfat::fs::VirtualExfatFs;
 use file_access::exfat::layout::SECTOR_SIZE;
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::sector_owner::SectorOwner;
-use file_access::exfat::transaction::PendingTransaction;
+use file_access::exfat::transaction::{PendingTransaction, ResolveStatus};
 use file_access::types::{ControlledEntry, PolicySnapshot};
 use file_access::vfs::mutation::FsMutation;
 
@@ -113,6 +113,21 @@ fn write_facade_dir_entries(fs: &VirtualExfatFs, dir_cluster: u32, entries: Vec<
         .unwrap();
 }
 
+fn commit_closed_transaction(state: &mut ExfatRuntimeState, tx: &PendingTransaction) {
+    let mutations = match state.try_commit_closed_transaction(tx).unwrap() {
+        ResolveStatus::Complete(resolved) => resolved.mutations,
+        ResolveStatus::Incomplete(reason) => {
+            panic!("expected complete transaction, got incomplete: {reason:?}")
+        }
+        ResolveStatus::Invalid(err) => {
+            panic!("expected complete transaction, got invalid: {err:?}")
+        }
+    };
+    for mutation in mutations {
+        state.commit_mutation(mutation).unwrap();
+    }
+}
+
 #[test]
 fn runtime_matrix_commits_create_write_rename_truncate_and_delete_tree() {
     let tmp = tempfile::tempdir().unwrap();
@@ -129,7 +144,7 @@ fn runtime_matrix_commits_create_write_rename_truncate_and_delete_tree() {
         root_sector,
         vec![build_file_entry_set("matrix", true, dir_cluster, 0, false)],
     );
-    state.try_commit_closed_transaction(&tx).unwrap();
+    commit_closed_transaction(&mut state, &tx);
     assert!(tmp.path().join("matrix").is_dir());
 
     let matrix_sector = state.cluster_to_sector(dir_cluster);
@@ -137,24 +152,41 @@ fn runtime_matrix_commits_create_write_rename_truncate_and_delete_tree() {
     let mut tx = PendingTransaction::new(2);
     let mut file_data = vec![0u8; SECTOR_SIZE as usize];
     file_data[..11].copy_from_slice(b"hello world");
-    state.record_write(&mut tx, file_sector, &file_data).unwrap();
+    state
+        .record_write(&mut tx, file_sector, &file_data)
+        .unwrap();
     write_entries(
         &state,
         &mut tx,
         matrix_sector,
-        vec![build_file_entry_set("file.txt", false, file_cluster, 11, false)],
+        vec![build_file_entry_set(
+            "file.txt",
+            false,
+            file_cluster,
+            11,
+            false,
+        )],
     );
-    state.try_commit_closed_transaction(&tx).unwrap();
-    assert_eq!(std::fs::read(tmp.path().join("matrix/file.txt")).unwrap(), b"hello world");
+    commit_closed_transaction(&mut state, &tx);
+    assert_eq!(
+        std::fs::read(tmp.path().join("matrix/file.txt")).unwrap(),
+        b"hello world"
+    );
 
     let mut tx = PendingTransaction::new(3);
     write_entries(
         &state,
         &mut tx,
         matrix_sector,
-        vec![build_file_entry_set("renamed.txt", false, file_cluster, 11, false)],
+        vec![build_file_entry_set(
+            "renamed.txt",
+            false,
+            file_cluster,
+            11,
+            false,
+        )],
     );
-    state.try_commit_closed_transaction(&tx).unwrap();
+    commit_closed_transaction(&mut state, &tx);
     assert!(!tmp.path().join("matrix/file.txt").exists());
     assert!(tmp.path().join("matrix/renamed.txt").is_file());
 
@@ -163,14 +195,23 @@ fn runtime_matrix_commits_create_write_rename_truncate_and_delete_tree() {
         &state,
         &mut tx,
         matrix_sector,
-        vec![build_file_entry_set("renamed.txt", false, file_cluster, 2, false)],
+        vec![build_file_entry_set(
+            "renamed.txt",
+            false,
+            file_cluster,
+            2,
+            false,
+        )],
     );
-    state.try_commit_closed_transaction(&tx).unwrap();
-    assert_eq!(std::fs::read(tmp.path().join("matrix/renamed.txt")).unwrap(), b"he");
+    commit_closed_transaction(&mut state, &tx);
+    assert_eq!(
+        std::fs::read(tmp.path().join("matrix/renamed.txt")).unwrap(),
+        b"he"
+    );
 
     let mut tx = PendingTransaction::new(5);
     write_entries(&state, &mut tx, root_sector, Vec::new());
-    state.try_commit_closed_transaction(&tx).unwrap();
+    commit_closed_transaction(&mut state, &tx);
     assert!(!tmp.path().join("matrix").exists());
     assert!(state.lookup_path("/matrix").is_none());
 }

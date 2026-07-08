@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use file_access::exfat::layout::{PARTITION_OFFSET_SECTORS, SECTOR_SIZE};
 use file_access::exfat::dir_entry::build_file_entry_set;
+use file_access::exfat::layout::{PARTITION_OFFSET_SECTORS, SECTOR_SIZE};
 use file_access::exfat::runtime_state::ExfatRuntimeState;
 use file_access::exfat::sector_owner::SectorOwner;
-use file_access::exfat::transaction::{PendingTransaction, TransactionWrite};
+use file_access::exfat::transaction::{PendingTransaction, ResolveStatus, TransactionWrite};
 use file_access::types::{ControlledEntry, PolicySnapshot};
+use file_access::vfs::mutation::FsMutation;
 
 fn snapshot() -> PolicySnapshot {
     PolicySnapshot {
@@ -50,6 +51,29 @@ fn write_empty_directory_sector(
     state
         .record_write(tx, directory_sector, &vec![0u8; SECTOR_SIZE as usize])
         .unwrap();
+}
+
+fn complete_mutations(status: ResolveStatus) -> Vec<FsMutation> {
+    match status {
+        ResolveStatus::Complete(resolved) => resolved.mutations,
+        ResolveStatus::Incomplete(reason) => {
+            panic!("expected complete transaction, got incomplete: {reason:?}")
+        }
+        ResolveStatus::Invalid(err) => {
+            panic!("expected complete transaction, got invalid: {err:?}")
+        }
+    }
+}
+
+fn commit_closed_transaction(
+    state: &mut ExfatRuntimeState,
+    tx: &PendingTransaction,
+) -> Vec<FsMutation> {
+    let mutations = complete_mutations(state.try_commit_closed_transaction(tx).unwrap());
+    for mutation in mutations.clone() {
+        state.commit_mutation(mutation).unwrap();
+    }
+    mutations
 }
 
 fn file(path: PathBuf, name: &str, size: u64) -> ControlledEntry {
@@ -117,15 +141,21 @@ fn write_interpreter_records_real_fat_bitmap_directory_and_data_sectors() {
     let data = vec![0x5a; SECTOR_SIZE as usize];
 
     let fat_sector = first_sector_matching(&state, |owner| matches!(owner, SectorOwner::Fat));
-    let bitmap_sector =
-        first_sector_matching(&state, |owner| matches!(owner, SectorOwner::AllocationBitmap));
-    let directory_sector = first_sector_matching(&state, |owner| {
-        matches!(owner, SectorOwner::RootDirectory | SectorOwner::DirectoryData { .. })
+    let bitmap_sector = first_sector_matching(&state, |owner| {
+        matches!(owner, SectorOwner::AllocationBitmap)
     });
-    let file_data_sector =
-        first_sector_matching(&state, |owner| matches!(owner, SectorOwner::FileData { .. }));
-    let free_sector =
-        first_sector_matching(&state, |owner| matches!(owner, SectorOwner::FreeCluster { .. }));
+    let directory_sector = first_sector_matching(&state, |owner| {
+        matches!(
+            owner,
+            SectorOwner::RootDirectory | SectorOwner::DirectoryData { .. }
+        )
+    });
+    let file_data_sector = first_sector_matching(&state, |owner| {
+        matches!(owner, SectorOwner::FileData { .. })
+    });
+    let free_sector = first_sector_matching(&state, |owner| {
+        matches!(owner, SectorOwner::FreeCluster { .. })
+    });
 
     for sector in [
         fat_sector,
@@ -166,7 +196,10 @@ fn write_interpreter_records_real_fat_bitmap_directory_and_data_sectors() {
     let out_of_range_err = state
         .record_write(&mut tx, state.total_sectors() + 1, &data)
         .unwrap_err();
-    assert_eq!(out_of_range_err.kind(), std::io::ErrorKind::PermissionDenied);
+    assert_eq!(
+        out_of_range_err.kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
 }
 
 #[test]
@@ -184,13 +217,12 @@ fn write_at_sequence_creates_empty_dir_and_zero_file_without_flush() {
             .copied()
             .unwrap(),
     );
-    let free_cluster =
-        match state.sector_owner(first_sector_matching(&state, |owner| {
-            matches!(owner, SectorOwner::FreeCluster { .. })
-        })) {
-            SectorOwner::FreeCluster { cluster } => cluster,
-            other => panic!("expected free cluster, got {other:?}"),
-        };
+    let free_cluster = match state.sector_owner(first_sector_matching(&state, |owner| {
+        matches!(owner, SectorOwner::FreeCluster { .. })
+    })) {
+        SectorOwner::FreeCluster { cluster } => cluster,
+        other => panic!("expected free cluster, got {other:?}"),
+    };
 
     let mut tx = PendingTransaction::new(2);
     write_directory_entry(
@@ -199,7 +231,7 @@ fn write_at_sequence_creates_empty_dir_and_zero_file_without_flush() {
         root_sector,
         build_file_entry_set("closed_empty_dir", true, free_cluster, 0, false),
     );
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
     assert_eq!(mutations.len(), 1);
     assert!(tmp.path().join("closed_empty_dir").is_dir());
     assert!(state.lookup_path("/closed_empty_dir").unwrap().is_dir());
@@ -214,7 +246,7 @@ fn write_at_sequence_creates_empty_dir_and_zero_file_without_flush() {
             build_file_entry_set("closed_zero.txt", false, 0, 0, false),
         ],
     );
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
     assert_eq!(mutations.len(), 1);
     assert_eq!(
         std::fs::metadata(tmp.path().join("closed_zero.txt"))
@@ -251,7 +283,9 @@ fn write_at_sequence_creates_file_and_commits_data_to_real_usb() {
     let mut tx = PendingTransaction::new(4);
     let mut data_sector = vec![0u8; SECTOR_SIZE as usize];
     data_sector[..11].copy_from_slice(b"hello world");
-    state.record_write(&mut tx, free_sector, &data_sector).unwrap();
+    state
+        .record_write(&mut tx, free_sector, &data_sector)
+        .unwrap();
     write_directory_entry(
         &state,
         &mut tx,
@@ -259,7 +293,7 @@ fn write_at_sequence_creates_file_and_commits_data_to_real_usb() {
         build_file_entry_set("created.txt", false, file_cluster, 11, false),
     );
 
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
     assert_eq!(mutations.len(), 1);
     assert_eq!(
         std::fs::read(tmp.path().join("created.txt")).unwrap(),
@@ -301,7 +335,7 @@ fn write_at_sequence_deletes_outer_directory_tree() {
 
     let mut tx = PendingTransaction::new(5);
     write_empty_directory_sector(&state, &mut tx, root_sector);
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
 
     assert!(mutations.iter().any(|mutation| {
         matches!(
@@ -332,7 +366,11 @@ fn write_at_sequence_renames_file_from_directory_entry_change() {
             .unwrap(),
     );
 
-    let old_cluster = state.lookup_path("/old.txt").unwrap().first_cluster.unwrap();
+    let old_cluster = state
+        .lookup_path("/old.txt")
+        .unwrap()
+        .first_cluster
+        .unwrap();
     let mut tx = PendingTransaction::new(6);
     write_directory_entry(
         &state,
@@ -340,7 +378,7 @@ fn write_at_sequence_renames_file_from_directory_entry_change() {
         root_sector,
         build_file_entry_set("renamed.txt", false, old_cluster, 8, false),
     );
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
 
     assert!(mutations.iter().any(|mutation| {
         matches!(
@@ -350,7 +388,10 @@ fn write_at_sequence_renames_file_from_directory_entry_change() {
         )
     }));
     assert!(!tmp.path().join("old.txt").exists());
-    assert_eq!(std::fs::read(tmp.path().join("renamed.txt")).unwrap(), b"old-data");
+    assert_eq!(
+        std::fs::read(tmp.path().join("renamed.txt")).unwrap(),
+        b"old-data"
+    );
     assert!(state.lookup_path("/old.txt").is_none());
     assert!(state.lookup_path("/renamed.txt").is_some());
 }
@@ -373,7 +414,11 @@ fn write_at_sequence_truncates_existing_file_from_directory_entry_length() {
             .unwrap(),
     );
 
-    let data_cluster = state.lookup_path("/data.txt").unwrap().first_cluster.unwrap();
+    let data_cluster = state
+        .lookup_path("/data.txt")
+        .unwrap()
+        .first_cluster
+        .unwrap();
     let mut tx = PendingTransaction::new(7);
     write_directory_entry(
         &state,
@@ -381,7 +426,7 @@ fn write_at_sequence_truncates_existing_file_from_directory_entry_length() {
         root_sector,
         build_file_entry_set("data.txt", false, data_cluster, 2, false),
     );
-    let mutations = state.try_commit_closed_transaction(&tx).unwrap();
+    let mutations = commit_closed_transaction(&mut state, &tx);
 
     assert!(mutations.iter().any(|mutation| {
         matches!(

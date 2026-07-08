@@ -144,6 +144,14 @@ impl DiskLayout {
         self.total_sectors * SECTOR_SIZE as u64
     }
 
+    pub fn cluster_size(&self) -> u32 {
+        CLUSTER_SIZE
+    }
+
+    pub fn sectors_per_cluster(&self) -> u32 {
+        SECTORS_PER_CLUSTER
+    }
+
     /// 虚拟整盘最后一个合法字节之后的位置。
     pub fn end_byte_exclusive(&self) -> u64 {
         self.total_bytes()

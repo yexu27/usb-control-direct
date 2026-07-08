@@ -21,6 +21,22 @@ fn make_snapshot() -> PolicySnapshot {
     }
 }
 
+fn controlled_dir(name: &str, children: Vec<ControlledEntry>) -> ControlledEntry {
+    ControlledEntry {
+        real_path: format!("/mnt/usb-control/raw/<session-id>/{name}").into(),
+        virtual_name: name.to_string(),
+        file_size: 0,
+        is_dir: true,
+        is_virus: false,
+        exec_type: None,
+        extension: String::new(),
+        is_autorun_target: false,
+        is_autorun_inf: false,
+        is_root_shell_script: false,
+        children,
+    }
+}
+
 #[test]
 fn volume_mbr_has_boot_signature() {
     let tmp = tempfile::tempdir().unwrap();
@@ -139,15 +155,34 @@ fn blocked_file_directory_entry_uses_placeholder_size() {
         .find(|entry| entry.name == "setup.exe")
         .unwrap();
 
-    assert_eq!(
-        setup.data_length,
-        blocked_placeholder_bytes().len() as u64
-    );
+    assert_eq!(setup.data_length, blocked_placeholder_bytes().len() as u64);
     assert_eq!(
         setup.valid_data_length,
         blocked_placeholder_bytes().len() as u64
     );
     assert_ne!(setup.first_cluster, 0);
+}
+
+#[test]
+fn existing_directory_entry_exposes_allocated_directory_stream_length() {
+    let volume = VirtualVolume::build_with_capacity(
+        &[controlled_dir("t2", Vec::new())],
+        &make_snapshot(),
+        16 * 1024 * 1024,
+    )
+    .unwrap();
+    let root_sector = volume.layout().cluster_to_sector(2);
+    let root = match volume.read_sector(root_sector).unwrap() {
+        SectorContent::Metadata(data) => data,
+        other => panic!("root directory sector should be metadata, got {other:?}"),
+    };
+    let entries = parse_entry_sets(&root).unwrap();
+    let t2 = entries.iter().find(|entry| entry.name == "t2").unwrap();
+
+    assert!(t2.is_dir);
+    assert_ne!(t2.first_cluster, 0);
+    assert_eq!(t2.data_length, CLUSTER_SIZE as u64);
+    assert_eq!(t2.valid_data_length, CLUSTER_SIZE as u64);
 }
 
 #[test]

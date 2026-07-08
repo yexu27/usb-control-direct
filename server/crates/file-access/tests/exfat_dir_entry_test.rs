@@ -1,5 +1,21 @@
 use file_access::exfat::dir_entry::*;
 
+fn stream_entry(entry_set: &[u8]) -> &[u8] {
+    &entry_set[32..64]
+}
+
+fn stream_flags(entry_set: &[u8]) -> u8 {
+    stream_entry(entry_set)[1]
+}
+
+fn stream_valid_data_length(entry_set: &[u8]) -> u64 {
+    u64::from_le_bytes(stream_entry(entry_set)[8..16].try_into().unwrap())
+}
+
+fn stream_data_length(entry_set: &[u8]) -> u64 {
+    u64::from_le_bytes(stream_entry(entry_set)[24..32].try_into().unwrap())
+}
+
 #[test]
 fn file_entry_set_basic_structure() {
     let data = build_file_entry_set("readme.txt", false, 5, 1024, false);
@@ -51,6 +67,24 @@ fn directory_entry_has_dir_attribute() {
     // FileAttributes at offset 4
     let attrs = u16::from_le_bytes(data[4..6].try_into().unwrap());
     assert_eq!(attrs & ATTR_DIRECTORY, ATTR_DIRECTORY);
+}
+
+#[test]
+fn directory_entry_with_allocated_cluster_has_directory_stream_length() {
+    let entry_set = build_file_entry_set("t2", true, 42, 4096, false);
+
+    assert_eq!(stream_valid_data_length(&entry_set), 4096);
+    assert_eq!(stream_data_length(&entry_set), 4096);
+    assert_eq!(stream_flags(&entry_set) & 0x01, 0x01);
+}
+
+#[test]
+fn directory_entry_without_allocated_cluster_has_zero_stream_length() {
+    let entry_set = build_file_entry_set("empty", true, 0, 0, false);
+
+    assert_eq!(stream_valid_data_length(&entry_set), 0);
+    assert_eq!(stream_data_length(&entry_set), 0);
+    assert_eq!(stream_flags(&entry_set) & 0x01, 0x01);
 }
 
 #[test]

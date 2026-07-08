@@ -125,7 +125,7 @@ pub fn build_file_entry_set(
     // GeneralSecondaryFlags at offset 1
     // Bit 0: AllocationPossible = 1
     // Bit 1: NoFatChain = 1（连续分配时可设置）
-    let flags = if data_length > 0 { 0x03u8 } else { 0x01u8 };
+    let flags = stream_general_secondary_flags(start_cluster, data_length, true);
     stream_entry[1] = flags;
 
     // NameLength at offset 3
@@ -172,6 +172,18 @@ pub fn build_file_entry_set(
     entries
 }
 
+fn stream_general_secondary_flags(
+    start_cluster: u32,
+    data_length: u64,
+    uses_no_fat_chain: bool,
+) -> u8 {
+    let mut flags = 0x01u8;
+    if start_cluster != 0 && data_length > 0 && uses_no_fat_chain {
+        flags |= 0x02;
+    }
+    flags
+}
+
 /// 编码 exFAT 时间戳。
 fn encode_exfat_timestamp(year: u16, month: u8, day: u8, hour: u8, min: u8, sec: u8) -> u32 {
     let y = ((year - 1980) as u32) << 25;
@@ -215,7 +227,9 @@ fn compute_set_checksum(entry_set: &[u8]) -> u16 {
             continue;
         }
         checksum = if checksum & 1 != 0 {
-            0x8000u16.wrapping_add(checksum >> 1).wrapping_add(byte as u16)
+            0x8000u16
+                .wrapping_add(checksum >> 1)
+                .wrapping_add(byte as u16)
         } else {
             (checksum >> 1).wrapping_add(byte as u16)
         };

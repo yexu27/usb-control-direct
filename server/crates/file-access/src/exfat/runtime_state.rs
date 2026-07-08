@@ -5,22 +5,24 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use crate::exfat::bitmap_state::BitmapState;
+use crate::exfat::commit_pipeline::CommitPipeline;
 use crate::exfat::directory_store::DirectoryStore;
 use crate::exfat::fat_state::FatState;
 use crate::exfat::layout::{
-    BOOT_REGION_SECTORS, FIRST_CLUSTER, PARTITION_OFFSET_SECTORS, SECTOR_SIZE,
-    SECTORS_PER_CLUSTER,
+    BOOT_REGION_SECTORS, FIRST_CLUSTER, PARTITION_OFFSET_SECTORS, SECTORS_PER_CLUSTER, SECTOR_SIZE,
 };
+use crate::exfat::metadata_overlay::MetadataOverlay;
+use crate::exfat::metadata_renderer::MetadataRenderer;
+use crate::exfat::metadata_state::ExfatMetadataState;
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
-use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
+use crate::exfat::transaction::{PendingTransaction, ResolveStatus};
 use crate::exfat::transaction_resolver::TransactionResolver;
 use crate::exfat::volume::{FileDataRangeInfo, VirtualVolume};
 use crate::exfat::write_interpreter::WriteInterpreter;
 use crate::types::{blocked_placeholder_bytes, ControlledEntry, PolicySnapshot};
 use crate::vfs::committer::RealFsCommitter;
-use crate::vfs::mutation::{FsMutation, NodeKind};
+use crate::vfs::mutation::{ClusterChain, FsMutation, NodeKind};
 use crate::vfs::node::VfsFileView;
-use crate::vfs::operation_guard::{FsOperation, OperationGuard};
 use crate::vfs::VfsNodeKind;
 use crate::vfs::{NodeId, VfsIndex, VfsNode};
 
@@ -28,11 +30,8 @@ use crate::vfs::{NodeId, VfsIndex, VfsNode};
 pub struct ExfatRuntimeState {
     index: VfsIndex,
     volume: VirtualVolume,
-    directory_store: DirectoryStore,
-    fat: FatState,
-    bitmap: BitmapState,
-    sector_owners: SectorOwnerMap,
-    metadata_overlays: HashMap<u64, Vec<u8>>,
+    metadata: ExfatMetadataState,
+    metadata_overlay: MetadataOverlay,
     snapshot: PolicySnapshot,
     committer: RealFsCommitter,
     pending_tx: PendingTransaction,
@@ -129,7 +128,10 @@ impl ExfatRuntimeState {
                 }
                 None => sector_owners.owner_of(sector),
             };
-            if matches!(owner, SectorOwner::FreeCluster { .. } | SectorOwner::Reserved) {
+            if matches!(
+                owner,
+                SectorOwner::FreeCluster { .. } | SectorOwner::Reserved
+            ) {
                 sector_owners.mark_range(sector, 1, SectorOwner::UpcaseTable)?;
             }
         }
@@ -140,14 +142,37 @@ impl ExfatRuntimeState {
             }
         }
 
+        let mut metadata = ExfatMetadataState::new(fat, bitmap, directory_store, sector_owners);
+        for info in volume.file_data_range_entries() {
+            let Some(node) = real_to_node.get(&normalize_path(&info.real_path)) else {
+                continue;
+            };
+            let Some(first_cluster) = volume.layout().sector_to_cluster(info.start_sector) else {
+                continue;
+            };
+            let cluster_count = file_cluster_count(node.size);
+            if cluster_count == 0 {
+                continue;
+            }
+            let clusters = (0..cluster_count)
+                .map(|offset| first_cluster + offset)
+                .collect::<Vec<_>>();
+            metadata.set_file_chain(
+                &layout,
+                node.id,
+                &ClusterChain {
+                    first_cluster,
+                    clusters,
+                },
+                node.size,
+            )?;
+        }
+
         let state = Self {
             index,
             volume,
-            directory_store,
-            fat,
-            bitmap,
-            sector_owners,
-            metadata_overlays: HashMap::new(),
+            metadata,
+            metadata_overlay: MetadataOverlay::new(),
             snapshot,
             committer: RealFsCommitter::new(mount_root.to_path_buf()),
             pending_tx: PendingTransaction::new(1),
@@ -158,7 +183,9 @@ impl ExfatRuntimeState {
     }
 
     pub fn lookup_path(&self, path: &str) -> Option<&VfsNode> {
-        self.index.lookup_path(path).and_then(|id| self.index.node(id))
+        self.index
+            .lookup_path(path)
+            .and_then(|id| self.index.node(id))
     }
 
     pub fn lookup_node_id(&self, path: &str) -> Option<NodeId> {
@@ -170,11 +197,11 @@ impl ExfatRuntimeState {
     }
 
     pub fn directory_store(&self) -> &DirectoryStore {
-        &self.directory_store
+        self.metadata.directory_store()
     }
 
     pub fn sector_owner(&self, sector: u64) -> SectorOwner {
-        self.sector_owners.owner_of(sector)
+        self.metadata.owner_of(sector)
     }
 
     pub fn total_sectors(&self) -> u64 {
@@ -187,7 +214,10 @@ impl ExfatRuntimeState {
 
     fn file_node(&self, node_id: u64) -> Result<&VfsNode, std::io::Error> {
         self.index.node(NodeId(node_id)).ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::NotFound, "file data owner not found in VFS")
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "file data owner not found in VFS",
+            )
         })
     }
 
@@ -199,7 +229,7 @@ impl ExfatRuntimeState {
             let sector = current / SECTOR_SIZE as u64;
             let sector_offset = (current % SECTOR_SIZE as u64) as usize;
             let take = (SECTOR_SIZE as usize - sector_offset).min(len - out.len());
-            if let Some(data) = self.metadata_overlays.get(&sector) {
+            if let Some(data) = self.metadata_overlay.read_sector(sector) {
                 out.extend_from_slice(&data[sector_offset..sector_offset + take]);
                 current += take as u64;
                 continue;
@@ -319,7 +349,7 @@ impl ExfatRuntimeState {
         &self,
         path: &str,
     ) -> Result<Option<(u64, Vec<u8>)>, std::io::Error> {
-        let Some(clusters) = self.directory_store.directory_clusters(path) else {
+        let Some(clusters) = self.metadata.directory_clusters(path) else {
             return Ok(None);
         };
         let Some(first_cluster) = clusters.first() else {
@@ -333,7 +363,7 @@ impl ExfatRuntimeState {
             let cluster_sector = self.volume.layout().cluster_to_sector(*cluster);
             for sector_offset in 0..SECTORS_PER_CLUSTER as u64 {
                 let sector = cluster_sector + sector_offset;
-                if let Some(overlay) = self.metadata_overlays.get(&sector) {
+                if let Some(overlay) = self.metadata_overlay.read_sector(sector) {
                     data.extend_from_slice(overlay);
                     continue;
                 }
@@ -368,8 +398,7 @@ impl ExfatRuntimeState {
             let owner = self.sector_owner(sector);
             match owner.clone() {
                 SectorOwner::BootRegion | SectorOwner::BackupBootRegion => {
-                    self.metadata_overlays
-                        .insert(sector, padded_sector(chunk));
+                    self.metadata_overlay.insert_sector(sector, chunk);
                 }
                 SectorOwner::FileData {
                     node_id,
@@ -426,9 +455,11 @@ impl ExfatRuntimeState {
         if recorded_transaction_write {
             let tx = self.pending_tx.clone();
             match self.try_commit_closed_transaction(&tx) {
-                Ok(mutations) => {
-                    if !mutations.is_empty() {
-                        self.apply_metadata_overlays_from_transaction(&tx);
+                Ok(ResolveStatus::Complete(resolved)) => {
+                    if !resolved.mutations.is_empty() {
+                        for mutation in resolved.mutations {
+                            self.commit_mutation(mutation)?;
+                        }
                         self.pending_tx = PendingTransaction::new(self.next_tx_id);
                         self.next_tx_id += 1;
                     } else {
@@ -438,6 +469,22 @@ impl ExfatRuntimeState {
                             self.next_tx_id += 1;
                         }
                     }
+                }
+                Ok(ResolveStatus::Incomplete(_)) => {
+                    self.pending_tx = tx;
+                }
+                Ok(ResolveStatus::Invalid(err)) => {
+                    tracing::warn!(
+                        tx_id = tx.id(),
+                        error = ?err,
+                        "exFAT 写事务无效，丢弃未提交的虚拟 metadata"
+                    );
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("{err:?}"),
+                    ));
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -458,12 +505,31 @@ impl ExfatRuntimeState {
         if !self.pending_tx.writes().is_empty() {
             let tx = self.pending_tx.clone();
             match self.try_commit_closed_transaction(&tx) {
-                Ok(mutations) => {
-                    if !mutations.is_empty() {
-                        self.apply_metadata_overlays_from_transaction(&tx);
+                Ok(ResolveStatus::Complete(resolved)) => {
+                    if !resolved.mutations.is_empty() {
+                        for mutation in resolved.mutations {
+                            self.commit_mutation(mutation)?;
+                        }
                     }
                     self.pending_tx = PendingTransaction::new(self.next_tx_id);
                     self.next_tx_id += 1;
+                }
+                Ok(ResolveStatus::Incomplete(_)) => {
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                }
+                Ok(ResolveStatus::Invalid(err)) => {
+                    tracing::warn!(
+                        tx_id = tx.id(),
+                        error = ?err,
+                        "exFAT flush 事务无效，丢弃未提交的虚拟 metadata"
+                    );
+                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
+                    self.next_tx_id += 1;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("{err:?}"),
+                    ));
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -485,46 +551,8 @@ impl ExfatRuntimeState {
     }
 
     pub fn validate_consistency(&self) -> Result<(), std::io::Error> {
-        for record in self.directory_store.records() {
-            if self.index.node(record.node_id).is_none() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("directory {} points to missing VFS node", record.virtual_path),
-                ));
-            }
-            for cluster in &record.clusters {
-                if !self.bitmap.is_allocated(*cluster) {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("directory {} cluster {} is not allocated", record.virtual_path, cluster),
-                    ));
-                }
-                let owner = self.sector_owner(self.cluster_to_sector(*cluster));
-                let valid_owner = if record.virtual_path == "/" {
-                    matches!(owner, SectorOwner::RootDirectory)
-                } else {
-                    matches!(owner, SectorOwner::DirectoryData { node_id } if node_id == record.node_id.0)
-                };
-                if !valid_owner {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("directory {} cluster {} has invalid owner", record.virtual_path, cluster),
-                    ));
-                }
-            }
-        }
-
-        for cluster in self.bitmap.allocated_clusters() {
-            let owner = self.sector_owner(self.cluster_to_sector(cluster));
-            if matches!(owner, SectorOwner::FreeCluster { .. }) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("allocated cluster {} still marked free", cluster),
-                ));
-            }
-        }
-
-        for (start, _, _) in self.sector_owners.explicit_ranges() {
+        self.metadata.validate(&self.index, self.volume.layout())?;
+        for (start, _, _) in self.metadata.explicit_ranges() {
             match self.sector_owner(start) {
                 SectorOwner::DirectoryData { node_id }
                 | SectorOwner::FileData { node_id, .. }
@@ -555,84 +583,18 @@ impl ExfatRuntimeState {
     pub fn try_commit_closed_transaction(
         &mut self,
         tx: &PendingTransaction,
-    ) -> Result<Vec<FsMutation>, std::io::Error> {
-        let mutations = TransactionResolver::new().resolve_closed(tx, self)?;
-        for mutation in &mutations {
-            self.commit_mutation(mutation.clone())?;
-        }
-        Ok(mutations)
+    ) -> Result<ResolveStatus, std::io::Error> {
+        TransactionResolver::new().resolve_closed(tx, self)
     }
 
     pub fn commit_mutation(&mut self, mutation: FsMutation) -> Result<(), std::io::Error> {
-        self.check_mutation(&mutation)?;
-        match &mutation {
-            FsMutation::CreateDir { parent, name, .. } => {
-                self.committer.create_dir(&join_virtual_path(parent, name))?;
-            }
-            FsMutation::CreateFile {
-                parent,
-                name,
-                data_patches,
-                ..
-            } => {
-                let path = join_virtual_path(parent, name);
-                self.committer.create_file(&path)?;
-                for patch in data_patches {
-                    self.committer
-                        .write_at(&patch.virtual_path, patch.offset, &patch.data)?;
-                    self.committer.flush_file(&patch.virtual_path)?;
-                }
-            }
-            FsMutation::WriteFile {
-                virtual_path,
-                offset,
-                data,
-            } => {
-                self.committer.write_at(virtual_path, *offset, data)?;
-                self.committer.flush_file(virtual_path)?;
-            }
-            FsMutation::Truncate { virtual_path, len } => {
-                self.committer.truncate(virtual_path, *len)?;
-                self.committer.flush_file(virtual_path)?;
-            }
-            FsMutation::Rename { from, to, .. } => {
-                self.committer.rename(from, to)?;
-            }
-            FsMutation::Delete { virtual_path, kind } => match kind {
-                NodeKind::File => self.committer.delete_file(virtual_path)?,
-                NodeKind::Directory => self.committer.delete_dir(virtual_path)?,
-            },
-            FsMutation::RewriteFile {
-                virtual_path,
-                size,
-                data_patches,
-                ..
-            } => {
-                self.committer.truncate(virtual_path, *size)?;
-                for patch in data_patches {
-                    self.committer
-                        .write_at(&patch.virtual_path, patch.offset, &patch.data)?;
-                }
-                self.committer.flush_file(virtual_path)?;
-            }
-        }
+        CommitPipeline::new(&self.index, &self.committer, self.snapshot.clone())
+            .check_and_commit_real_fs(&mutation)?;
         self.index.apply_mutation(&mutation)?;
         self.refresh_runtime_metadata_after_mutation(&mutation)?;
         self.validate_consistency()?;
+        self.apply_committed_metadata_for_mutation(&mutation)?;
         Ok(())
-    }
-
-    fn apply_metadata_overlays_from_transaction(&mut self, tx: &PendingTransaction) {
-        for write in tx.writes() {
-            match write {
-                TransactionWrite::Fat { sector, data }
-                | TransactionWrite::Bitmap { sector, data }
-                | TransactionWrite::Directory { sector, data, .. } => {
-                    self.metadata_overlays.insert(*sector, padded_sector(data));
-                }
-                TransactionWrite::FileData { .. } | TransactionWrite::FreeCluster { .. } => {}
-            }
-        }
     }
 
     pub fn parent_path_for_directory_owner(&self, owner: &SectorOwner) -> Option<String> {
@@ -667,6 +629,57 @@ impl ExfatRuntimeState {
             })
             .collect()
     }
+
+    fn apply_committed_metadata_for_mutation(
+        &mut self,
+        mutation: &FsMutation,
+    ) -> Result<(), std::io::Error> {
+        let renderer = MetadataRenderer;
+        let mut updates = renderer.render_fat_and_bitmap(&self.metadata, self.volume.layout());
+        match mutation {
+            FsMutation::CreateDir { parent, .. } | FsMutation::CreateFile { parent, .. } => {
+                updates.extend(renderer.render_directory(
+                    parent,
+                    &self.index,
+                    &self.metadata,
+                    self.volume.layout(),
+                )?);
+            }
+            FsMutation::WriteFile { .. } => {}
+            FsMutation::Truncate { virtual_path, .. }
+            | FsMutation::RewriteFile { virtual_path, .. }
+            | FsMutation::Delete { virtual_path, .. } => {
+                if let Some(parent) = parent_path(virtual_path) {
+                    updates.extend(renderer.render_directory(
+                        &parent,
+                        &self.index,
+                        &self.metadata,
+                        self.volume.layout(),
+                    )?);
+                }
+            }
+            FsMutation::Rename { from, to, .. } => {
+                if let Some(parent) = parent_path(from) {
+                    updates.extend(renderer.render_directory(
+                        &parent,
+                        &self.index,
+                        &self.metadata,
+                        self.volume.layout(),
+                    )?);
+                }
+                if let Some(parent) = parent_path(to) {
+                    updates.extend(renderer.render_directory(
+                        &parent,
+                        &self.index,
+                        &self.metadata,
+                        self.volume.layout(),
+                    )?);
+                }
+            }
+        }
+        let updates = renderer.merge_updates(updates);
+        self.metadata_overlay.apply_committed(&updates)
+    }
 }
 
 fn mark_file_range(
@@ -687,6 +700,10 @@ fn mark_file_range(
 
 fn normalize_path(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+fn file_cluster_count(file_size: u64) -> u32 {
+    file_size.div_ceil((SECTOR_SIZE * SECTORS_PER_CLUSTER) as u64) as u32
 }
 
 fn sync_vfs_clusters_from_volume(
@@ -712,13 +729,6 @@ fn sync_vfs_clusters_from_volume(
     Ok(())
 }
 
-fn padded_sector(data: &[u8]) -> Vec<u8> {
-    let mut out = vec![0u8; SECTOR_SIZE as usize];
-    let copy_len = data.len().min(SECTOR_SIZE as usize);
-    out[..copy_len].copy_from_slice(&data[..copy_len]);
-    out
-}
-
 fn read_placeholder_slice(file_offset: u64, sector_offset: usize, take: usize) -> Vec<u8> {
     let placeholder = blocked_placeholder_bytes();
     let Some(start_u64) = file_offset.checked_add(sector_offset as u64) else {
@@ -736,103 +746,41 @@ fn read_placeholder_slice(file_offset: u64, sector_offset: usize, take: usize) -
     out
 }
 
-fn mutation_name(mutation: &FsMutation) -> &'static str {
-    match mutation {
-        FsMutation::CreateDir { .. } => "create_dir",
-        FsMutation::CreateFile { .. } => "create_file",
-        FsMutation::WriteFile { .. } => "write_file",
-        FsMutation::Truncate { .. } => "truncate",
-        FsMutation::Rename { .. } => "rename",
-        FsMutation::Delete { .. } => "delete",
-        FsMutation::RewriteFile { .. } => "rewrite_file",
+fn parent_path(path: &str) -> Option<String> {
+    if path == "/" {
+        return None;
     }
+    let trimmed = path.trim_end_matches('/');
+    let (parent, _) = trimmed.rsplit_once('/')?;
+    Some(if parent.is_empty() {
+        "/".to_string()
+    } else {
+        parent.to_string()
+    })
 }
 
 impl ExfatRuntimeState {
-    fn check_mutation(&self, mutation: &FsMutation) -> Result<(), std::io::Error> {
-        match mutation {
-            FsMutation::WriteFile { virtual_path, .. }
-            | FsMutation::RewriteFile { virtual_path, .. }
-            | FsMutation::Truncate { virtual_path, .. }
-            | FsMutation::Delete { virtual_path, .. } => {
-                self.deny_if_blocked_placeholder(virtual_path, mutation_name(mutation))?;
-            }
-            FsMutation::Rename { from, to, .. } => {
-                self.deny_if_blocked_placeholder(from, "rename_from")?;
-                self.deny_if_blocked_placeholder(to, "rename_to")?;
-            }
-            FsMutation::CreateDir { .. } | FsMutation::CreateFile { .. } => {}
-        }
-
-        let guard = OperationGuard::new(self.snapshot.clone());
-        match mutation {
-            FsMutation::CreateDir { parent, name, .. } => guard.check(&FsOperation::CreateDir {
-                virtual_path: join_virtual_path(parent, name),
-            }),
-            FsMutation::CreateFile { parent, name, .. } => guard.check(&FsOperation::CreateFile {
-                virtual_path: join_virtual_path(parent, name),
-            }),
-            FsMutation::WriteFile { virtual_path, .. }
-            | FsMutation::RewriteFile { virtual_path, .. } => guard.check(&FsOperation::WriteFile {
-                virtual_path: virtual_path.clone(),
-            }),
-            FsMutation::Truncate { virtual_path, .. } => guard.check(&FsOperation::Truncate {
-                virtual_path: virtual_path.clone(),
-            }),
-            FsMutation::Rename { from, to, .. } => guard.check(&FsOperation::Rename {
-                from: from.clone(),
-                to: to.clone(),
-            }),
-            FsMutation::Delete { virtual_path, .. } => guard.check(&FsOperation::Delete {
-                virtual_path: virtual_path.clone(),
-            }),
-        }
-    }
-
-    fn deny_if_blocked_placeholder(
-        &self,
-        virtual_path: &str,
-        operation: &str,
-    ) -> Result<(), std::io::Error> {
-        if let Some(node) = self.lookup_path(virtual_path) {
-            if node.is_blocked_placeholder() {
-                tracing::warn!(
-                    virtual_path = %node.virtual_path,
-                    reason = node.blocked_reason().unwrap_or("unknown"),
-                    operation,
-                    "阻断占位文件禁止变更"
-                );
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "阻断占位文件禁止变更",
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn refresh_runtime_metadata_after_mutation(
         &mut self,
         mutation: &FsMutation,
     ) -> Result<(), std::io::Error> {
         match mutation {
-            FsMutation::CreateDir { parent, name, chain } => {
+            FsMutation::CreateDir {
+                parent,
+                name,
+                chain,
+            } => {
                 let path = join_virtual_path(parent, name);
                 let id = self.index.lookup_path(&path).ok_or_else(|| {
                     std::io::Error::new(std::io::ErrorKind::NotFound, "created dir not in VFS")
                 })?;
                 if let Some(chain) = chain {
-                    self.directory_store
-                        .insert_directory(path, id, chain.clusters.clone());
-                    self.fat.set_chain(&chain.clusters)?;
-                    for cluster in &chain.clusters {
-                        self.bitmap.mark_allocated(*cluster)?;
-                        self.sector_owners.mark_range(
-                            self.volume.layout().cluster_to_sector(*cluster),
-                            SECTORS_PER_CLUSTER as u64,
-                            SectorOwner::DirectoryData { node_id: id.0 },
-                        )?;
-                    }
+                    self.metadata.set_directory_chain(
+                        self.volume.layout(),
+                        id,
+                        path,
+                        chain.clusters.clone(),
+                    )?;
                 }
             }
             FsMutation::CreateFile {
@@ -851,18 +799,11 @@ impl ExfatRuntimeState {
                 }
             }
             FsMutation::Rename { from, to, .. } => {
-                self.directory_store.rename_subtree(from, to);
+                self.metadata.rename_subtree(from, to);
             }
             FsMutation::Delete { virtual_path, .. } => {
-                let removed_clusters = self.directory_store.remove_subtree(virtual_path);
-                for cluster in removed_clusters {
-                    self.bitmap.mark_free(cluster)?;
-                    self.sector_owners.mark_range(
-                        self.volume.layout().cluster_to_sector(cluster),
-                        SECTORS_PER_CLUSTER as u64,
-                        SectorOwner::FreeCluster { cluster },
-                    )?;
-                }
+                self.metadata
+                    .remove_subtree(self.volume.layout(), virtual_path)?;
                 self.clear_stale_node_owners()?;
             }
             FsMutation::RewriteFile {
@@ -890,36 +831,12 @@ impl ExfatRuntimeState {
         chain: &crate::vfs::mutation::ClusterChain,
         size: u64,
     ) -> Result<(), std::io::Error> {
-        self.fat.set_chain(&chain.clusters)?;
-        let mut remaining = size;
-        let mut offset = 0_u64;
-        for cluster in &chain.clusters {
-            self.bitmap.mark_allocated(*cluster)?;
-            for i in 0..SECTORS_PER_CLUSTER as u64 {
-                let sector = self.volume.layout().cluster_to_sector(*cluster) + i;
-                let owner = if remaining == 0 {
-                    SectorOwner::AllocatedZero {
-                        node_id: id.0,
-                        file_offset: offset,
-                    }
-                } else {
-                    let valid_bytes = remaining.min(crate::exfat::layout::SECTOR_SIZE as u64);
-                    remaining = remaining.saturating_sub(valid_bytes);
-                    SectorOwner::FileData {
-                        node_id: id.0,
-                        file_offset: offset,
-                        valid_bytes: valid_bytes as u32,
-                    }
-                };
-                self.sector_owners.mark_range(sector, 1, owner)?;
-                offset += crate::exfat::layout::SECTOR_SIZE as u64;
-            }
-        }
-        Ok(())
+        self.metadata
+            .mark_file_chain(self.volume.layout(), id, chain, size)
     }
 
     fn clear_stale_node_owners(&mut self) -> Result<(), std::io::Error> {
-        for (start, len, owner) in self.sector_owners.explicit_ranges() {
+        for (start, len, owner) in self.metadata.explicit_ranges() {
             let stale_node = match owner {
                 SectorOwner::DirectoryData { node_id }
                 | SectorOwner::FileData { node_id, .. }
@@ -942,13 +859,13 @@ impl ExfatRuntimeState {
             } else {
                 SectorOwner::Reserved
             };
-            self.sector_owners.mark_range(start, len, replacement)?;
+            self.metadata.mark_range(start, len, replacement)?;
         }
         Ok(())
     }
 
     fn clear_file_node_owners(&mut self, id: NodeId) -> Result<(), std::io::Error> {
-        for (start, len, owner) in self.sector_owners.explicit_ranges() {
+        for (start, len, owner) in self.metadata.explicit_ranges() {
             let owned_by_file = match owner {
                 SectorOwner::FileData { node_id, .. }
                 | SectorOwner::FileDataRange { node_id, .. }
@@ -968,7 +885,7 @@ impl ExfatRuntimeState {
             } else {
                 SectorOwner::Reserved
             };
-            self.sector_owners.mark_range(start, len, replacement)?;
+            self.metadata.mark_range(start, len, replacement)?;
         }
         Ok(())
     }
@@ -979,9 +896,14 @@ impl ExfatRuntimeState {
         len: u64,
     ) -> Result<(), std::io::Error> {
         for sector_offset in (0..len).step_by(SECTORS_PER_CLUSTER as usize) {
-            if let Some(cluster) = self.volume.layout().sector_to_cluster(start + sector_offset) {
-                if self.bitmap.is_allocated(cluster) {
-                    self.bitmap.mark_free(cluster)?;
+            if let Some(cluster) = self
+                .volume
+                .layout()
+                .sector_to_cluster(start + sector_offset)
+            {
+                if self.metadata.is_allocated(cluster) {
+                    self.metadata
+                        .mark_cluster_free(self.volume.layout(), cluster)?;
                 }
             }
         }

@@ -1,10 +1,13 @@
 //! Resolve closed runtime exFAT write transactions into filesystem mutations.
 
 use crate::exfat::directory_parser::parse_entry_sets;
+use crate::exfat::layout::SECTOR_SIZE;
 use crate::exfat::runtime_state::ExfatRuntimeState;
 use crate::exfat::sector_owner::SectorOwner;
-use crate::exfat::transaction::{PendingTransaction, TransactionWrite};
-use crate::exfat::layout::SECTOR_SIZE;
+use crate::exfat::transaction::{
+    PendingReason, PendingTransaction, ResolveStatus, ResolvedTransaction, TransactionError,
+    TransactionWrite,
+};
 use crate::vfs::mutation::{ClusterChain, FileDataPatch, FsMutation, NodeKind};
 use std::collections::{BTreeMap, HashSet};
 
@@ -20,7 +23,7 @@ impl TransactionResolver {
         &self,
         tx: &PendingTransaction,
         state: &ExfatRuntimeState,
-    ) -> Result<Vec<FsMutation>, std::io::Error> {
+    ) -> Result<ResolveStatus, std::io::Error> {
         let mut mutations = Vec::new();
         let mut directory_writes = BTreeMap::<String, BTreeMap<u64, Vec<u8>>>::new();
         for write in tx.writes() {
@@ -31,7 +34,9 @@ impl TransactionResolver {
             } = write
             {
                 let Some(parent) = state.parent_path_for_directory_owner(owner) else {
-                    continue;
+                    return Ok(ResolveStatus::Invalid(
+                        TransactionError::UnknownDirectoryOwner { sector: *sector },
+                    ));
                 };
                 directory_writes
                     .entry(parent)
@@ -42,15 +47,21 @@ impl TransactionResolver {
 
         for (parent, sectors) in directory_writes {
             let Some((first_sector, mut data)) = state.directory_image(&parent)? else {
-                continue;
+                return Ok(ResolveStatus::Invalid(
+                    TransactionError::MissingDirectoryImage { parent },
+                ));
             };
             for (sector, sector_data) in sectors {
                 if sector < first_sector {
-                    continue;
+                    return Ok(ResolveStatus::Invalid(
+                        TransactionError::DirectoryWriteBeforeStart { parent, sector },
+                    ));
                 }
                 let offset = (sector - first_sector) as usize * SECTOR_SIZE as usize;
                 if offset >= data.len() {
-                    continue;
+                    return Ok(ResolveStatus::Incomplete(
+                        PendingReason::WaitingForDirectoryData { sector },
+                    ));
                 }
                 let end = (offset + SECTOR_SIZE as usize).min(data.len());
                 data[offset..end].copy_from_slice(&sector_data[..end - offset]);
@@ -113,13 +124,24 @@ impl TransactionResolver {
             for entry in parsed_entries {
                 let virtual_path = join_virtual_path(&parent, &entry.name);
                 if let Some(node) = state.lookup_path(&virtual_path) {
+                    if entry.is_dir {
+                        if entry_first_cluster(entry.first_cluster) != node.first_cluster {
+                            return Ok(ResolveStatus::Invalid(
+                                TransactionError::UnsupportedDirectoryRewrite {
+                                    parent: parent.clone(),
+                                },
+                            ));
+                        }
+                        continue;
+                    }
                     if !entry.is_dir {
                         let entry_first_cluster = if entry.first_cluster == 0 {
                             None
                         } else {
                             Some(entry.first_cluster)
                         };
-                        if entry_first_cluster == node.first_cluster && entry.data_length != node.size
+                        if entry_first_cluster == node.first_cluster
+                            && entry.data_length != node.size
                         {
                             mutations.push(FsMutation::Truncate {
                                 virtual_path,
@@ -155,12 +177,7 @@ impl TransactionResolver {
                         chain: chain.clone(),
                     });
                     if let Some(data) = free_cluster_data(tx, entry.first_cluster) {
-                        resolve_new_directory_entries(
-                            &virtual_path,
-                            &data,
-                            tx,
-                            &mut mutations,
-                        )?;
+                        resolve_new_directory_entries(&virtual_path, &data, tx, &mut mutations)?;
                     }
                 } else {
                     let data_patches = collect_data_patches(
@@ -180,7 +197,10 @@ impl TransactionResolver {
                 }
             }
         }
-        Ok(mutations)
+        Ok(ResolveStatus::Complete(ResolvedTransaction {
+            mutations,
+            metadata_updates: Vec::new(),
+        }))
     }
 }
 
@@ -264,7 +284,9 @@ fn free_cluster_data(tx: &PendingTransaction, cluster: u32) -> Option<Vec<u8>> {
     for write in tx.writes() {
         if let TransactionWrite::FreeCluster {
             sector,
-            owner: SectorOwner::FreeCluster { cluster: write_cluster },
+            owner: SectorOwner::FreeCluster {
+                cluster: write_cluster,
+            },
             data,
         } = write
         {

@@ -38,6 +38,10 @@ impl BitmapState {
         self.allocated.iter().copied()
     }
 
+    pub fn cluster_count(&self) -> u32 {
+        self.cluster_count
+    }
+
     fn validate_cluster(&self, cluster: u32) -> Result<(), std::io::Error> {
         if cluster < FIRST_CLUSTER || cluster >= FIRST_CLUSTER + self.cluster_count {
             return Err(std::io::Error::new(
