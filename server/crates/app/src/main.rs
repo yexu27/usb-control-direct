@@ -37,6 +37,18 @@ use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
+const DEFAULT_DEVICE_DESCRIPTION: &str = "(AD USB protection dev)USB Device";
+
+fn load_device_description(storage: &Storage) -> String {
+    match storage.config_get("device_description") {
+        Ok(Some(config)) => match config.config_value {
+            Some(value) if !value.trim().is_empty() => value,
+            _ => DEFAULT_DEVICE_DESCRIPTION.to_string(),
+        },
+        Ok(None) | Err(_) => DEFAULT_DEVICE_DESCRIPTION.to_string(),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let config = AppConfig::load_from_args(std::env::args()).expect("启动配置加载失败");
@@ -51,6 +63,7 @@ async fn main() {
     let db_path = config.database_path.clone();
 
     let storage = Arc::new(Storage::open_with_pool_size(&db_path, 8).expect("数据库未就绪"));
+    let device_description = load_device_description(storage.as_ref());
 
     let auth_service = Arc::new(AuthService::new(
         Arc::clone(&storage),
@@ -81,8 +94,8 @@ async fn main() {
     );
 
     // ===== USB Gadget 运行时检查 =====
-    let usb_runtime =
-        usb_bootstrap::prepare_usb_runtime(&config).expect("USB runtime 启动准备失败");
+    let usb_runtime = usb_bootstrap::prepare_usb_runtime(&config, device_description)
+        .expect("USB runtime 启动准备失败");
     let gadget_runtime = usb_runtime.gadget_runtime;
     let hidg_nodes = usb_runtime.hidg_nodes;
     info!(

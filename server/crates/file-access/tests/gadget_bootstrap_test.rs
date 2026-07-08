@@ -14,6 +14,7 @@ fn base_config(root: &Path, udc_root: &Path) -> GadgetBootstrapConfig {
         storage_lun: 0,
         keyboard_function: "hid.keyboard".into(),
         mouse_function: "hid.mouse".into(),
+        device_description: "(AD USB protection dev)USB Device".into(),
     }
 }
 
@@ -108,6 +109,49 @@ fn bootstrap_is_idempotent() {
     assert!(gadget.join("functions/mass_storage.usb0/lun.0").is_dir());
     assert!(gadget.join("functions/hid.keyboard").is_dir());
     assert!(gadget.join("functions/hid.mouse").is_dir());
+    assert_eq!(
+        std::fs::read_to_string(gadget.join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_writes_product_string_descriptor() {
+    let dir = tempfile::tempdir().unwrap();
+    let udc = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(udc.path().join("fcc00000.dwc3")).unwrap();
+
+    GadgetBootstrap::prepare(base_config(dir.path(), udc.path())).unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("rockchip/strings/0x409/product")).unwrap(),
+        "(AD USB protection dev)USB Device\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_updates_product_descriptor_when_udc_is_bound() {
+    let dir = tempfile::tempdir().unwrap();
+    let udc = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(udc.path().join("fcc00000.dwc3")).unwrap();
+
+    let gadget = dir.path().join("rockchip");
+    std::fs::create_dir_all(gadget.join("strings/0x409")).unwrap();
+    std::fs::create_dir_all(gadget.join("configs/b.1")).unwrap();
+    std::fs::write(gadget.join("strings/0x409/product"), "OLD_DESC\n").unwrap();
+    std::fs::write(gadget.join("UDC"), "fcc00000.dwc3\n").unwrap();
+
+    let mut cfg = base_config(dir.path(), udc.path());
+    cfg.device_description = "USB_DEVICE_01".into();
+
+    GadgetBootstrap::prepare(cfg).unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(gadget.join("strings/0x409/product")).unwrap(),
+        "USB_DEVICE_01\n"
+    );
     assert_eq!(
         std::fs::read_to_string(gadget.join("UDC")).unwrap(),
         "fcc00000.dwc3\n"

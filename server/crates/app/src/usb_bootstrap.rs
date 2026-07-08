@@ -22,7 +22,10 @@ pub struct UsbBootstrapResult {
 }
 
 /// 准备 USB gadget、HID 节点和 storage 启动恢复。
-pub fn prepare_usb_runtime(config: &AppConfig) -> Result<UsbBootstrapResult, String> {
+pub fn prepare_usb_runtime(
+    config: &AppConfig,
+    device_description: String,
+) -> Result<UsbBootstrapResult, String> {
     let bootstrap_config = file_access::gadget_bootstrap::GadgetBootstrapConfig {
         configfs_root: PathBuf::from("/sys/kernel/config/usb_gadget"),
         udc_root: PathBuf::from("/sys/class/udc"),
@@ -34,6 +37,7 @@ pub fn prepare_usb_runtime(config: &AppConfig) -> Result<UsbBootstrapResult, Str
         storage_lun: config.gadget.storage.lun,
         keyboard_function: config.gadget.keyboard.function.clone(),
         mouse_function: config.gadget.mouse.function.clone(),
+        device_description,
     };
 
     let gadget_runtime = file_access::gadget_bootstrap::GadgetBootstrap::prepare(bootstrap_config)
@@ -47,9 +51,12 @@ pub fn prepare_usb_runtime(config: &AppConfig) -> Result<UsbBootstrapResult, Str
         .map_err(|e| format!("hidg 节点发现失败: {e}"))?;
 
     let recovery_config = StartupRecoveryConfig::production(gadget_runtime.lun_dir().join("file"));
-    let recovery_report =
-        run_startup_recovery(&recovery_config, &RealMountOps, &NbdDeviceManager::default())
-            .map_err(|e| format!("USB storage 启动恢复失败: {e}"))?;
+    let recovery_report = run_startup_recovery(
+        &recovery_config,
+        &RealMountOps,
+        &NbdDeviceManager::default(),
+    )
+    .map_err(|e| format!("USB storage 启动恢复失败: {e}"))?;
 
     Ok(UsbBootstrapResult {
         gadget_runtime,

@@ -21,6 +21,7 @@ pub struct GadgetBootstrapConfig {
     pub storage_lun: u8,
     pub keyboard_function: String,
     pub mouse_function: String,
+    pub device_description: String,
 }
 
 #[derive(Debug, Error)]
@@ -56,6 +57,8 @@ impl GadgetBootstrap {
         fs::create_dir_all(&functions_dir)?;
         fs::create_dir_all(config_dir.join("strings/0x409"))?;
         fs::create_dir_all(gadget_dir.join("strings/0x409"))?;
+        let descriptor_changed =
+            product_descriptor_changed(&gadget_dir, &config.device_description)?;
 
         let storage_dir = functions_dir.join(&config.storage_function);
         let lun_dir = storage_dir.join(format!("lun.{}", config.storage_lun));
@@ -75,15 +78,16 @@ impl GadgetBootstrap {
         }
         let previous_udc = fs::read_to_string(&udc_file).unwrap_or_default();
         let was_bound = !previous_udc.trim().is_empty();
-        if should_change_links && was_bound {
+        if (should_change_links || descriptor_changed) && was_bound {
             write_attr(&udc_file, "")?;
             info!(
                 udc = %previous_udc.trim(),
-                "USB gadget bootstrap: temporarily unbound UDC for function changes"
+                "USB gadget bootstrap: temporarily unbound UDC for descriptor or function changes"
             );
         }
 
         let result = (|| {
+            configure_gadget_strings(&gadget_dir, &config.device_description)?;
             configure_lun(&lun_dir)?;
 
             let hid_names = HidFunctionNames {
@@ -153,6 +157,35 @@ fn configure_lun(lun_dir: &Path) -> Result<(), GadgetBootstrapError> {
     write_attr(lun_dir.join("removable"), "1\n")?;
     write_attr(lun_dir.join("nofua"), "0\n")?;
     write_attr(lun_dir.join("cdrom"), "0\n")?;
+    Ok(())
+}
+
+fn product_descriptor_path(gadget_dir: &Path) -> PathBuf {
+    gadget_dir.join("strings/0x409/product")
+}
+
+fn product_descriptor_changed(
+    gadget_dir: &Path,
+    device_description: &str,
+) -> Result<bool, GadgetBootstrapError> {
+    let product_path = product_descriptor_path(gadget_dir);
+    let current = match fs::read_to_string(&product_path) {
+        Ok(value) => value,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(GadgetBootstrapError::Io(e)),
+    };
+    Ok(current.trim_end_matches('\n') != device_description)
+}
+
+fn configure_gadget_strings(
+    gadget_dir: &Path,
+    device_description: &str,
+) -> Result<(), GadgetBootstrapError> {
+    fs::create_dir_all(gadget_dir.join("strings/0x409"))?;
+    write_attr(
+        product_descriptor_path(gadget_dir),
+        format!("{device_description}\n"),
+    )?;
     Ok(())
 }
 
