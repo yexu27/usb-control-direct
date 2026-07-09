@@ -5,7 +5,9 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use device_runtime::{DeviceRuntimeRegistry, DeviceRuntimeUpdate};
 use storage::Storage;
@@ -90,7 +92,7 @@ impl NbdIndexPool {
     pub fn release(&mut self, idx: u32) {
         self.in_use.remove(&idx);
         if !self.available.contains(&idx) {
-            self.available.push(idx);
+            self.available.insert(0, idx);
         }
     }
 }
@@ -123,7 +125,24 @@ impl StorageMediaBuilder for VirtualMediaBuilder {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct StorageRunId(u64);
+
+impl StorageRunId {
+    fn new(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MountRecordStatus {
+    Recorded,
+    SessionMissing,
+    Stale,
+}
+
 struct ActiveStorageSession {
+    run_id: StorageRunId,
     device: AuthorizedStorageDevice,
     nbd_index: u32,
     mount_path: Option<PathBuf>,
@@ -140,6 +159,7 @@ pub struct StorageSessionManager {
     runtime_registry: Arc<DeviceRuntimeRegistry>,
     sessions: Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
+    next_run_id: AtomicU64,
 }
 
 fn stable_hash64(value: &str) -> u64 {
@@ -188,7 +208,12 @@ impl StorageSessionManager {
             runtime_registry,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             nbd_pool: Arc::new(Mutex::new(nbd_pool)),
+            next_run_id: AtomicU64::new(1),
         }
+    }
+
+    fn next_run_id(&self) -> StorageRunId {
+        StorageRunId::new(self.next_run_id.fetch_add(1, Ordering::Relaxed))
     }
 
     fn session_id(device: &AuthorizedStorageDevice) -> String {
@@ -220,6 +245,7 @@ impl StorageSessionController for StorageSessionManager {
 
             let session_id = Self::session_id(&device);
             let parent_path = device.parent_path.clone();
+            let run_id = self.next_run_id();
             let (cancel_tx, cancel_rx) = watch::channel(false);
 
             let mut sessions_locked = self.sessions.lock().await;
@@ -237,6 +263,7 @@ impl StorageSessionController for StorageSessionManager {
                 .ok_or_else(|| StorageSessionError::Rejected("NBD 设备号池耗尽".into()))?;
 
             let active = ActiveStorageSession {
+                run_id,
                 device: device.clone(),
                 nbd_index,
                 mount_path: None,
@@ -258,6 +285,7 @@ impl StorageSessionController for StorageSessionManager {
 
             tokio::spawn(async move {
                 run_storage_pipeline(
+                    run_id,
                     pipeline_session_id,
                     device,
                     nbd_index,
@@ -335,6 +363,7 @@ impl StorageSessionController for StorageSessionManager {
 }
 
 async fn run_storage_pipeline(
+    run_id: StorageRunId,
     session_id: String,
     device: AuthorizedStorageDevice,
     nbd_index: u32,
@@ -353,15 +382,24 @@ async fn run_storage_pipeline(
     let read_only = device.permission == 0;
 
     info!(
+        run_id = run_id.0,
+        session = %session_id,
         serial = %device.serial_number,
         dev = %device.device_name,
+        parent = %parent_path,
         nbd = nbd_index,
+        readonly = read_only,
         "Storage session pipeline 开始"
     );
 
+    let pipeline_started_at = Instant::now();
+    let mount_started_at = Instant::now();
     info!(
+        run_id = run_id.0,
+        session = %session_id,
         serial = %device.serial_number,
         dev = %device.device_name,
+        dev_path = %device.dev_path,
         mount_point = %mount_path_str,
         "Storage session 进入挂载阶段"
     );
@@ -384,25 +422,51 @@ async fn run_storage_pipeline(
             &e.to_string(),
         );
         warn!(
+            run_id = run_id.0,
+            session = %session_id,
             serial = %device.serial_number,
             dev = %device.device_name,
             error = %e,
             "Storage session 挂载失败"
         );
-        remove_failed_session(&sessions, &nbd_pool, &parent_path, nbd_index).await;
+        remove_failed_session_if_current(&sessions, &nbd_pool, &parent_path, run_id).await;
         return;
     }
-
-    if let Some(session) = sessions.lock().await.get_mut(&parent_path) {
-        session.mount_path = Some(mount_point.clone());
-    } else {
-        let _ = mount_ops.umount(&mount_path_str);
-        nbd_pool.lock().await.release(nbd_index);
-        runtime_registry.mark_removed(&device.runtime_id, "session_removed_before_mount_record");
-        return;
-    }
-
     info!(
+        run_id = run_id.0,
+        session = %session_id,
+        serial = %device.serial_number,
+        elapsed_ms = mount_started_at.elapsed().as_millis(),
+        "Storage session 挂载阶段完成"
+    );
+
+    match record_mount_path_if_current(&sessions, &parent_path, run_id, mount_point.clone()).await {
+        MountRecordStatus::Recorded => {}
+        MountRecordStatus::SessionMissing => {
+            let _ = mount_ops.umount(&mount_path_str);
+            warn!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                "Storage session 已移除，挂载资源已回滚"
+            );
+            return;
+        }
+        MountRecordStatus::Stale => {
+            warn!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                "Storage session 已被更新的 pipeline 接管，停止记录挂载状态"
+            );
+            return;
+        }
+    }
+
+    let scan_started_at = Instant::now();
+    info!(
+        run_id = run_id.0,
+        session = %session_id,
         serial = %device.serial_number,
         dev = %device.device_name,
         mount = %mount_point.display(),
@@ -420,10 +484,17 @@ async fn run_storage_pipeline(
     let scan_result = tokio::select! {
         result = scanner.scan(&mount_point, &device.serial_number, &device.device_name) => result,
         _ = cancel_rx.changed() => {
-            info!(serial = %device.serial_number, "Storage session 扫描被取消");
-            cleanup_removed_session(
+            info!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                elapsed_ms = scan_started_at.elapsed().as_millis(),
+                "Storage session 扫描被取消"
+            );
+            cleanup_session_if_current(
                 &sessions,
                 &parent_path,
+                run_id,
                 "scan_cancelled".to_string(),
                 Arc::clone(&mount_ops),
                 Arc::clone(&runtime_registry),
@@ -434,7 +505,18 @@ async fn run_storage_pipeline(
     };
 
     let scan_result = match scan_result {
-        Ok(result) => result,
+        Ok(result) => {
+            info!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                clean = result.is_clean,
+                infected_count = result.infected_files.len(),
+                elapsed_ms = scan_started_at.elapsed().as_millis(),
+                "Storage session 扫描阶段完成"
+            );
+            result
+        }
         Err(e) => {
             update_runtime(
                 &runtime_registry,
@@ -445,15 +527,19 @@ async fn run_storage_pipeline(
                 e.reason(),
             );
             warn!(
+                run_id = run_id.0,
+                session = %session_id,
                 serial = %device.serial_number,
                 dev = %device.device_name,
                 scan_error_kind = %e.fail_code(),
+                elapsed_ms = scan_started_at.elapsed().as_millis(),
                 error = %e,
                 "Storage session 扫描失败"
             );
-            cleanup_failed_session_resources(
+            cleanup_failed_session_resources_if_current(
                 &sessions,
                 &parent_path,
+                run_id,
                 e.fail_code(),
                 Arc::clone(&mount_ops),
                 Arc::clone(&nbd_pool),
@@ -468,9 +554,15 @@ async fn run_storage_pipeline(
         .and_then(|size| u64::try_from(size).ok())
         .unwrap_or_else(|| block_device_size_bytes(&device.dev_path));
 
+    let media_build_started_at = Instant::now();
     info!(
+        run_id = run_id.0,
+        session = %session_id,
         serial = %device.serial_number,
         dev = %device.device_name,
+        mount = %mount_point.display(),
+        permission = device.permission,
+        source_size_bytes,
         "Storage session 进入虚拟介质构建阶段"
     );
     update_runtime(
@@ -488,7 +580,18 @@ async fn run_storage_pipeline(
         device.permission,
         source_size_bytes,
     ) {
-        Ok(media) => media,
+        Ok(media) => {
+            info!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                total_sectors = media.total_sectors(),
+                virtual_size_bytes = media.total_sectors().saturating_mul(512),
+                elapsed_ms = media_build_started_at.elapsed().as_millis(),
+                "Storage session 虚拟介质构建阶段完成"
+            );
+            media
+        }
         Err(e) => {
             update_runtime(
                 &runtime_registry,
@@ -499,14 +602,18 @@ async fn run_storage_pipeline(
                 &e.to_string(),
             );
             warn!(
+                run_id = run_id.0,
+                session = %session_id,
                 serial = %device.serial_number,
                 dev = %device.device_name,
+                elapsed_ms = media_build_started_at.elapsed().as_millis(),
                 error = %e,
                 "Storage session 虚拟介质构建失败"
             );
-            cleanup_removed_session(
+            cleanup_session_if_current(
                 &sessions,
                 &parent_path,
+                run_id,
                 "media_build_failed".to_string(),
                 Arc::clone(&mount_ops),
                 Arc::clone(&runtime_registry),
@@ -517,10 +624,25 @@ async fn run_storage_pipeline(
         }
     };
 
+    if !is_current_session(&sessions, &parent_path, run_id).await {
+        warn!(
+            run_id = run_id.0,
+            session = %session_id,
+            serial = %device.serial_number,
+            elapsed_ms = pipeline_started_at.elapsed().as_millis(),
+            "Storage session 已被更新的 pipeline 接管，跳过发布阶段"
+        );
+        return;
+    }
+
+    let publish_started_at = Instant::now();
     info!(
+        run_id = run_id.0,
+        session = %session_id,
         serial = %device.serial_number,
         dev = %device.device_name,
         nbd = nbd_index,
+        readonly = read_only,
         "Storage session 进入发布阶段"
     );
     update_runtime(
@@ -535,10 +657,17 @@ async fn run_storage_pipeline(
     let published = tokio::select! {
         result = publisher.publish(media, nbd_index, read_only) => result,
         _ = cancel_rx.changed() => {
-            info!(serial = %device.serial_number, "Storage session 发布被取消");
-            cleanup_removed_session(
+            info!(
+                run_id = run_id.0,
+                session = %session_id,
+                serial = %device.serial_number,
+                elapsed_ms = publish_started_at.elapsed().as_millis(),
+                "Storage session 发布被取消"
+            );
+            cleanup_session_if_current(
                 &sessions,
                 &parent_path,
+                run_id,
                 "publish_cancelled".to_string(),
                 Arc::clone(&mount_ops),
                 Arc::clone(&runtime_registry),
@@ -550,8 +679,7 @@ async fn run_storage_pipeline(
 
     match published {
         Ok(published) => {
-            if let Some(session) = sessions.lock().await.get_mut(&parent_path) {
-                session.published = Some(published);
+            if store_published_if_current(&sessions, &parent_path, run_id, published).await {
                 update_runtime(
                     &runtime_registry,
                     &device.runtime_id,
@@ -560,13 +688,22 @@ async fn run_storage_pipeline(
                     "",
                     "",
                 );
-                info!(serial = %device.serial_number, "Storage session 映射成功");
-            } else {
-                published.stop().await;
-                nbd_pool.lock().await.release(nbd_index);
-                runtime_registry.mark_removed(&device.runtime_id, "session_removed_after_publish");
-                warn!(
+                info!(
+                    run_id = run_id.0,
+                    session = %session_id,
                     serial = %device.serial_number,
+                    nbd = nbd_index,
+                    elapsed_ms = publish_started_at.elapsed().as_millis(),
+                    total_elapsed_ms = pipeline_started_at.elapsed().as_millis(),
+                    "Storage session 映射成功"
+                );
+            } else {
+                warn!(
+                    run_id = run_id.0,
+                    session = %session_id,
+                    serial = %device.serial_number,
+                    nbd = nbd_index,
+                    elapsed_ms = publish_started_at.elapsed().as_millis(),
                     "Storage session 已移除，发布资源已回滚"
                 );
             }
@@ -581,14 +718,19 @@ async fn run_storage_pipeline(
                 &e.to_string(),
             );
             warn!(
+                run_id = run_id.0,
+                session = %session_id,
                 serial = %device.serial_number,
                 dev = %device.device_name,
+                nbd = nbd_index,
+                elapsed_ms = publish_started_at.elapsed().as_millis(),
                 error = %e,
                 "Storage session 映射失败"
             );
-            cleanup_removed_session(
+            cleanup_session_if_current(
                 &sessions,
                 &parent_path,
+                run_id,
                 "publish_failed".to_string(),
                 Arc::clone(&mount_ops),
                 Arc::clone(&runtime_registry),
@@ -599,29 +741,118 @@ async fn run_storage_pipeline(
     }
 }
 
-async fn cleanup_removed_session(
+async fn is_current_session(
     sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     parent_path: &str,
+    run_id: StorageRunId,
+) -> bool {
+    sessions
+        .lock()
+        .await
+        .get(parent_path)
+        .map(|session| session.run_id == run_id)
+        .unwrap_or(false)
+}
+
+async fn record_mount_path_if_current(
+    sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
+    parent_path: &str,
+    run_id: StorageRunId,
+    mount_path: PathBuf,
+) -> MountRecordStatus {
+    let mut locked = sessions.lock().await;
+    match locked.get_mut(parent_path) {
+        Some(session) if session.run_id == run_id => {
+            session.mount_path = Some(mount_path);
+            MountRecordStatus::Recorded
+        }
+        Some(_) => MountRecordStatus::Stale,
+        None => MountRecordStatus::SessionMissing,
+    }
+}
+
+async fn cleanup_session_if_current(
+    sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
+    parent_path: &str,
+    run_id: StorageRunId,
     reason: String,
     mount_ops: Arc<dyn StorageSessionMountOps>,
     runtime_registry: Arc<DeviceRuntimeRegistry>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
-    let session = sessions.lock().await.remove(parent_path);
+    let session = {
+        let mut locked = sessions.lock().await;
+        match locked.get(parent_path) {
+            Some(session) if session.run_id == run_id => locked.remove(parent_path),
+            Some(session) => {
+                warn!(
+                    requested_run_id = run_id.0,
+                    current_run_id = session.run_id.0,
+                    parent = %parent_path,
+                    reason = %reason,
+                    "Storage session cleanup 被跳过，当前 session 属于更新的 pipeline"
+                );
+                None
+            }
+            None => {
+                info!(
+                    requested_run_id = run_id.0,
+                    parent = %parent_path,
+                    reason = %reason,
+                    "Storage session cleanup 被跳过，session 已不存在"
+                );
+                None
+            }
+        }
+    };
+
     if let Some(session) = session {
         cleanup_session(session, reason, mount_ops, runtime_registry, nbd_pool).await;
     }
 }
 
-async fn cleanup_failed_session_resources(
+async fn cleanup_failed_session_resources_if_current(
     sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     parent_path: &str,
+    run_id: StorageRunId,
     reason: &str,
     mount_ops: Arc<dyn StorageSessionMountOps>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
-    let session = sessions.lock().await.remove(parent_path);
+    let session = {
+        let mut locked = sessions.lock().await;
+        match locked.get(parent_path) {
+            Some(session) if session.run_id == run_id => locked.remove(parent_path),
+            Some(session) => {
+                warn!(
+                    requested_run_id = run_id.0,
+                    current_run_id = session.run_id.0,
+                    parent = %parent_path,
+                    reason = %reason,
+                    "Storage session 失败资源清理被跳过，当前 session 属于更新的 pipeline"
+                );
+                None
+            }
+            None => {
+                info!(
+                    requested_run_id = run_id.0,
+                    parent = %parent_path,
+                    reason = %reason,
+                    "Storage session 失败资源清理被跳过，session 已不存在"
+                );
+                None
+            }
+        }
+    };
+
     if let Some(mut session) = session {
+        info!(
+            run_id = session.run_id.0,
+            serial = %session.device.serial_number,
+            nbd = session.nbd_index,
+            reason = %reason,
+            "Storage session 开始清理失败资源"
+        );
         let _ = session.cancel_tx.send(true);
 
         if let Some(published) = session.published.take() {
@@ -657,11 +888,59 @@ async fn cleanup_failed_session_resources(
 
         nbd_pool.lock().await.release(session.nbd_index);
         info!(
+            run_id = session.run_id.0,
             serial = %session.device.serial_number,
+            nbd = session.nbd_index,
             reason = %reason,
             "Storage session 失败资源清理完成"
         );
     }
+}
+
+async fn store_published_if_current(
+    sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
+    parent_path: &str,
+    run_id: StorageRunId,
+    published: Box<dyn PublishedStorageRuntime>,
+) -> bool {
+    let mut published = Some(published);
+    let stored = {
+        let mut locked = sessions.lock().await;
+        match locked.get_mut(parent_path) {
+            Some(session) if session.run_id == run_id => {
+                session.published = published.take();
+                true
+            }
+            Some(session) => {
+                warn!(
+                    requested_run_id = run_id.0,
+                    current_run_id = session.run_id.0,
+                    parent = %parent_path,
+                    "Storage session 发布写回被跳过，当前 session 属于更新的 pipeline"
+                );
+                false
+            }
+            None => {
+                info!(
+                    requested_run_id = run_id.0,
+                    parent = %parent_path,
+                    "Storage session 发布写回被跳过，session 已不存在"
+                );
+                false
+            }
+        }
+    };
+
+    if let Some(published) = published {
+        info!(
+            requested_run_id = run_id.0,
+            parent = %parent_path,
+            "Storage session 停止未归属当前 session 的发布资源"
+        );
+        published.stop().await;
+    }
+
+    stored
 }
 
 async fn cleanup_session(
@@ -671,6 +950,15 @@ async fn cleanup_session(
     runtime_registry: Arc<DeviceRuntimeRegistry>,
     nbd_pool: Arc<Mutex<NbdIndexPool>>,
 ) {
+    info!(
+        run_id = session.run_id.0,
+        serial = %session.device.serial_number,
+        nbd = session.nbd_index,
+        reason = %reason,
+        published = session.published.is_some(),
+        mounted = session.mount_path.is_some(),
+        "Storage session 开始清理"
+    );
     let _ = session.cancel_tx.send(true);
 
     if let Some(published) = session.published.take() {
@@ -707,20 +995,53 @@ async fn cleanup_session(
     nbd_pool.lock().await.release(session.nbd_index);
     runtime_registry.mark_removed(&session.device.runtime_id, reason.clone());
     info!(
+        run_id = session.run_id.0,
         serial = %session.device.serial_number,
+        nbd = session.nbd_index,
         reason = %reason,
         "Storage session 清理完成"
     );
 }
 
-async fn remove_failed_session(
+async fn remove_failed_session_if_current(
     sessions: &Arc<Mutex<HashMap<String, ActiveStorageSession>>>,
     nbd_pool: &Arc<Mutex<NbdIndexPool>>,
     parent_path: &str,
-    nbd_index: u32,
+    run_id: StorageRunId,
 ) {
-    sessions.lock().await.remove(parent_path);
-    nbd_pool.lock().await.release(nbd_index);
+    let session = {
+        let mut locked = sessions.lock().await;
+        match locked.get(parent_path) {
+            Some(session) if session.run_id == run_id => locked.remove(parent_path),
+            Some(session) => {
+                warn!(
+                    requested_run_id = run_id.0,
+                    current_run_id = session.run_id.0,
+                    parent = %parent_path,
+                    "Storage session 挂载失败清理被跳过，当前 session 属于更新的 pipeline"
+                );
+                None
+            }
+            None => {
+                info!(
+                    requested_run_id = run_id.0,
+                    parent = %parent_path,
+                    "Storage session 挂载失败清理被跳过，session 已不存在"
+                );
+                None
+            }
+        }
+    };
+
+    if let Some(session) = session {
+        nbd_pool.lock().await.release(session.nbd_index);
+        info!(
+            run_id = session.run_id.0,
+            serial = %session.device.serial_number,
+            nbd = session.nbd_index,
+            "Storage session 挂载失败资源清理完成"
+        );
+    }
 }
 
 fn update_runtime(
