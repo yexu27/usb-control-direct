@@ -125,9 +125,35 @@ impl TransactionResolver {
                 continue;
             }
 
+            let mut skipped_blocked_paths = HashSet::new();
+            let mut skipped_cached_names = HashSet::new();
+            if new_entries.len() > 1 {
+                for missing in &missing_children {
+                    let (_, virtual_path, _) = missing;
+                    if !is_blocked_placeholder_path(state, virtual_path) {
+                        continue;
+                    }
+                    let Some(cached_entry) = new_entries
+                        .iter()
+                        .find(|entry| is_cached_blocked_rename_entry(state, missing, entry))
+                    else {
+                        continue;
+                    };
+                    tracing::warn!(
+                        from = %virtual_path,
+                        cached_name = %cached_entry.name,
+                        "忽略 Windows 缓存的 blocked placeholder 重命名目录项，继续处理同事务内其他写入"
+                    );
+                    skipped_blocked_paths.insert(virtual_path.clone());
+                    skipped_cached_names.insert(cached_entry.name.clone());
+                }
+            }
+
             if !new_entries.is_empty() {
                 for (_, virtual_path, _) in &missing_children {
-                    if is_blocked_placeholder_path(state, virtual_path) {
+                    if is_blocked_placeholder_path(state, virtual_path)
+                        && !skipped_blocked_paths.contains(virtual_path)
+                    {
                         return Ok(ResolveStatus::Invalid(
                             TransactionError::BlockedPlaceholderRewrite {
                                 virtual_path: virtual_path.clone(),
@@ -138,9 +164,15 @@ impl TransactionResolver {
             }
 
             for (_, virtual_path, kind) in missing_children {
+                if skipped_blocked_paths.contains(&virtual_path) {
+                    continue;
+                }
                 mutations.push(FsMutation::Delete { virtual_path, kind });
             }
             for entry in parsed_entries {
+                if skipped_cached_names.contains(&entry.name) {
+                    continue;
+                }
                 let virtual_path = join_virtual_path(&parent, &entry.name);
                 if let Some(node) = state.lookup_path(&virtual_path) {
                     if entry.is_dir {
@@ -296,6 +328,21 @@ fn is_blocked_placeholder_path(state: &ExfatRuntimeState, virtual_path: &str) ->
         .lookup_path(virtual_path)
         .map(|node| node.is_blocked_placeholder())
         .unwrap_or(false)
+}
+
+fn is_cached_blocked_rename_entry(
+    state: &ExfatRuntimeState,
+    missing: &(String, String, NodeKind),
+    new_entry: &crate::exfat::directory_parser::ParsedDirectoryEntry,
+) -> bool {
+    if !is_rename_candidate(state, missing, new_entry) {
+        return false;
+    }
+    let (_, virtual_path, _) = missing;
+    let Some(node) = state.lookup_path(virtual_path) else {
+        return false;
+    };
+    node.is_blocked_placeholder() && node.size == new_entry.data_length
 }
 
 fn entry_kind(entry: &crate::exfat::directory_parser::ParsedDirectoryEntry) -> NodeKind {

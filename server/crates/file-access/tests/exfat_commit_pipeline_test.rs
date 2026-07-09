@@ -101,6 +101,25 @@ fn root_entry_cluster(fs: &VirtualExfatFs, name: &str) -> u32 {
         .first_cluster
 }
 
+fn root_entry_size(fs: &VirtualExfatFs, name: &str) -> u64 {
+    let data = fs.read_at(fs.root_dir_offset_for_test(), 4096).unwrap();
+    parse_entry_sets(&data)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .unwrap()
+        .data_length
+}
+
+fn root_entry_names(fs: &VirtualExfatFs) -> Vec<String> {
+    let data = fs.read_at(fs.root_dir_offset_for_test(), 4096).unwrap();
+    parse_entry_sets(&data)
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect()
+}
+
 fn entry_cluster(fs: &VirtualExfatFs, dir_cluster: u32, name: &str) -> u32 {
     let data = fs
         .read_at(fs.cluster_offset_for_test(dir_cluster), 4096)
@@ -355,8 +374,8 @@ fn delete_read_blocked_blacklist_file_removes_real_file_and_virtual_node() {
         6,
         None,
     )];
-    let fs = VirtualExfatFs::build(tmp.path(), &tree, blacklist_snapshot(), 16 * 1024 * 1024)
-        .unwrap();
+    let fs =
+        VirtualExfatFs::build(tmp.path(), &tree, blacklist_snapshot(), 16 * 1024 * 1024).unwrap();
 
     assert!(fs.lookup_path("/bad.blocked").is_some());
     delete_root_entry(&fs, "bad.blocked");
@@ -409,7 +428,13 @@ fn truncate_read_blocked_executable_still_fails() {
     let cluster = root_entry_cluster(&fs, "blocked.exe");
     let err = try_write_root_entries(
         &fs,
-        vec![build_file_entry_set("blocked.exe", false, cluster, 1, false)],
+        vec![build_file_entry_set(
+            "blocked.exe",
+            false,
+            cluster,
+            1,
+            false,
+        )],
     )
     .unwrap_err();
 
@@ -525,9 +550,108 @@ fn rename_read_blocked_executable_as_delete_create_still_fails() {
 
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(tmp.path().join("setup.exe").exists());
-    assert!(!tmp.path().join("codex-rename-should-not-exist.exe").exists());
+    assert!(!tmp
+        .path()
+        .join("codex-rename-should-not-exist.exe")
+        .exists());
     assert!(fs.lookup_path("/setup.exe").is_some());
-    assert!(fs.lookup_path("/codex-rename-should-not-exist.exe").is_none());
+    assert!(fs
+        .lookup_path("/codex-rename-should-not-exist.exe")
+        .is_none());
+}
+
+#[test]
+fn blocked_placeholder_failed_rename_does_not_poison_following_create() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
+    let tree = vec![controlled_file(
+        tmp.path().join("setup.exe"),
+        "setup.exe",
+        20,
+        Some(ExecFileType::Pe),
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, exec_control_snapshot(), 16 * 1024 * 1024)
+        .unwrap();
+
+    let err = try_rename_root_entry(&fs, "setup.exe", "1.exe").unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let after_cluster = 702;
+    write_file_data(&fs, after_cluster, b"after-ok");
+    try_write_root_entries(
+        &fs,
+        vec![
+            build_file_entry_set(
+                "setup.exe",
+                false,
+                root_entry_cluster(&fs, "setup.exe"),
+                root_entry_size(&fs, "setup.exe"),
+                false,
+            ),
+            build_file_entry_set("after.txt", false, after_cluster, 8, false),
+        ],
+    )
+    .unwrap();
+
+    assert!(tmp.path().join("setup.exe").exists());
+    assert!(!tmp.path().join("1.exe").exists());
+    assert_eq!(
+        std::fs::read(tmp.path().join("after.txt")).unwrap(),
+        b"after-ok"
+    );
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    assert!(fs.lookup_path("/1.exe").is_none());
+    assert!(fs.lookup_path("/after.txt").is_some());
+
+    let names = root_entry_names(&fs);
+    assert!(names.contains(&"setup.exe".to_string()));
+    assert!(names.contains(&"after.txt".to_string()));
+    assert!(!names.contains(&"1.exe".to_string()));
+}
+
+#[test]
+fn cached_blocked_rename_entry_is_ignored_when_following_create_is_committed() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
+    let tree = vec![controlled_file(
+        tmp.path().join("setup.exe"),
+        "setup.exe",
+        20,
+        Some(ExecFileType::Pe),
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, exec_control_snapshot(), 16 * 1024 * 1024)
+        .unwrap();
+
+    let setup_cluster = root_entry_cluster(&fs, "setup.exe");
+    let setup_visible_size = root_entry_size(&fs, "setup.exe");
+    let err = try_rename_root_entry(&fs, "setup.exe", "1.exe").unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+
+    let after_cluster = 703;
+    write_file_data(&fs, after_cluster, b"after-ok");
+    try_write_root_entries(
+        &fs,
+        vec![
+            build_file_entry_set("1.exe", false, setup_cluster, setup_visible_size, false),
+            build_file_entry_set("after.txt", false, after_cluster, 8, false),
+        ],
+    )
+    .unwrap();
+
+    assert!(tmp.path().join("setup.exe").exists());
+    assert!(!tmp.path().join("1.exe").exists());
+    assert_eq!(
+        std::fs::read(tmp.path().join("after.txt")).unwrap(),
+        b"after-ok"
+    );
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    assert!(fs.lookup_path("/1.exe").is_none());
+    assert!(fs.lookup_path("/after.txt").is_some());
+
+    let names = root_entry_names(&fs);
+    assert!(names.contains(&"setup.exe".to_string()));
+    assert!(names.contains(&"after.txt".to_string()));
+    assert!(!names.contains(&"1.exe".to_string()));
 }
 
 #[test]
@@ -540,8 +664,8 @@ fn rename_read_blocked_blacklist_file_still_fails() {
         6,
         None,
     )];
-    let fs = VirtualExfatFs::build(tmp.path(), &tree, blacklist_snapshot(), 16 * 1024 * 1024)
-        .unwrap();
+    let fs =
+        VirtualExfatFs::build(tmp.path(), &tree, blacklist_snapshot(), 16 * 1024 * 1024).unwrap();
 
     let err = try_rename_root_entry(&fs, "bad.blocked", "renamed.txt").unwrap_err();
 

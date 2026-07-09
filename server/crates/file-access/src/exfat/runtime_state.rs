@@ -470,15 +470,16 @@ impl ExfatRuntimeState {
                 Ok(ResolveStatus::Complete(resolved)) => {
                     if !resolved.mutations.is_empty() {
                         for mutation in resolved.mutations {
-                            self.commit_resolved_mutation(mutation)?;
+                            if let Err(e) = self.commit_resolved_mutation(mutation) {
+                                self.reset_pending_transaction_after_commit_error(tx.id(), &e);
+                                return Err(e);
+                            }
                         }
-                        self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                        self.next_tx_id += 1;
+                        self.reset_pending_transaction();
                     } else {
                         self.pending_tx.retain_deferred_data_writes();
                         if self.pending_tx.is_empty() {
-                            self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                            self.next_tx_id += 1;
+                            self.reset_pending_transaction();
                         }
                     }
                 }
@@ -491,8 +492,11 @@ impl ExfatRuntimeState {
                         error = ?err,
                         "exFAT 写事务无效，丢弃未提交的虚拟 metadata"
                     );
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    if err.is_recoverable_policy_rejection() {
+                        self.reset_pending_transaction_after_policy_rejection(tx.id());
+                    } else {
+                        self.reset_pending_transaction();
+                    }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("{err:?}"),
@@ -504,8 +508,7 @@ impl ExfatRuntimeState {
                         error = %e,
                         "exFAT 写事务提交失败，丢弃未提交的虚拟 metadata"
                     );
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    self.reset_pending_transaction();
                     return Err(e);
                 }
             }
@@ -520,15 +523,16 @@ impl ExfatRuntimeState {
                 Ok(ResolveStatus::Complete(resolved)) => {
                     if !resolved.mutations.is_empty() {
                         for mutation in resolved.mutations {
-                            self.commit_resolved_mutation(mutation)?;
+                            if let Err(e) = self.commit_resolved_mutation(mutation) {
+                                self.reset_pending_transaction_after_commit_error(tx.id(), &e);
+                                return Err(e);
+                            }
                         }
                     }
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    self.reset_pending_transaction();
                 }
                 Ok(ResolveStatus::Incomplete(_)) => {
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    self.reset_pending_transaction();
                 }
                 Ok(ResolveStatus::Invalid(err)) => {
                     tracing::warn!(
@@ -536,8 +540,11 @@ impl ExfatRuntimeState {
                         error = ?err,
                         "exFAT flush 事务无效，丢弃未提交的虚拟 metadata"
                     );
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    if err.is_recoverable_policy_rejection() {
+                        self.reset_pending_transaction_after_policy_rejection(tx.id());
+                    } else {
+                        self.reset_pending_transaction();
+                    }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("{err:?}"),
@@ -549,8 +556,7 @@ impl ExfatRuntimeState {
                         error = %e,
                         "exFAT flush 提交失败，丢弃未提交的虚拟 metadata"
                     );
-                    self.pending_tx = PendingTransaction::new(self.next_tx_id);
-                    self.next_tx_id += 1;
+                    self.reset_pending_transaction();
                     return Err(e);
                 }
             }
@@ -588,6 +594,28 @@ impl ExfatRuntimeState {
         tx: &PendingTransaction,
     ) -> Result<ResolveStatus, std::io::Error> {
         TransactionResolver::new().resolve_closed(tx, self)
+    }
+
+    fn reset_pending_transaction(&mut self) {
+        self.pending_tx = PendingTransaction::new(self.next_tx_id);
+        self.next_tx_id += 1;
+    }
+
+    fn reset_pending_transaction_after_policy_rejection(&mut self, tx_id: u64) {
+        tracing::warn!(
+            tx_id,
+            "blocked placeholder 写事务被策略拒绝，已隔离失败事务，后续写入将从新事务开始"
+        );
+        self.reset_pending_transaction();
+    }
+
+    fn reset_pending_transaction_after_commit_error(&mut self, tx_id: u64, err: &std::io::Error) {
+        tracing::warn!(
+            tx_id,
+            error = %err,
+            "exFAT 写事务提交失败，已隔离失败事务，后续写入将从新事务开始"
+        );
+        self.reset_pending_transaction();
     }
 
     fn commit_resolved_mutation(&mut self, mutation: FsMutation) -> Result<(), std::io::Error> {

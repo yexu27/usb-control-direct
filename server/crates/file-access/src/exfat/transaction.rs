@@ -59,6 +59,12 @@ pub enum TransactionError {
     },
 }
 
+impl TransactionError {
+    pub fn is_recoverable_policy_rejection(&self) -> bool {
+        matches!(self, Self::BlockedPlaceholderRewrite { .. })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommittedMetadataUpdate {
     Sector { sector: u64, data: Vec<u8> },
