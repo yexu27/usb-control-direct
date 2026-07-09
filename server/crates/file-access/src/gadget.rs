@@ -29,6 +29,14 @@ pub enum GadgetError {
     RealBlockDeviceForbidden(String),
     #[error("不能绑定 NBD 分区到 LUN，必须绑定整盘 /dev/nbdX: {0}")]
     NbdPartitionForbidden(String),
+    #[error(
+        "UDC rebind 后 host 未完成 configured: udc={udc:?}, before={before:?}, after={after:?}"
+    )]
+    UdcEnumerationFailed {
+        udc: Option<String>,
+        before: Option<String>,
+        after: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +244,46 @@ impl GadgetRuntime {
         fs::write(&path, format!("{udc}\n"))?;
         info!(udc = %udc, "bound UDC for USB gadget startup");
         Ok(())
+    }
+
+    pub fn current_udc_name(&self) -> Result<Option<String>, GadgetError> {
+        let value = fs::read_to_string(self.udc_path())?;
+        let name = value.trim().to_string();
+        if name.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(name))
+        }
+    }
+
+    pub fn current_udc_state(&self) -> Result<Option<String>, GadgetError> {
+        let Some(name) = self.current_udc_name()? else {
+            return Ok(None);
+        };
+        let state_path = self.udc_root.join(name).join("state");
+        match fs::read_to_string(state_path) {
+            Ok(value) => Ok(Some(value.trim().to_string())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(GadgetError::Io(e)),
+        }
+    }
+
+    pub fn rebind_current_udc(&self) -> Result<Option<String>, GadgetError> {
+        let Some(current_udc) = self.current_udc_name()? else {
+            self.bind_udc_if_empty()?;
+            return Ok(None);
+        };
+
+        info!(
+            udc = %current_udc,
+            "Rebinding UDC to trigger host USB enumeration"
+        );
+
+        let udc_path = self.udc_path();
+        fs::write(&udc_path, "\n")?;
+        fs::write(&udc_path, format!("{current_udc}\n"))?;
+
+        Ok(Some(current_udc))
     }
 
     pub fn current_backing(&self) -> Result<String, GadgetError> {

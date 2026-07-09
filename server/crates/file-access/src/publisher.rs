@@ -8,12 +8,16 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use tracing::{debug, error, info};
+use tokio::time::{sleep, Duration, Instant};
+use tracing::{debug, error, info, warn};
 
 use crate::block_backend::BlockBackend;
 use crate::exfat::fs::VirtualExfatFs;
 use crate::gadget::{GadgetError, GadgetRuntime};
 use crate::nbd::{device::NbdDevice, NbdDeviceManager};
+
+const UDC_ENUMERATION_TIMEOUT: Duration = Duration::from_secs(3);
+const UDC_ENUMERATION_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// 已发布 storage 资源的运行时句柄。
 pub(crate) trait PublishedStorageRuntime: Send {
@@ -73,6 +77,70 @@ impl StoragePublisher {
     }
 }
 
+fn udc_state_needs_rebind(state: Option<&str>) -> bool {
+    matches!(
+        state,
+        None | Some("not attached") | Some("powered") | Some("default")
+    )
+}
+
+fn udc_state_is_configured(state: Option<&str>) -> bool {
+    matches!(state, Some("configured"))
+}
+
+async fn ensure_host_enumerated_after_lun_update(
+    gadget: &GadgetRuntime,
+) -> Result<(), GadgetError> {
+    let before_state = gadget.current_udc_state()?;
+    if udc_state_is_configured(before_state.as_deref()) {
+        debug!(
+            state = ?before_state,
+            "UDC already configured after mass storage LUN update"
+        );
+        return Ok(());
+    }
+
+    let before_udc = gadget.current_udc_name()?;
+    if udc_state_needs_rebind(before_state.as_deref()) {
+        info!(
+            udc = ?before_udc,
+            state = ?before_state,
+            "UDC is not configured after LUN update; rebind once to trigger host enumeration"
+        );
+        gadget.rebind_current_udc()?;
+    } else {
+        warn!(
+            udc = ?before_udc,
+            state = ?before_state,
+            "UDC is not configured after LUN update; waiting without rebind"
+        );
+    }
+
+    let deadline = Instant::now() + UDC_ENUMERATION_TIMEOUT;
+    loop {
+        let after_state = gadget.current_udc_state()?;
+        if udc_state_is_configured(after_state.as_deref()) {
+            info!(
+                udc = ?gadget.current_udc_name()?,
+                before_state = ?before_state,
+                after_state = ?after_state,
+                "UDC host enumeration completed after mass storage LUN update"
+            );
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            return Err(GadgetError::UdcEnumerationFailed {
+                udc: gadget.current_udc_name()?,
+                before: before_state,
+                after: after_state,
+            });
+        }
+
+        sleep(UDC_ENUMERATION_POLL_INTERVAL).await;
+    }
+}
+
 impl StorageRuntimePublisher for StoragePublisher {
     fn publish(
         &self,
@@ -97,6 +165,12 @@ impl StorageRuntimePublisher for StoragePublisher {
                 .map_err(|e| PublishError::Nbd(e.to_string()))?;
 
             if let Err(e) = self.gadget.attach_mass_storage(&nbd_device, readonly) {
+                nbd_device_runtime.stop().await;
+                return Err(PublishError::Gadget(e));
+            }
+
+            if let Err(e) = ensure_host_enumerated_after_lun_update(&self.gadget).await {
+                let _ = self.gadget.detach_mass_storage();
                 nbd_device_runtime.stop().await;
                 return Err(PublishError::Gadget(e));
             }

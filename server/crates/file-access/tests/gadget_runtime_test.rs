@@ -33,6 +33,15 @@ fn make_lun(root: &Path, function_name: &str, linked: bool) -> PathBuf {
 }
 
 #[cfg(unix)]
+fn make_udc(root: &Path, name: &str, state: &str) -> PathBuf {
+    let class_udc = root.join("class_udc");
+    let udc = class_udc.join(name);
+    fs::create_dir_all(&udc).unwrap();
+    fs::write(udc.join("state"), format!("{state}\n")).unwrap();
+    class_udc
+}
+
+#[cfg(unix)]
 #[test]
 fn discover_under_prefers_lun_linked_to_active_config() {
     let dir = tempdir().unwrap();
@@ -45,6 +54,46 @@ fn discover_under_prefers_lun_linked_to_active_config() {
     assert_eq!(runtime.lun_dir(), linked.as_path());
     assert_eq!(runtime.gadget_name(), "rockchip");
     assert_eq!(runtime.function_name(), "mass_storage.usb0");
+}
+
+#[cfg(unix)]
+#[test]
+fn reads_current_bound_udc_state() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    make_lun(root, "mass_storage.usb0", true);
+    let class_udc = make_udc(root, "fcc00000.dwc3", "not attached");
+
+    let runtime = GadgetRuntime::discover_under_with_udc_root(root, &class_udc).unwrap();
+
+    assert_eq!(
+        runtime.current_udc_name().unwrap().as_deref(),
+        Some("fcc00000.dwc3")
+    );
+    assert_eq!(
+        runtime.current_udc_state().unwrap().as_deref(),
+        Some("not attached")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rebinds_current_udc_without_waiting_for_host() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    make_lun(root, "mass_storage.usb0", true);
+    let class_udc = make_udc(root, "fcc00000.dwc3", "not attached");
+
+    let runtime = GadgetRuntime::discover_under_with_udc_root(root, &class_udc).unwrap();
+
+    assert_eq!(
+        runtime.rebind_current_udc().unwrap().as_deref(),
+        Some("fcc00000.dwc3")
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("rockchip").join("UDC")).unwrap(),
+        "fcc00000.dwc3\n"
+    );
 }
 
 #[cfg(unix)]
