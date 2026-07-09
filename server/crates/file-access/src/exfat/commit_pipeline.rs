@@ -58,15 +58,15 @@ impl<'a> CommitPipeline<'a> {
         match mutation {
             FsMutation::WriteFile { virtual_path, .. }
             | FsMutation::RewriteFile { virtual_path, .. }
-            | FsMutation::Truncate { virtual_path, .. }
-            | FsMutation::Delete { virtual_path, .. } => {
-                self.deny_if_blocked_placeholder(virtual_path, mutation_name(mutation))?;
+            | FsMutation::Truncate { virtual_path, .. } => {
+                self.deny_modify_blocked_placeholder(virtual_path, mutation_name(mutation))?;
             }
-            FsMutation::Rename { from, to, .. } => {
-                self.deny_if_blocked_placeholder(from, "rename_from")?;
-                self.deny_if_blocked_placeholder(to, "rename_to")?;
+            FsMutation::Rename { from, .. } => {
+                self.deny_modify_blocked_placeholder(from, "rename_from")?;
             }
-            FsMutation::CreateDir { .. } | FsMutation::CreateFile { .. } => {}
+            FsMutation::CreateDir { .. }
+            | FsMutation::CreateFile { .. }
+            | FsMutation::Delete { .. } => {}
         }
 
         let guard = OperationGuard::new(self.snapshot.clone());
@@ -96,7 +96,7 @@ impl<'a> CommitPipeline<'a> {
         }
     }
 
-    fn deny_if_blocked_placeholder(
+    fn deny_modify_blocked_placeholder(
         &self,
         virtual_path: &str,
         operation: &str,
@@ -108,11 +108,11 @@ impl<'a> CommitPipeline<'a> {
                         virtual_path = %node.virtual_path,
                         reason = node.blocked_reason().unwrap_or("unknown"),
                         operation,
-                        "阻断占位文件禁止变更"
+                        "策略命中文件禁止修改"
                     );
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
-                        "阻断占位文件禁止变更",
+                        "策略命中文件禁止修改",
                     ));
                 }
             }
@@ -153,10 +153,23 @@ impl<'a> CommitPipeline<'a> {
                 self.committer.flush_file(virtual_path)
             }
             FsMutation::Rename { from, to, .. } => self.committer.rename(from, to),
-            FsMutation::Delete { virtual_path, kind } => match kind {
-                NodeKind::File => self.committer.delete_file(virtual_path),
-                NodeKind::Directory => self.committer.delete_dir(virtual_path),
-            },
+            FsMutation::Delete { virtual_path, kind } => {
+                let real_path = self
+                    .index
+                    .lookup_path(virtual_path)
+                    .and_then(|id| self.index.node(id))
+                    .map(|node| node.real_path.clone())
+                    .ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("delete target not found in VFS: {virtual_path}"),
+                        )
+                    })?;
+                match kind {
+                    NodeKind::File => self.committer.delete_file_at_real_path(&real_path),
+                    NodeKind::Directory => self.committer.delete_dir_at_real_path(&real_path),
+                }
+            }
             FsMutation::RewriteFile {
                 virtual_path,
                 size,

@@ -41,6 +41,30 @@ fn blacklist_denies_create_and_rename_target() {
 }
 
 #[test]
+fn blacklist_does_not_deny_delete_when_permission_is_read_write() {
+    let guard = OperationGuard::new(snapshot(1));
+
+    guard
+        .check(&FsOperation::Delete {
+            virtual_path: "/bad.blocked".to_string(),
+        })
+        .unwrap();
+}
+
+#[test]
+fn readonly_still_denies_delete() {
+    let guard = OperationGuard::new(snapshot(0));
+
+    let err = guard
+        .check(&FsOperation::Delete {
+            virtual_path: "/bad.blocked".to_string(),
+        })
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
 fn executable_control_denies_pe_write_commit() {
     let guard = OperationGuard::new(snapshot(1));
     let err = guard

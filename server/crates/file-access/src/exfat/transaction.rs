@@ -50,6 +50,9 @@ pub enum TransactionError {
     UnsupportedDirectoryRewrite {
         parent: String,
     },
+    BlockedPlaceholderRewrite {
+        virtual_path: String,
+    },
     UnresolvedClusterChain {
         first_cluster: u32,
         data_length: u64,

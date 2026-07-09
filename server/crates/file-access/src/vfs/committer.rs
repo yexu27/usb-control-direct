@@ -76,8 +76,8 @@ impl RealFsCommitter {
         Ok(())
     }
 
-    pub fn delete_file(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        let path = self.resolve_virtual_path(virtual_path)?;
+    pub fn delete_file_at_real_path(&self, real_path: &Path) -> Result<(), std::io::Error> {
+        let path = self.resolve_real_path_under_mount_root(real_path)?;
         match fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -86,8 +86,8 @@ impl RealFsCommitter {
         self.sync_parent(&path)
     }
 
-    pub fn delete_dir(&self, virtual_path: &str) -> Result<(), std::io::Error> {
-        let path = self.resolve_virtual_path(virtual_path)?;
+    pub fn delete_dir_at_real_path(&self, real_path: &Path) -> Result<(), std::io::Error> {
+        let path = self.resolve_real_path_under_mount_root(real_path)?;
         match fs::remove_dir_all(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -127,6 +127,42 @@ impl RealFsCommitter {
             }
         }
         Ok(())
+    }
+
+    fn resolve_real_path_under_mount_root(
+        &self,
+        real_path: &Path,
+    ) -> Result<PathBuf, std::io::Error> {
+        let path = if real_path.is_absolute() {
+            real_path.to_path_buf()
+        } else {
+            self.mount_root.join(real_path)
+        };
+        let canonical_root = self.mount_root.canonicalize()?;
+        let mut ancestor = path.parent().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "real path has no parent")
+        })?;
+        let canonical_ancestor = loop {
+            match ancestor.canonicalize() {
+                Ok(path) => break path,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    ancestor = ancestor.parent().ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            "real path has no existing ancestor",
+                        )
+                    })?;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+        if !canonical_ancestor.starts_with(&canonical_root) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "real path escapes mount root",
+            ));
+        }
+        Ok(path)
     }
 
     fn resolve_virtual_path(&self, virtual_path: &str) -> Result<PathBuf, std::io::Error> {

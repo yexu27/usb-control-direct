@@ -56,7 +56,7 @@ impl OperationGuard {
             | FsOperation::WriteFile { virtual_path }
             | FsOperation::Truncate { virtual_path } => self.check_path(virtual_path),
             FsOperation::Rename { to, .. } => self.check_path(to),
-            FsOperation::Delete { virtual_path } => self.check_path(virtual_path),
+            FsOperation::Delete { .. } => Ok(()),
             FsOperation::WriteExecutable {
                 virtual_path,
                 exec_type,

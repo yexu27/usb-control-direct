@@ -125,6 +125,18 @@ impl TransactionResolver {
                 continue;
             }
 
+            if !new_entries.is_empty() {
+                for (_, virtual_path, _) in &missing_children {
+                    if is_blocked_placeholder_path(state, virtual_path) {
+                        return Ok(ResolveStatus::Invalid(
+                            TransactionError::BlockedPlaceholderRewrite {
+                                virtual_path: virtual_path.clone(),
+                            },
+                        ));
+                    }
+                }
+            }
+
             for (_, virtual_path, kind) in missing_children {
                 mutations.push(FsMutation::Delete { virtual_path, kind });
             }
@@ -277,6 +289,13 @@ fn is_rename_candidate(
         return false;
     };
     node.first_cluster == entry_first_cluster(new_entry.first_cluster)
+}
+
+fn is_blocked_placeholder_path(state: &ExfatRuntimeState, virtual_path: &str) -> bool {
+    state
+        .lookup_path(virtual_path)
+        .map(|node| node.is_blocked_placeholder())
+        .unwrap_or(false)
 }
 
 fn entry_kind(entry: &crate::exfat::directory_parser::ParsedDirectoryEntry) -> NodeKind {
