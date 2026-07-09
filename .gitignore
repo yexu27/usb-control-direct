@@ -5,5 +5,3 @@ docs/prompts
 docs/superpowers
 server/Cargo.lock
 .claude/worktrees
-artifacts/license/
-license-machine-code.txt
