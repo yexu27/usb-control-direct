@@ -5,3 +5,4 @@ docs/prompts
 docs/superpowers
 server/Cargo.lock
 .claude/worktrees
+.codex/worktrees
