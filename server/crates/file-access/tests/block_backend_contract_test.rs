@@ -1,7 +1,7 @@
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use file_access::block_backend::BlockBackend;
+use file_access::block_backend::{BlockBackend, BlockWriteOutcome};
 
 #[derive(Default)]
 struct MockBlockBackend {
@@ -14,8 +14,8 @@ impl BlockBackend for MockBlockBackend {
         Ok(vec![0u8; len])
     }
 
-    fn write_at(&self, _offset: u64, _data: &[u8]) -> io::Result<()> {
-        Ok(())
+    fn write_at(&self, _offset: u64, _data: &[u8]) -> io::Result<BlockWriteOutcome> {
+        Ok(BlockWriteOutcome::Committed)
     }
 
     fn flush(&self) -> io::Result<()> {

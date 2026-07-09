@@ -37,7 +37,10 @@ fn function_body<'a>(source: &'a str, signature: &str) -> &'a str {
 #[test]
 fn virtual_exfat_facade_write_path_does_not_use_legacy_overlay_or_diff() {
     let fs_rs = source_file("src/exfat/fs.rs");
-    let write_at = function_body(&fs_rs, "pub fn write_at(&self, offset: u64, data: &[u8])");
+    let write_at = function_body(
+        &fs_rs,
+        "pub fn write_at(&self, offset: u64, data: &[u8]) -> Result<BlockWriteOutcome, std::io::Error>",
+    );
     for forbidden in [
         "metadata_overlay",
         "data_overlay",

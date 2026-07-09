@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tracing::{debug, error, info, warn};
 
-use crate::block_backend::BlockBackend;
+use crate::block_backend::{BlockBackend, BlockWriteOutcome};
 
 use super::io::{read_exact_fd, write_all_fd};
 use super::protocol::{build_reply, NbdCommand, NbdRequest, NBD_EIO, NBD_REQUEST_SIZE};
@@ -99,7 +99,16 @@ fn handle_write<B: BlockBackend + ?Sized>(user_fd: RawFd, req: &NbdRequest, back
     }
 
     let error = match backend.write_at(req.from, &write_data) {
-        Ok(()) => 0,
+        Ok(BlockWriteOutcome::Committed) => 0,
+        Ok(BlockWriteOutcome::PolicyRejectedAndRestored { reason }) => {
+            warn!(
+                offset = req.from,
+                len = req.len,
+                reason = %reason,
+                "NBD WRITE 被后端策略拒绝并恢复 canonical metadata，回复成功以避免卷进入 I/O 错误状态"
+            );
+            0
+        }
         Err(e) => {
             warn!(
                 offset = req.from,

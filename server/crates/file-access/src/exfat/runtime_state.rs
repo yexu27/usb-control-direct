@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
+use crate::block_backend::BlockWriteOutcome;
 use crate::exfat::bitmap_state::BitmapState;
 use crate::exfat::commit_pipeline::CommitPipeline;
 use crate::exfat::directory_store::DirectoryStore;
@@ -13,6 +14,7 @@ use crate::exfat::layout::{
 };
 use crate::exfat::metadata_overlay::MetadataOverlay;
 use crate::exfat::metadata_state::ExfatMetadataState;
+use crate::exfat::policy_rejection::RecoverablePolicyRejection;
 use crate::exfat::sector_owner::{SectorOwner, SectorOwnerMap};
 use crate::exfat::transaction::{PendingTransaction, ResolveStatus};
 use crate::exfat::transaction_resolver::TransactionResolver;
@@ -388,7 +390,11 @@ impl ExfatRuntimeState {
         Ok(Some((first_sector, data)))
     }
 
-    pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+    pub fn write_at(
+        &mut self,
+        offset: u64,
+        data: &[u8],
+    ) -> Result<BlockWriteOutcome, std::io::Error> {
         if !data.is_empty() && self.snapshot.permission == 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -425,11 +431,17 @@ impl ExfatRuntimeState {
                         ));
                     };
                     let write_len = (valid_bytes as usize).min(chunk.len());
-                    self.commit_resolved_mutation(FsMutation::WriteFile {
-                        virtual_path: node.virtual_path.clone(),
-                        offset: file_offset,
-                        data: chunk[..write_len].to_vec(),
-                    })?;
+                    let virtual_path = node.virtual_path.clone();
+                    if let Some(outcome) = self.commit_mutation_for_write_request(
+                        self.pending_tx.id(),
+                        FsMutation::WriteFile {
+                            virtual_path,
+                            offset: file_offset,
+                            data: chunk[..write_len].to_vec(),
+                        },
+                    )? {
+                        return Ok(outcome);
+                    }
                 }
                 SectorOwner::AllocatedZero {
                     node_id,
@@ -447,11 +459,17 @@ impl ExfatRuntimeState {
                     } else {
                         known_remaining.min(chunk.len())
                     };
-                    self.commit_resolved_mutation(FsMutation::WriteFile {
-                        virtual_path: node.virtual_path.clone(),
-                        offset: file_offset,
-                        data: chunk[..write_len].to_vec(),
-                    })?;
+                    let virtual_path = node.virtual_path.clone();
+                    if let Some(outcome) = self.commit_mutation_for_write_request(
+                        self.pending_tx.id(),
+                        FsMutation::WriteFile {
+                            virtual_path,
+                            offset: file_offset,
+                            data: chunk[..write_len].to_vec(),
+                        },
+                    )? {
+                        return Ok(outcome);
+                    }
                 }
                 _ => {
                     WriteInterpreter::new().record_sector_write(
@@ -470,9 +488,10 @@ impl ExfatRuntimeState {
                 Ok(ResolveStatus::Complete(resolved)) => {
                     if !resolved.mutations.is_empty() {
                         for mutation in resolved.mutations {
-                            if let Err(e) = self.commit_resolved_mutation(mutation) {
-                                self.reset_pending_transaction_after_commit_error(tx.id(), &e);
-                                return Err(e);
+                            if let Some(outcome) =
+                                self.commit_mutation_for_write_request(tx.id(), mutation)?
+                            {
+                                return Ok(outcome);
                             }
                         }
                         self.reset_pending_transaction();
@@ -493,7 +512,14 @@ impl ExfatRuntimeState {
                         "exFAT 写事务无效，丢弃未提交的虚拟 metadata"
                     );
                     if err.is_recoverable_policy_rejection() {
+                        let reason = format!("{err:?}");
                         self.reset_pending_transaction_after_policy_rejection(tx.id());
+                        tracing::warn!(
+                            tx_id = tx.id(),
+                            reason = %reason,
+                            "blocked placeholder 写事务被解析层拒绝，已恢复 canonical metadata 并吸收块写入"
+                        );
+                        return Ok(BlockWriteOutcome::PolicyRejectedAndRestored { reason });
                     } else {
                         self.reset_pending_transaction();
                     }
@@ -513,7 +539,7 @@ impl ExfatRuntimeState {
                 }
             }
         }
-        Ok(())
+        Ok(BlockWriteOutcome::Committed)
     }
 
     pub fn flush(&mut self) -> Result<(), std::io::Error> {
@@ -523,9 +549,8 @@ impl ExfatRuntimeState {
                 Ok(ResolveStatus::Complete(resolved)) => {
                     if !resolved.mutations.is_empty() {
                         for mutation in resolved.mutations {
-                            if let Err(e) = self.commit_resolved_mutation(mutation) {
-                                self.reset_pending_transaction_after_commit_error(tx.id(), &e);
-                                return Err(e);
+                            if self.commit_mutation_for_flush(tx.id(), mutation)? {
+                                return self.committer.sync_mount_root();
                             }
                         }
                     }
@@ -542,6 +567,12 @@ impl ExfatRuntimeState {
                     );
                     if err.is_recoverable_policy_rejection() {
                         self.reset_pending_transaction_after_policy_rejection(tx.id());
+                        tracing::warn!(
+                            tx_id = tx.id(),
+                            error = ?err,
+                            "blocked placeholder flush 事务被解析层拒绝，已恢复 canonical metadata 并吸收 flush"
+                        );
+                        return Ok(());
                     } else {
                         self.reset_pending_transaction();
                     }
@@ -616,6 +647,56 @@ impl ExfatRuntimeState {
             "exFAT 写事务提交失败，已隔离失败事务，后续写入将从新事务开始"
         );
         self.reset_pending_transaction();
+    }
+
+    fn commit_mutation_for_write_request(
+        &mut self,
+        tx_id: u64,
+        mutation: FsMutation,
+    ) -> Result<Option<BlockWriteOutcome>, std::io::Error> {
+        match self.commit_resolved_mutation(mutation) {
+            Ok(()) => Ok(None),
+            Err(e) => {
+                if let Some(rejection) = RecoverablePolicyRejection::from_io_error(&e) {
+                    let reason = rejection.to_outcome_reason();
+                    self.reset_pending_transaction_after_commit_error(tx_id, &e);
+                    tracing::warn!(
+                        tx_id,
+                        reason = %reason,
+                        "blocked placeholder 写事务被策略拒绝，已恢复 canonical metadata 并吸收块写入"
+                    );
+                    return Ok(Some(BlockWriteOutcome::PolicyRejectedAndRestored {
+                        reason,
+                    }));
+                }
+                self.reset_pending_transaction_after_commit_error(tx_id, &e);
+                Err(e)
+            }
+        }
+    }
+
+    fn commit_mutation_for_flush(
+        &mut self,
+        tx_id: u64,
+        mutation: FsMutation,
+    ) -> Result<bool, std::io::Error> {
+        match self.commit_resolved_mutation(mutation) {
+            Ok(()) => Ok(false),
+            Err(e) => {
+                if let Some(rejection) = RecoverablePolicyRejection::from_io_error(&e) {
+                    let reason = rejection.to_outcome_reason();
+                    self.reset_pending_transaction_after_commit_error(tx_id, &e);
+                    tracing::warn!(
+                        tx_id,
+                        reason = %reason,
+                        "blocked placeholder flush 事务被策略拒绝，已恢复 canonical metadata 并吸收 flush"
+                    );
+                    return Ok(true);
+                }
+                self.reset_pending_transaction_after_commit_error(tx_id, &e);
+                Err(e)
+            }
+        }
     }
 
     fn commit_resolved_mutation(&mut self, mutation: FsMutation) -> Result<(), std::io::Error> {

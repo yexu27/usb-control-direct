@@ -89,8 +89,31 @@ impl TransactionResolver {
                 .cloned()
                 .collect::<Vec<_>>();
 
+            let mut skipped_blocked_paths = HashSet::new();
+            let mut skipped_cached_names = HashSet::new();
+            for missing in &missing_children {
+                let (_, virtual_path, _) = missing;
+                if !is_blocked_placeholder_path(state, virtual_path) {
+                    continue;
+                }
+                let Some(cached_entry) = new_entries
+                    .iter()
+                    .find(|entry| is_cached_blocked_rename_entry(state, missing, entry))
+                else {
+                    continue;
+                };
+                tracing::warn!(
+                    from = %virtual_path,
+                    cached_name = %cached_entry.name,
+                    "忽略 Windows 缓存的 blocked placeholder 重命名目录项，继续处理同事务内其他写入"
+                );
+                skipped_blocked_paths.insert(virtual_path.clone());
+                skipped_cached_names.insert(cached_entry.name.clone());
+            }
+
             if missing_children.len() == 1
                 && new_entries.len() == 1
+                && skipped_blocked_paths.is_empty()
                 && is_rename_candidate(state, &missing_children[0], &new_entries[0])
             {
                 let (_, from, kind) = &missing_children[0];
@@ -125,28 +148,21 @@ impl TransactionResolver {
                 continue;
             }
 
-            let mut skipped_blocked_paths = HashSet::new();
-            let mut skipped_cached_names = HashSet::new();
-            if new_entries.len() > 1 {
-                for missing in &missing_children {
-                    let (_, virtual_path, _) = missing;
-                    if !is_blocked_placeholder_path(state, virtual_path) {
-                        continue;
-                    }
-                    let Some(cached_entry) = new_entries
-                        .iter()
-                        .find(|entry| is_cached_blocked_rename_entry(state, missing, entry))
-                    else {
-                        continue;
-                    };
-                    tracing::warn!(
-                        from = %virtual_path,
-                        cached_name = %cached_entry.name,
-                        "忽略 Windows 缓存的 blocked placeholder 重命名目录项，继续处理同事务内其他写入"
-                    );
-                    skipped_blocked_paths.insert(virtual_path.clone());
-                    skipped_cached_names.insert(cached_entry.name.clone());
-                }
+            if !skipped_blocked_paths.is_empty()
+                && new_entries.len() == skipped_cached_names.len()
+                && !parsed_entries.iter().any(|entry| {
+                    !skipped_cached_names.contains(&entry.name)
+                        && existing_entry_has_metadata_change(state, &parent, entry)
+                })
+            {
+                let virtual_path = skipped_blocked_paths
+                    .iter()
+                    .next()
+                    .expect("skipped blocked path exists")
+                    .clone();
+                return Ok(ResolveStatus::Invalid(
+                    TransactionError::BlockedPlaceholderRewrite { virtual_path },
+                ));
             }
 
             if !new_entries.is_empty() {
@@ -343,6 +359,22 @@ fn is_cached_blocked_rename_entry(
         return false;
     };
     node.is_blocked_placeholder() && node.size == new_entry.data_length
+}
+
+fn existing_entry_has_metadata_change(
+    state: &ExfatRuntimeState,
+    parent: &str,
+    entry: &crate::exfat::directory_parser::ParsedDirectoryEntry,
+) -> bool {
+    let virtual_path = join_virtual_path(parent, &entry.name);
+    let Some(node) = state.lookup_path(&virtual_path) else {
+        return false;
+    };
+    if entry.is_dir {
+        return entry_first_cluster(entry.first_cluster) != node.first_cluster;
+    }
+    let entry_first_cluster = entry_first_cluster(entry.first_cluster);
+    entry_first_cluster != node.first_cluster || entry.data_length != node.size
 }
 
 fn entry_kind(entry: &crate::exfat::directory_parser::ParsedDirectoryEntry) -> NodeKind {

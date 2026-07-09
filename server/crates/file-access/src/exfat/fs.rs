@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use tracing::debug;
 
+use crate::block_backend::BlockWriteOutcome;
 use crate::exfat::layout::SECTOR_SIZE;
 use crate::exfat::runtime_state::ExfatRuntimeState;
 use crate::types::{ControlledEntry, PolicySnapshot};
@@ -53,7 +54,7 @@ impl VirtualExfatFs {
         self.runtime.lock().unwrap().read_at(offset, len)
     }
 
-    pub fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+    pub fn write_at(&self, offset: u64, data: &[u8]) -> Result<BlockWriteOutcome, std::io::Error> {
         self.runtime.lock().unwrap().write_at(offset, data)
     }
 
@@ -71,7 +72,7 @@ impl crate::block_backend::BlockBackend for VirtualExfatFs {
         VirtualExfatFs::read_at(self, offset, len)
     }
 
-    fn write_at(&self, offset: u64, data: &[u8]) -> Result<(), std::io::Error> {
+    fn write_at(&self, offset: u64, data: &[u8]) -> Result<BlockWriteOutcome, std::io::Error> {
         VirtualExfatFs::write_at(self, offset, data)
     }
 

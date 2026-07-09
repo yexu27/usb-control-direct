@@ -1,16 +1,27 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use file_access::block_backend::BlockWriteOutcome;
+use file_access::exfat::dir_entry::build_file_entry_set;
 use file_access::exfat::directory_parser::parse_entry_sets;
 use file_access::exfat::fs::VirtualExfatFs;
-use file_access::exfat::dir_entry::build_file_entry_set;
-use file_access::types::{ControlledEntry, PolicySnapshot};
+use file_access::types::{ControlledEntry, ExecFileType, PolicySnapshot};
 
 fn snapshot() -> PolicySnapshot {
     PolicySnapshot {
         exec_control_enabled: true,
         file_type_blacklist_enabled: true,
         auto_read_control_enabled: true,
+        blacklist_extensions: HashSet::new(),
+        permission: 1,
+    }
+}
+
+fn exec_control_snapshot() -> PolicySnapshot {
+    PolicySnapshot {
+        exec_control_enabled: true,
+        file_type_blacklist_enabled: false,
+        auto_read_control_enabled: false,
         blacklist_extensions: HashSet::new(),
         permission: 1,
     }
@@ -24,6 +35,30 @@ fn file(path: PathBuf, name: &str, size: u64) -> ControlledEntry {
         is_dir: false,
         is_virus: false,
         exec_type: None,
+        extension: name
+            .rsplit_once('.')
+            .map(|(_, ext)| ext.to_ascii_lowercase())
+            .unwrap_or_default(),
+        is_autorun_target: false,
+        is_autorun_inf: false,
+        is_root_shell_script: false,
+        children: vec![],
+    }
+}
+
+fn controlled_file(
+    path: PathBuf,
+    name: &str,
+    size: u64,
+    exec_type: Option<ExecFileType>,
+) -> ControlledEntry {
+    ControlledEntry {
+        real_path: path,
+        virtual_name: name.to_string(),
+        file_size: size,
+        is_dir: false,
+        is_virus: false,
+        exec_type,
         extension: name
             .rsplit_once('.')
             .map(|(_, ext)| ext.to_ascii_lowercase())
@@ -61,8 +96,32 @@ fn root_entry_cluster(fs: &VirtualExfatFs, name: &str) -> u32 {
         .first_cluster
 }
 
+fn root_entry_size(fs: &VirtualExfatFs, name: &str) -> u64 {
+    let root = fs.read_at(fs.root_dir_offset_for_test(), 4096).unwrap();
+    parse_entry_sets(&root)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .unwrap()
+        .data_length
+}
+
+fn assert_policy_rejected_and_restored(outcome: BlockWriteOutcome) {
+    match outcome {
+        BlockWriteOutcome::PolicyRejectedAndRestored { reason } => {
+            assert!(
+                reason.contains("blocked") || reason.contains("BlockedPlaceholderRewrite"),
+                "unexpected policy rejection reason: {reason}"
+            );
+        }
+        other => panic!("expected PolicyRejectedAndRestored, got {other:?}"),
+    }
+}
+
 fn directory_entry_cluster(fs: &VirtualExfatFs, dir_cluster: u32, name: &str) -> u32 {
-    let data = fs.read_at(fs.cluster_offset_for_test(dir_cluster), 4096).unwrap();
+    let data = fs
+        .read_at(fs.cluster_offset_for_test(dir_cluster), 4096)
+        .unwrap();
     let entries = parse_entry_sets(&data).unwrap();
     entries
         .into_iter()
@@ -128,6 +187,42 @@ fn write_interpreter_rejects_boot_sector_mutation() {
 }
 
 #[test]
+fn flush_absorbs_blocked_placeholder_policy_rejection_without_device_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
+    let tree = vec![controlled_file(
+        tmp.path().join("setup.exe"),
+        "setup.exe",
+        20,
+        Some(ExecFileType::Pe),
+    )];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, exec_control_snapshot(), 16 * 1024 * 1024)
+        .unwrap();
+
+    let cluster = root_entry_cluster(&fs, "setup.exe");
+    let mut root_sector = vec![0_u8; 4096];
+    let rename_entry = build_file_entry_set(
+        "1.exe",
+        false,
+        cluster,
+        root_entry_size(&fs, "setup.exe"),
+        false,
+    );
+    root_sector[..rename_entry.len()].copy_from_slice(&rename_entry);
+
+    let outcome = fs
+        .write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
+    assert_policy_rejected_and_restored(outcome);
+    fs.flush().unwrap();
+
+    assert!(tmp.path().join("setup.exe").exists());
+    assert!(!tmp.path().join("1.exe").exists());
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    assert!(fs.lookup_path("/1.exe").is_none());
+}
+
+#[test]
 fn write_interpreter_commits_empty_root_file_on_flush() {
     let tmp = tempfile::tempdir().unwrap();
     let fs = VirtualExfatFs::build(tmp.path(), &[], snapshot(), 16 * 1024 * 1024).unwrap();
@@ -135,7 +230,8 @@ fn write_interpreter_commits_empty_root_file_on_flush() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     let real = tmp.path().join("empty.txt");
@@ -151,7 +247,8 @@ fn write_interpreter_commits_empty_root_directory_on_flush() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     assert!(tmp.path().join("empty_dir").is_dir());
@@ -166,7 +263,8 @@ fn write_interpreter_commits_root_file_on_flush() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
 
     let mut data_sector = vec![0u8; 512];
     data_sector[..11].copy_from_slice(b"hello world");
@@ -233,7 +331,8 @@ fn write_interpreter_commits_file_inside_runtime_created_directory() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     let file_cluster = 250;
@@ -374,7 +473,8 @@ fn write_interpreter_commits_second_write_to_runtime_created_file() {
     let dir_entry = build_file_entry_set("runtime.txt", false, file_cluster, 5, false);
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
 
     let mut data_sector = vec![0u8; 512];
     data_sector[..5].copy_from_slice(b"first");
@@ -402,14 +502,26 @@ fn write_interpreter_commits_data_written_after_zero_length_runtime_create() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("zero_then_data.txt", false, file_cluster, 0, false)],
+        vec![build_file_entry_set(
+            "zero_then_data.txt",
+            false,
+            file_cluster,
+            0,
+            false,
+        )],
     );
     fs.flush().unwrap();
 
     write_file_data(&fs, file_cluster, b"data");
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("zero_then_data.txt", false, file_cluster, 4, false)],
+        vec![build_file_entry_set(
+            "zero_then_data.txt",
+            false,
+            file_cluster,
+            4,
+            false,
+        )],
     );
     fs.flush().unwrap();
 
@@ -432,7 +544,8 @@ fn write_interpreter_commits_deep_directory_tree_created_before_single_flush() {
     let nested_entry = build_file_entry_set("nested", true, nested_cluster, 0, false);
     let mut root_sector = vec![0u8; 512];
     root_sector[..nested_entry.len()].copy_from_slice(&nested_entry);
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
 
     let a_entry = build_file_entry_set("a", true, a_cluster, 0, false);
     let mut nested_sector = vec![0u8; 512];
@@ -480,7 +593,8 @@ fn write_interpreter_commits_rename_and_delete_on_flush() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     assert!(!tmp.path().join("old.txt").exists());
@@ -502,7 +616,13 @@ fn write_interpreter_ignores_windows_deleted_entry_sets_on_flush() {
 
     let mut deleted_old = build_file_entry_set("old.txt", false, old_cluster, 5, false);
     mark_entry_set_deleted(&mut deleted_old);
-    let mut deleted_gone = build_file_entry_set("gone.txt", false, root_entry_cluster(&fs, "gone.txt"), 3, false);
+    let mut deleted_gone = build_file_entry_set(
+        "gone.txt",
+        false,
+        root_entry_cluster(&fs, "gone.txt"),
+        3,
+        false,
+    );
     mark_entry_set_deleted(&mut deleted_gone);
     let new_entry = build_file_entry_set("new.txt", false, old_cluster, 5, false);
 
@@ -513,7 +633,8 @@ fn write_interpreter_ignores_windows_deleted_entry_sets_on_flush() {
         cursor += entry.len();
     }
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     assert!(!tmp.path().join("old.txt").exists());
@@ -568,10 +689,7 @@ fn write_interpreter_commits_non_empty_directory_tree_delete_on_flush() {
             ),
         ],
     );
-    let tree = vec![
-        tree_entry,
-        file(tmp.path().join("keep.txt"), "keep.txt", 4),
-    ];
+    let tree = vec![tree_entry, file(tmp.path().join("keep.txt"), "keep.txt", 4)];
     let fs = VirtualExfatFs::build(tmp.path(), &tree, snapshot(), 16 * 1024 * 1024).unwrap();
     let keep_cluster = root_entry_cluster(&fs, "keep.txt");
     let keep_entry = build_file_entry_set("keep.txt", false, keep_cluster, 4, false);
@@ -625,7 +743,10 @@ fn write_interpreter_commits_mixed_delete_then_create_after_flush() {
         .unwrap();
     fs.flush().unwrap();
 
-    assert_eq!(std::fs::read(tmp.path().join("after.txt")).unwrap(), b"after");
+    assert_eq!(
+        std::fs::read(tmp.path().join("after.txt")).unwrap(),
+        b"after"
+    );
 }
 
 #[test]
@@ -639,7 +760,13 @@ fn write_interpreter_deletes_runtime_created_directory_tree_after_flush() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("runtime_tree", true, tree_cluster, 0, false)],
+        vec![build_file_entry_set(
+            "runtime_tree",
+            true,
+            tree_cluster,
+            0,
+            false,
+        )],
     );
     fs.flush().unwrap();
 
@@ -653,7 +780,13 @@ fn write_interpreter_deletes_runtime_created_directory_tree_after_flush() {
     write_dir_entries(
         &fs,
         child_cluster,
-        vec![build_file_entry_set("data.txt", false, file_cluster, 4, false)],
+        vec![build_file_entry_set(
+            "data.txt",
+            false,
+            file_cluster,
+            4,
+            false,
+        )],
     );
     write_file_data(&fs, file_cluster, b"data");
     fs.flush().unwrap();
@@ -679,7 +812,13 @@ fn write_interpreter_commits_create_after_runtime_delete() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("old.txt", false, old_cluster, 3, false)],
+        vec![build_file_entry_set(
+            "old.txt",
+            false,
+            old_cluster,
+            3,
+            false,
+        )],
     );
     write_file_data(&fs, old_cluster, b"old");
     fs.flush().unwrap();
@@ -688,7 +827,13 @@ fn write_interpreter_commits_create_after_runtime_delete() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("new.txt", false, new_cluster, 3, false)],
+        vec![build_file_entry_set(
+            "new.txt",
+            false,
+            new_cluster,
+            3,
+            false,
+        )],
     );
     write_file_data(&fs, new_cluster, b"new");
     fs.flush().unwrap();
@@ -711,7 +856,10 @@ fn write_interpreter_commits_runtime_rename_and_truncate_after_flush() {
     write_file_data(&fs, cluster, b"abcdefgh");
     fs.flush().unwrap();
 
-    assert_eq!(std::fs::read(tmp.path().join("source.txt")).unwrap(), b"abcdefgh");
+    assert_eq!(
+        std::fs::read(tmp.path().join("source.txt")).unwrap(),
+        b"abcdefgh"
+    );
 
     write_root_entries(
         &fs,
@@ -720,7 +868,10 @@ fn write_interpreter_commits_runtime_rename_and_truncate_after_flush() {
     fs.flush().unwrap();
 
     assert!(!tmp.path().join("source.txt").exists());
-    assert_eq!(std::fs::read(tmp.path().join("target.txt")).unwrap(), b"abcd");
+    assert_eq!(
+        std::fs::read(tmp.path().join("target.txt")).unwrap(),
+        b"abcd"
+    );
 }
 
 #[test]
@@ -863,14 +1014,26 @@ fn write_interpreter_commits_directory_created_on_reused_file_cluster() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("matrix", true, matrix_cluster, 0, false)],
+        vec![build_file_entry_set(
+            "matrix",
+            true,
+            matrix_cluster,
+            0,
+            false,
+        )],
     );
     fs.flush().unwrap();
 
     write_dir_entries(
         &fs,
         matrix_cluster,
-        vec![build_file_entry_set("old.txt", false, reused_cluster, 3, false)],
+        vec![build_file_entry_set(
+            "old.txt",
+            false,
+            reused_cluster,
+            3,
+            false,
+        )],
     );
     write_file_data(&fs, reused_cluster, b"old");
     fs.flush().unwrap();
@@ -878,7 +1041,13 @@ fn write_interpreter_commits_directory_created_on_reused_file_cluster() {
     write_dir_entries(
         &fs,
         matrix_cluster,
-        vec![build_file_entry_set("after_delete", true, reused_cluster, 0, false)],
+        vec![build_file_entry_set(
+            "after_delete",
+            true,
+            reused_cluster,
+            0,
+            false,
+        )],
     );
     write_dir_entries(
         &fs,
@@ -888,7 +1057,13 @@ fn write_interpreter_commits_directory_created_on_reused_file_cluster() {
     write_dir_entries(
         &fs,
         deep_cluster,
-        vec![build_file_entry_set("created.txt", false, file_cluster, 4, false)],
+        vec![build_file_entry_set(
+            "created.txt",
+            false,
+            file_cluster,
+            4,
+            false,
+        )],
     );
     write_file_data(&fs, file_cluster, b"data");
     fs.flush().unwrap();
@@ -921,12 +1096,24 @@ fn write_interpreter_commits_file_created_on_reused_deleted_cluster() {
 
     write_root_entries(
         &fs,
-        vec![build_file_entry_set("mutate", true, mutate_cluster, 0, false)],
+        vec![build_file_entry_set(
+            "mutate",
+            true,
+            mutate_cluster,
+            0,
+            false,
+        )],
     );
     write_dir_entries(
         &fs,
         mutate_cluster,
-        vec![build_file_entry_set("new.txt", false, old_cluster, 4, false)],
+        vec![build_file_entry_set(
+            "new.txt",
+            false,
+            old_cluster,
+            4,
+            false,
+        )],
     );
     write_file_data(&fs, old_cluster, b"data");
     fs.flush().unwrap();
@@ -949,7 +1136,8 @@ fn write_interpreter_commits_truncate_on_flush() {
     let mut root_sector = vec![0u8; 512];
     root_sector[..dir_entry.len()].copy_from_slice(&dir_entry);
 
-    fs.write_at(fs.root_dir_offset_for_test(), &root_sector).unwrap();
+    fs.write_at(fs.root_dir_offset_for_test(), &root_sector)
+        .unwrap();
     fs.flush().unwrap();
 
     assert_eq!(std::fs::read(tmp.path().join("file.txt")).unwrap(), b"he");

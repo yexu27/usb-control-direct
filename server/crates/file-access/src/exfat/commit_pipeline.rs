@@ -4,6 +4,7 @@ use crate::exfat::layout::SECTORS_PER_CLUSTER;
 use crate::exfat::metadata_overlay::MetadataOverlay;
 use crate::exfat::metadata_renderer::MetadataRenderer;
 use crate::exfat::metadata_state::ExfatMetadataState;
+use crate::exfat::policy_rejection::RecoverablePolicyRejection;
 use crate::exfat::sector_owner::SectorOwner;
 use crate::exfat::volume::VirtualVolume;
 use crate::types::PolicySnapshot;
@@ -104,16 +105,19 @@ impl<'a> CommitPipeline<'a> {
         if let Some(id) = self.index.lookup_path(virtual_path) {
             if let Some(node) = self.index.node(id) {
                 if node.is_blocked_placeholder() {
+                    let reason = node.blocked_reason().unwrap_or("unknown").to_string();
                     tracing::warn!(
                         virtual_path = %node.virtual_path,
-                        reason = node.blocked_reason().unwrap_or("unknown"),
+                        reason = %reason,
                         operation,
                         "策略命中文件禁止修改"
                     );
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::PermissionDenied,
-                        "策略命中文件禁止修改",
-                    ));
+                    return Err(RecoverablePolicyRejection::blocked_placeholder(
+                        node.virtual_path.clone(),
+                        operation,
+                        reason,
+                    )
+                    .into_io_error());
                 }
             }
         }
