@@ -1458,6 +1458,161 @@ export namespace usb_control {
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 
+    /** Properties of a DeviceRuntimeStatus. */
+    interface IDeviceRuntimeStatus {
+
+        /** DeviceRuntimeStatus runtimeId */
+        runtimeId?: (string|null);
+
+        /** DeviceRuntimeStatus parentPath */
+        parentPath?: (string|null);
+
+        /** DeviceRuntimeStatus interfacePath */
+        interfacePath?: (string|null);
+
+        /** DeviceRuntimeStatus serialNumber */
+        serialNumber?: (string|null);
+
+        /** DeviceRuntimeStatus deviceName */
+        deviceName?: (string|null);
+
+        /** DeviceRuntimeStatus deviceType */
+        deviceType?: (string|null);
+
+        /** DeviceRuntimeStatus interfaceType */
+        interfaceType?: (string|null);
+
+        /** DeviceRuntimeStatus status */
+        status?: (string|null);
+
+        /** DeviceRuntimeStatus stage */
+        stage?: (string|null);
+
+        /** DeviceRuntimeStatus failCode */
+        failCode?: (string|null);
+
+        /** DeviceRuntimeStatus failReason */
+        failReason?: (string|null);
+
+        /** DeviceRuntimeStatus connectedAt */
+        connectedAt?: (number|Long|null);
+
+        /** DeviceRuntimeStatus updatedAt */
+        updatedAt?: (number|Long|null);
+    }
+
+    /** Represents a DeviceRuntimeStatus. */
+    class DeviceRuntimeStatus implements IDeviceRuntimeStatus {
+
+        /**
+         * Constructs a new DeviceRuntimeStatus.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: usb_control.IDeviceRuntimeStatus);
+
+        /** DeviceRuntimeStatus runtimeId. */
+        public runtimeId: string;
+
+        /** DeviceRuntimeStatus parentPath. */
+        public parentPath: string;
+
+        /** DeviceRuntimeStatus interfacePath. */
+        public interfacePath: string;
+
+        /** DeviceRuntimeStatus serialNumber. */
+        public serialNumber: string;
+
+        /** DeviceRuntimeStatus deviceName. */
+        public deviceName: string;
+
+        /** DeviceRuntimeStatus deviceType. */
+        public deviceType: string;
+
+        /** DeviceRuntimeStatus interfaceType. */
+        public interfaceType: string;
+
+        /** DeviceRuntimeStatus status. */
+        public status: string;
+
+        /** DeviceRuntimeStatus stage. */
+        public stage: string;
+
+        /** DeviceRuntimeStatus failCode. */
+        public failCode: string;
+
+        /** DeviceRuntimeStatus failReason. */
+        public failReason: string;
+
+        /** DeviceRuntimeStatus connectedAt. */
+        public connectedAt: (number|Long);
+
+        /** DeviceRuntimeStatus updatedAt. */
+        public updatedAt: (number|Long);
+
+        /**
+         * Encodes the specified DeviceRuntimeStatus message. Does not implicitly {@link usb_control.DeviceRuntimeStatus.verify|verify} messages.
+         * @param message DeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: usb_control.IDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified DeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.DeviceRuntimeStatus.verify|verify} messages.
+         * @param message DeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: usb_control.IDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a DeviceRuntimeStatus message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns DeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): usb_control.DeviceRuntimeStatus;
+
+        /**
+         * Decodes a DeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns DeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): usb_control.DeviceRuntimeStatus;
+
+        /**
+         * Creates a DeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns DeviceRuntimeStatus
+         */
+        public static fromObject(object: { [k: string]: any }): usb_control.DeviceRuntimeStatus;
+
+        /**
+         * Creates a plain object from a DeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @param message DeviceRuntimeStatus
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: usb_control.DeviceRuntimeStatus, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this DeviceRuntimeStatus to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for DeviceRuntimeStatus
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
     /** Properties of a CmdAddWhitelist. */
     interface ICmdAddWhitelist {
 
@@ -3658,6 +3813,172 @@ export namespace usb_control {
 
         /**
          * Gets the default type url for CmdDeleteLogs
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
+    /** Properties of a CmdGetDeviceRuntimeStatus. */
+    interface ICmdGetDeviceRuntimeStatus {
+
+        /** CmdGetDeviceRuntimeStatus sessionToken */
+        sessionToken?: (string|null);
+    }
+
+    /** Represents a CmdGetDeviceRuntimeStatus. */
+    class CmdGetDeviceRuntimeStatus implements ICmdGetDeviceRuntimeStatus {
+
+        /**
+         * Constructs a new CmdGetDeviceRuntimeStatus.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: usb_control.ICmdGetDeviceRuntimeStatus);
+
+        /** CmdGetDeviceRuntimeStatus sessionToken. */
+        public sessionToken: string;
+
+        /**
+         * Encodes the specified CmdGetDeviceRuntimeStatus message. Does not implicitly {@link usb_control.CmdGetDeviceRuntimeStatus.verify|verify} messages.
+         * @param message CmdGetDeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: usb_control.ICmdGetDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified CmdGetDeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.CmdGetDeviceRuntimeStatus.verify|verify} messages.
+         * @param message CmdGetDeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: usb_control.ICmdGetDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a CmdGetDeviceRuntimeStatus message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns CmdGetDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): usb_control.CmdGetDeviceRuntimeStatus;
+
+        /**
+         * Decodes a CmdGetDeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns CmdGetDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): usb_control.CmdGetDeviceRuntimeStatus;
+
+        /**
+         * Creates a CmdGetDeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns CmdGetDeviceRuntimeStatus
+         */
+        public static fromObject(object: { [k: string]: any }): usb_control.CmdGetDeviceRuntimeStatus;
+
+        /**
+         * Creates a plain object from a CmdGetDeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @param message CmdGetDeviceRuntimeStatus
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: usb_control.CmdGetDeviceRuntimeStatus, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this CmdGetDeviceRuntimeStatus to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for CmdGetDeviceRuntimeStatus
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
+
+    /** Properties of a RspDeviceRuntimeStatus. */
+    interface IRspDeviceRuntimeStatus {
+
+        /** RspDeviceRuntimeStatus devices */
+        devices?: (usb_control.IDeviceRuntimeStatus[]|null);
+    }
+
+    /** Represents a RspDeviceRuntimeStatus. */
+    class RspDeviceRuntimeStatus implements IRspDeviceRuntimeStatus {
+
+        /**
+         * Constructs a new RspDeviceRuntimeStatus.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: usb_control.IRspDeviceRuntimeStatus);
+
+        /** RspDeviceRuntimeStatus devices. */
+        public devices: usb_control.IDeviceRuntimeStatus[];
+
+        /**
+         * Encodes the specified RspDeviceRuntimeStatus message. Does not implicitly {@link usb_control.RspDeviceRuntimeStatus.verify|verify} messages.
+         * @param message RspDeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: usb_control.IRspDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified RspDeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.RspDeviceRuntimeStatus.verify|verify} messages.
+         * @param message RspDeviceRuntimeStatus message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: usb_control.IRspDeviceRuntimeStatus, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a RspDeviceRuntimeStatus message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns RspDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): usb_control.RspDeviceRuntimeStatus;
+
+        /**
+         * Decodes a RspDeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns RspDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): usb_control.RspDeviceRuntimeStatus;
+
+        /**
+         * Creates a RspDeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns RspDeviceRuntimeStatus
+         */
+        public static fromObject(object: { [k: string]: any }): usb_control.RspDeviceRuntimeStatus;
+
+        /**
+         * Creates a plain object from a RspDeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @param message RspDeviceRuntimeStatus
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: usb_control.RspDeviceRuntimeStatus, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this RspDeviceRuntimeStatus to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for RspDeviceRuntimeStatus
          * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns The default type url
          */

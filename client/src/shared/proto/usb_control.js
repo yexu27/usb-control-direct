@@ -3778,6 +3778,473 @@ export const usb_control = $root.usb_control = (() => {
         return RspConnectedDevices;
     })();
 
+    usb_control.DeviceRuntimeStatus = (function() {
+
+        /**
+         * Properties of a DeviceRuntimeStatus.
+         * @memberof usb_control
+         * @interface IDeviceRuntimeStatus
+         * @property {string|null} [runtimeId] DeviceRuntimeStatus runtimeId
+         * @property {string|null} [parentPath] DeviceRuntimeStatus parentPath
+         * @property {string|null} [interfacePath] DeviceRuntimeStatus interfacePath
+         * @property {string|null} [serialNumber] DeviceRuntimeStatus serialNumber
+         * @property {string|null} [deviceName] DeviceRuntimeStatus deviceName
+         * @property {string|null} [deviceType] DeviceRuntimeStatus deviceType
+         * @property {string|null} [interfaceType] DeviceRuntimeStatus interfaceType
+         * @property {string|null} [status] DeviceRuntimeStatus status
+         * @property {string|null} [stage] DeviceRuntimeStatus stage
+         * @property {string|null} [failCode] DeviceRuntimeStatus failCode
+         * @property {string|null} [failReason] DeviceRuntimeStatus failReason
+         * @property {number|Long|null} [connectedAt] DeviceRuntimeStatus connectedAt
+         * @property {number|Long|null} [updatedAt] DeviceRuntimeStatus updatedAt
+         */
+
+        /**
+         * Constructs a new DeviceRuntimeStatus.
+         * @memberof usb_control
+         * @classdesc Represents a DeviceRuntimeStatus.
+         * @implements IDeviceRuntimeStatus
+         * @constructor
+         * @param {usb_control.IDeviceRuntimeStatus=} [properties] Properties to set
+         */
+        function DeviceRuntimeStatus(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * DeviceRuntimeStatus runtimeId.
+         * @member {string} runtimeId
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.runtimeId = "";
+
+        /**
+         * DeviceRuntimeStatus parentPath.
+         * @member {string} parentPath
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.parentPath = "";
+
+        /**
+         * DeviceRuntimeStatus interfacePath.
+         * @member {string} interfacePath
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.interfacePath = "";
+
+        /**
+         * DeviceRuntimeStatus serialNumber.
+         * @member {string} serialNumber
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.serialNumber = "";
+
+        /**
+         * DeviceRuntimeStatus deviceName.
+         * @member {string} deviceName
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.deviceName = "";
+
+        /**
+         * DeviceRuntimeStatus deviceType.
+         * @member {string} deviceType
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.deviceType = "";
+
+        /**
+         * DeviceRuntimeStatus interfaceType.
+         * @member {string} interfaceType
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.interfaceType = "";
+
+        /**
+         * DeviceRuntimeStatus status.
+         * @member {string} status
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.status = "";
+
+        /**
+         * DeviceRuntimeStatus stage.
+         * @member {string} stage
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.stage = "";
+
+        /**
+         * DeviceRuntimeStatus failCode.
+         * @member {string} failCode
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.failCode = "";
+
+        /**
+         * DeviceRuntimeStatus failReason.
+         * @member {string} failReason
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.failReason = "";
+
+        /**
+         * DeviceRuntimeStatus connectedAt.
+         * @member {number|Long} connectedAt
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.connectedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * DeviceRuntimeStatus updatedAt.
+         * @member {number|Long} updatedAt
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         */
+        DeviceRuntimeStatus.prototype.updatedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Encodes the specified DeviceRuntimeStatus message. Does not implicitly {@link usb_control.DeviceRuntimeStatus.verify|verify} messages.
+         * @function encode
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {usb_control.IDeviceRuntimeStatus} message DeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DeviceRuntimeStatus.encode = function encode(message, writer, q) {
+            if (!writer)
+                writer = $Writer.create();
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            if (message.runtimeId != null && Object.hasOwnProperty.call(message, "runtimeId"))
+                writer.uint32(/* id 1, wireType 2 =*/10).string(message.runtimeId);
+            if (message.parentPath != null && Object.hasOwnProperty.call(message, "parentPath"))
+                writer.uint32(/* id 2, wireType 2 =*/18).string(message.parentPath);
+            if (message.interfacePath != null && Object.hasOwnProperty.call(message, "interfacePath"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.interfacePath);
+            if (message.serialNumber != null && Object.hasOwnProperty.call(message, "serialNumber"))
+                writer.uint32(/* id 4, wireType 2 =*/34).string(message.serialNumber);
+            if (message.deviceName != null && Object.hasOwnProperty.call(message, "deviceName"))
+                writer.uint32(/* id 5, wireType 2 =*/42).string(message.deviceName);
+            if (message.deviceType != null && Object.hasOwnProperty.call(message, "deviceType"))
+                writer.uint32(/* id 6, wireType 2 =*/50).string(message.deviceType);
+            if (message.interfaceType != null && Object.hasOwnProperty.call(message, "interfaceType"))
+                writer.uint32(/* id 7, wireType 2 =*/58).string(message.interfaceType);
+            if (message.status != null && Object.hasOwnProperty.call(message, "status"))
+                writer.uint32(/* id 8, wireType 2 =*/66).string(message.status);
+            if (message.stage != null && Object.hasOwnProperty.call(message, "stage"))
+                writer.uint32(/* id 9, wireType 2 =*/74).string(message.stage);
+            if (message.failCode != null && Object.hasOwnProperty.call(message, "failCode"))
+                writer.uint32(/* id 10, wireType 2 =*/82).string(message.failCode);
+            if (message.failReason != null && Object.hasOwnProperty.call(message, "failReason"))
+                writer.uint32(/* id 11, wireType 2 =*/90).string(message.failReason);
+            if (message.connectedAt != null && Object.hasOwnProperty.call(message, "connectedAt"))
+                writer.uint32(/* id 12, wireType 0 =*/96).int64(message.connectedAt);
+            if (message.updatedAt != null && Object.hasOwnProperty.call(message, "updatedAt"))
+                writer.uint32(/* id 13, wireType 0 =*/104).int64(message.updatedAt);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified DeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.DeviceRuntimeStatus.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {usb_control.IDeviceRuntimeStatus} message DeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DeviceRuntimeStatus.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer && writer.len ? writer.fork() : writer).ldelim();
+        };
+
+        /**
+         * Decodes a DeviceRuntimeStatus message from the specified reader or buffer.
+         * @function decode
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {usb_control.DeviceRuntimeStatus} DeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DeviceRuntimeStatus.decode = function decode(reader, length, error, long) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            if (long === undefined)
+                long = 0;
+            if (long > $Reader.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.usb_control.DeviceRuntimeStatus();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.runtimeId = reader.string();
+                        break;
+                    }
+                case 2: {
+                        message.parentPath = reader.string();
+                        break;
+                    }
+                case 3: {
+                        message.interfacePath = reader.string();
+                        break;
+                    }
+                case 4: {
+                        message.serialNumber = reader.string();
+                        break;
+                    }
+                case 5: {
+                        message.deviceName = reader.string();
+                        break;
+                    }
+                case 6: {
+                        message.deviceType = reader.string();
+                        break;
+                    }
+                case 7: {
+                        message.interfaceType = reader.string();
+                        break;
+                    }
+                case 8: {
+                        message.status = reader.string();
+                        break;
+                    }
+                case 9: {
+                        message.stage = reader.string();
+                        break;
+                    }
+                case 10: {
+                        message.failCode = reader.string();
+                        break;
+                    }
+                case 11: {
+                        message.failReason = reader.string();
+                        break;
+                    }
+                case 12: {
+                        message.connectedAt = reader.int64();
+                        break;
+                    }
+                case 13: {
+                        message.updatedAt = reader.int64();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7, long);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a DeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {usb_control.DeviceRuntimeStatus} DeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DeviceRuntimeStatus.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Creates a DeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {usb_control.DeviceRuntimeStatus} DeviceRuntimeStatus
+         */
+        DeviceRuntimeStatus.fromObject = function fromObject(object, long) {
+            if (object instanceof $root.usb_control.DeviceRuntimeStatus)
+                return object;
+            if (!$util.isObject(object))
+                throw TypeError(".usb_control.DeviceRuntimeStatus: object expected");
+            if (long === undefined)
+                long = 0;
+            if (long > $util.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let message = new $root.usb_control.DeviceRuntimeStatus();
+            if (object.runtimeId != null)
+                message.runtimeId = String(object.runtimeId);
+            if (object.parentPath != null)
+                message.parentPath = String(object.parentPath);
+            if (object.interfacePath != null)
+                message.interfacePath = String(object.interfacePath);
+            if (object.serialNumber != null)
+                message.serialNumber = String(object.serialNumber);
+            if (object.deviceName != null)
+                message.deviceName = String(object.deviceName);
+            if (object.deviceType != null)
+                message.deviceType = String(object.deviceType);
+            if (object.interfaceType != null)
+                message.interfaceType = String(object.interfaceType);
+            if (object.status != null)
+                message.status = String(object.status);
+            if (object.stage != null)
+                message.stage = String(object.stage);
+            if (object.failCode != null)
+                message.failCode = String(object.failCode);
+            if (object.failReason != null)
+                message.failReason = String(object.failReason);
+            if (object.connectedAt != null)
+                if ($util.Long)
+                    message.connectedAt = $util.Long.fromValue(object.connectedAt, false);
+                else if (typeof object.connectedAt === "string")
+                    message.connectedAt = parseInt(object.connectedAt, 10);
+                else if (typeof object.connectedAt === "number")
+                    message.connectedAt = object.connectedAt;
+                else if (typeof object.connectedAt === "object")
+                    message.connectedAt = new $util.LongBits(object.connectedAt.low >>> 0, object.connectedAt.high >>> 0).toNumber();
+            if (object.updatedAt != null)
+                if ($util.Long)
+                    message.updatedAt = $util.Long.fromValue(object.updatedAt, false);
+                else if (typeof object.updatedAt === "string")
+                    message.updatedAt = parseInt(object.updatedAt, 10);
+                else if (typeof object.updatedAt === "number")
+                    message.updatedAt = object.updatedAt;
+                else if (typeof object.updatedAt === "object")
+                    message.updatedAt = new $util.LongBits(object.updatedAt.low >>> 0, object.updatedAt.high >>> 0).toNumber();
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a DeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {usb_control.DeviceRuntimeStatus} message DeviceRuntimeStatus
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        DeviceRuntimeStatus.toObject = function toObject(message, options, q) {
+            if (!options)
+                options = {};
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            let object = {};
+            if (options.defaults) {
+                object.runtimeId = "";
+                object.parentPath = "";
+                object.interfacePath = "";
+                object.serialNumber = "";
+                object.deviceName = "";
+                object.deviceType = "";
+                object.interfaceType = "";
+                object.status = "";
+                object.stage = "";
+                object.failCode = "";
+                object.failReason = "";
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.connectedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                } else
+                    object.connectedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.updatedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                } else
+                    object.updatedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+            }
+            if (message.runtimeId != null && Object.hasOwnProperty.call(message, "runtimeId"))
+                object.runtimeId = message.runtimeId;
+            if (message.parentPath != null && Object.hasOwnProperty.call(message, "parentPath"))
+                object.parentPath = message.parentPath;
+            if (message.interfacePath != null && Object.hasOwnProperty.call(message, "interfacePath"))
+                object.interfacePath = message.interfacePath;
+            if (message.serialNumber != null && Object.hasOwnProperty.call(message, "serialNumber"))
+                object.serialNumber = message.serialNumber;
+            if (message.deviceName != null && Object.hasOwnProperty.call(message, "deviceName"))
+                object.deviceName = message.deviceName;
+            if (message.deviceType != null && Object.hasOwnProperty.call(message, "deviceType"))
+                object.deviceType = message.deviceType;
+            if (message.interfaceType != null && Object.hasOwnProperty.call(message, "interfaceType"))
+                object.interfaceType = message.interfaceType;
+            if (message.status != null && Object.hasOwnProperty.call(message, "status"))
+                object.status = message.status;
+            if (message.stage != null && Object.hasOwnProperty.call(message, "stage"))
+                object.stage = message.stage;
+            if (message.failCode != null && Object.hasOwnProperty.call(message, "failCode"))
+                object.failCode = message.failCode;
+            if (message.failReason != null && Object.hasOwnProperty.call(message, "failReason"))
+                object.failReason = message.failReason;
+            if (message.connectedAt != null && Object.hasOwnProperty.call(message, "connectedAt"))
+                if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                    object.connectedAt = typeof message.connectedAt === "number" ? BigInt(message.connectedAt) : $util.Long.fromBits(message.connectedAt.low >>> 0, message.connectedAt.high >>> 0, false).toBigInt();
+                else if (typeof message.connectedAt === "number")
+                    object.connectedAt = options.longs === String ? String(message.connectedAt) : message.connectedAt;
+                else
+                    object.connectedAt = options.longs === String ? $util.Long.prototype.toString.call(message.connectedAt) : options.longs === Number ? new $util.LongBits(message.connectedAt.low >>> 0, message.connectedAt.high >>> 0).toNumber() : message.connectedAt;
+            if (message.updatedAt != null && Object.hasOwnProperty.call(message, "updatedAt"))
+                if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                    object.updatedAt = typeof message.updatedAt === "number" ? BigInt(message.updatedAt) : $util.Long.fromBits(message.updatedAt.low >>> 0, message.updatedAt.high >>> 0, false).toBigInt();
+                else if (typeof message.updatedAt === "number")
+                    object.updatedAt = options.longs === String ? String(message.updatedAt) : message.updatedAt;
+                else
+                    object.updatedAt = options.longs === String ? $util.Long.prototype.toString.call(message.updatedAt) : options.longs === Number ? new $util.LongBits(message.updatedAt.low >>> 0, message.updatedAt.high >>> 0).toNumber() : message.updatedAt;
+            return object;
+        };
+
+        /**
+         * Converts this DeviceRuntimeStatus to JSON.
+         * @function toJSON
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        DeviceRuntimeStatus.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for DeviceRuntimeStatus
+         * @function getTypeUrl
+         * @memberof usb_control.DeviceRuntimeStatus
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        DeviceRuntimeStatus.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/usb_control.DeviceRuntimeStatus";
+        };
+
+        return DeviceRuntimeStatus;
+    })();
+
     usb_control.CmdAddWhitelist = (function() {
 
         /**
@@ -9824,6 +10291,409 @@ export const usb_control = $root.usb_control = (() => {
         };
 
         return CmdDeleteLogs;
+    })();
+
+    usb_control.CmdGetDeviceRuntimeStatus = (function() {
+
+        /**
+         * Properties of a CmdGetDeviceRuntimeStatus.
+         * @memberof usb_control
+         * @interface ICmdGetDeviceRuntimeStatus
+         * @property {string|null} [sessionToken] CmdGetDeviceRuntimeStatus sessionToken
+         */
+
+        /**
+         * Constructs a new CmdGetDeviceRuntimeStatus.
+         * @memberof usb_control
+         * @classdesc Represents a CmdGetDeviceRuntimeStatus.
+         * @implements ICmdGetDeviceRuntimeStatus
+         * @constructor
+         * @param {usb_control.ICmdGetDeviceRuntimeStatus=} [properties] Properties to set
+         */
+        function CmdGetDeviceRuntimeStatus(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * CmdGetDeviceRuntimeStatus sessionToken.
+         * @member {string} sessionToken
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @instance
+         */
+        CmdGetDeviceRuntimeStatus.prototype.sessionToken = "";
+
+        /**
+         * Encodes the specified CmdGetDeviceRuntimeStatus message. Does not implicitly {@link usb_control.CmdGetDeviceRuntimeStatus.verify|verify} messages.
+         * @function encode
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.ICmdGetDeviceRuntimeStatus} message CmdGetDeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        CmdGetDeviceRuntimeStatus.encode = function encode(message, writer, q) {
+            if (!writer)
+                writer = $Writer.create();
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            if (message.sessionToken != null && Object.hasOwnProperty.call(message, "sessionToken"))
+                writer.uint32(/* id 1, wireType 2 =*/10).string(message.sessionToken);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified CmdGetDeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.CmdGetDeviceRuntimeStatus.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.ICmdGetDeviceRuntimeStatus} message CmdGetDeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        CmdGetDeviceRuntimeStatus.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer && writer.len ? writer.fork() : writer).ldelim();
+        };
+
+        /**
+         * Decodes a CmdGetDeviceRuntimeStatus message from the specified reader or buffer.
+         * @function decode
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {usb_control.CmdGetDeviceRuntimeStatus} CmdGetDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        CmdGetDeviceRuntimeStatus.decode = function decode(reader, length, error, long) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            if (long === undefined)
+                long = 0;
+            if (long > $Reader.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.usb_control.CmdGetDeviceRuntimeStatus();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.sessionToken = reader.string();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7, long);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a CmdGetDeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {usb_control.CmdGetDeviceRuntimeStatus} CmdGetDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        CmdGetDeviceRuntimeStatus.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Creates a CmdGetDeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {usb_control.CmdGetDeviceRuntimeStatus} CmdGetDeviceRuntimeStatus
+         */
+        CmdGetDeviceRuntimeStatus.fromObject = function fromObject(object, long) {
+            if (object instanceof $root.usb_control.CmdGetDeviceRuntimeStatus)
+                return object;
+            if (!$util.isObject(object))
+                throw TypeError(".usb_control.CmdGetDeviceRuntimeStatus: object expected");
+            if (long === undefined)
+                long = 0;
+            if (long > $util.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let message = new $root.usb_control.CmdGetDeviceRuntimeStatus();
+            if (object.sessionToken != null)
+                message.sessionToken = String(object.sessionToken);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a CmdGetDeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.CmdGetDeviceRuntimeStatus} message CmdGetDeviceRuntimeStatus
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        CmdGetDeviceRuntimeStatus.toObject = function toObject(message, options, q) {
+            if (!options)
+                options = {};
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            let object = {};
+            if (options.defaults)
+                object.sessionToken = "";
+            if (message.sessionToken != null && Object.hasOwnProperty.call(message, "sessionToken"))
+                object.sessionToken = message.sessionToken;
+            return object;
+        };
+
+        /**
+         * Converts this CmdGetDeviceRuntimeStatus to JSON.
+         * @function toJSON
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        CmdGetDeviceRuntimeStatus.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for CmdGetDeviceRuntimeStatus
+         * @function getTypeUrl
+         * @memberof usb_control.CmdGetDeviceRuntimeStatus
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        CmdGetDeviceRuntimeStatus.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/usb_control.CmdGetDeviceRuntimeStatus";
+        };
+
+        return CmdGetDeviceRuntimeStatus;
+    })();
+
+    usb_control.RspDeviceRuntimeStatus = (function() {
+
+        /**
+         * Properties of a RspDeviceRuntimeStatus.
+         * @memberof usb_control
+         * @interface IRspDeviceRuntimeStatus
+         * @property {Array.<usb_control.IDeviceRuntimeStatus>|null} [devices] RspDeviceRuntimeStatus devices
+         */
+
+        /**
+         * Constructs a new RspDeviceRuntimeStatus.
+         * @memberof usb_control
+         * @classdesc Represents a RspDeviceRuntimeStatus.
+         * @implements IRspDeviceRuntimeStatus
+         * @constructor
+         * @param {usb_control.IRspDeviceRuntimeStatus=} [properties] Properties to set
+         */
+        function RspDeviceRuntimeStatus(properties) {
+            this.devices = [];
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * RspDeviceRuntimeStatus devices.
+         * @member {Array.<usb_control.IDeviceRuntimeStatus>} devices
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @instance
+         */
+        RspDeviceRuntimeStatus.prototype.devices = $util.emptyArray;
+
+        /**
+         * Encodes the specified RspDeviceRuntimeStatus message. Does not implicitly {@link usb_control.RspDeviceRuntimeStatus.verify|verify} messages.
+         * @function encode
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.IRspDeviceRuntimeStatus} message RspDeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RspDeviceRuntimeStatus.encode = function encode(message, writer, q) {
+            if (!writer)
+                writer = $Writer.create();
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            if (message.devices != null && message.devices.length)
+                for (let i = 0; i < message.devices.length; ++i)
+                    $root.usb_control.DeviceRuntimeStatus.encode(message.devices[i], writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified RspDeviceRuntimeStatus message, length delimited. Does not implicitly {@link usb_control.RspDeviceRuntimeStatus.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.IRspDeviceRuntimeStatus} message RspDeviceRuntimeStatus message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RspDeviceRuntimeStatus.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer && writer.len ? writer.fork() : writer).ldelim();
+        };
+
+        /**
+         * Decodes a RspDeviceRuntimeStatus message from the specified reader or buffer.
+         * @function decode
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {usb_control.RspDeviceRuntimeStatus} RspDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RspDeviceRuntimeStatus.decode = function decode(reader, length, error, long) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            if (long === undefined)
+                long = 0;
+            if (long > $Reader.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.usb_control.RspDeviceRuntimeStatus();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        if (!(message.devices && message.devices.length))
+                            message.devices = [];
+                        message.devices.push($root.usb_control.DeviceRuntimeStatus.decode(reader, reader.uint32(), undefined, long + 1));
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7, long);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a RspDeviceRuntimeStatus message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {usb_control.RspDeviceRuntimeStatus} RspDeviceRuntimeStatus
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RspDeviceRuntimeStatus.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Creates a RspDeviceRuntimeStatus message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {usb_control.RspDeviceRuntimeStatus} RspDeviceRuntimeStatus
+         */
+        RspDeviceRuntimeStatus.fromObject = function fromObject(object, long) {
+            if (object instanceof $root.usb_control.RspDeviceRuntimeStatus)
+                return object;
+            if (!$util.isObject(object))
+                throw TypeError(".usb_control.RspDeviceRuntimeStatus: object expected");
+            if (long === undefined)
+                long = 0;
+            if (long > $util.recursionLimit)
+                throw Error("maximum nesting depth exceeded");
+            let message = new $root.usb_control.RspDeviceRuntimeStatus();
+            if (object.devices) {
+                if (!Array.isArray(object.devices))
+                    throw TypeError(".usb_control.RspDeviceRuntimeStatus.devices: array expected");
+                message.devices = [];
+                for (let i = 0; i < object.devices.length; ++i) {
+                    if (!$util.isObject(object.devices[i]))
+                        throw TypeError(".usb_control.RspDeviceRuntimeStatus.devices: object expected");
+                    message.devices[i] = $root.usb_control.DeviceRuntimeStatus.fromObject(object.devices[i], long + 1);
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a RspDeviceRuntimeStatus message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {usb_control.RspDeviceRuntimeStatus} message RspDeviceRuntimeStatus
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        RspDeviceRuntimeStatus.toObject = function toObject(message, options, q) {
+            if (!options)
+                options = {};
+            if (q === undefined)
+                q = 0;
+            if (q > $util.recursionLimit)
+                throw Error("max depth exceeded");
+            let object = {};
+            if (options.arrays || options.defaults)
+                object.devices = [];
+            if (message.devices && message.devices.length) {
+                object.devices = [];
+                for (let j = 0; j < message.devices.length; ++j)
+                    object.devices[j] = $root.usb_control.DeviceRuntimeStatus.toObject(message.devices[j], options, q + 1);
+            }
+            return object;
+        };
+
+        /**
+         * Converts this RspDeviceRuntimeStatus to JSON.
+         * @function toJSON
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        RspDeviceRuntimeStatus.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for RspDeviceRuntimeStatus
+         * @function getTypeUrl
+         * @memberof usb_control.RspDeviceRuntimeStatus
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        RspDeviceRuntimeStatus.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/usb_control.RspDeviceRuntimeStatus";
+        };
+
+        return RspDeviceRuntimeStatus;
     })();
 
     usb_control.CmdGetSystemInfo = (function() {
