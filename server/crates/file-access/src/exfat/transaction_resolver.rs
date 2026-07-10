@@ -111,37 +111,56 @@ impl TransactionResolver {
                 skipped_cached_names.insert(cached_entry.name.clone());
             }
 
-            if missing_children.len() == 1
-                && new_entries.len() == 1
-                && skipped_blocked_paths.is_empty()
-                && is_rename_candidate(state, &missing_children[0], &new_entries[0])
+            let effective_missing_children = missing_children
+                .iter()
+                .filter(|(_, virtual_path, _)| !skipped_blocked_paths.contains(virtual_path))
+                .cloned()
+                .collect::<Vec<_>>();
+            let effective_new_entries = new_entries
+                .iter()
+                .filter(|entry| !skipped_cached_names.contains(&entry.name))
+                .cloned()
+                .collect::<Vec<_>>();
+            let effective_parsed_entries = parsed_entries
+                .iter()
+                .filter(|entry| !skipped_cached_names.contains(&entry.name))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if effective_missing_children.len() == 1
+                && effective_new_entries.len() == 1
+                && is_rename_candidate(
+                    state,
+                    &effective_missing_children[0],
+                    &effective_new_entries[0],
+                )
             {
-                let (_, from, kind) = &missing_children[0];
-                let to = join_virtual_path(&parent, &new_entries[0].name);
+                let (_, from, kind) = &effective_missing_children[0];
+                let to = join_virtual_path(&parent, &effective_new_entries[0].name);
                 mutations.push(FsMutation::Rename {
                     from: from.clone(),
                     to: to.clone(),
                     kind: *kind,
                 });
-                if !new_entries[0].is_dir {
+                if !effective_new_entries[0].is_dir {
                     let chain = match resolve_entry_chain(
                         state,
-                        new_entries[0].first_cluster,
-                        new_entries[0].data_length,
+                        effective_new_entries[0].first_cluster,
+                        effective_new_entries[0].data_length,
                     ) {
                         Ok(chain) => chain,
                         Err(err) => return Ok(ResolveStatus::Invalid(err)),
                     };
                     mutations.push(FsMutation::RewriteFile {
                         virtual_path: to,
-                        size: new_entries[0].data_length,
-                        valid_data_len: new_entries[0].valid_data_length,
+                        size: effective_new_entries[0].data_length,
+                        valid_data_len: effective_new_entries[0].valid_data_length,
                         chain,
                         data_patches: collect_data_patches(
                             tx,
-                            &join_virtual_path(&parent, &new_entries[0].name),
-                            new_entries[0].first_cluster,
-                            new_entries[0].data_length,
+                            &join_virtual_path(&parent, &effective_new_entries[0].name),
+                            effective_new_entries[0].first_cluster,
+                            effective_new_entries[0].data_length,
                         ),
                     });
                 }
@@ -149,11 +168,11 @@ impl TransactionResolver {
             }
 
             if !skipped_blocked_paths.is_empty()
-                && new_entries.len() == skipped_cached_names.len()
-                && !parsed_entries.iter().any(|entry| {
-                    !skipped_cached_names.contains(&entry.name)
-                        && existing_entry_has_metadata_change(state, &parent, entry)
-                })
+                && effective_missing_children.is_empty()
+                && effective_new_entries.is_empty()
+                && !effective_parsed_entries
+                    .iter()
+                    .any(|entry| existing_entry_has_metadata_change(state, &parent, entry))
             {
                 let virtual_path = skipped_blocked_paths
                     .iter()
@@ -165,11 +184,9 @@ impl TransactionResolver {
                 ));
             }
 
-            if !new_entries.is_empty() {
-                for (_, virtual_path, _) in &missing_children {
-                    if is_blocked_placeholder_path(state, virtual_path)
-                        && !skipped_blocked_paths.contains(virtual_path)
-                    {
+            if !effective_new_entries.is_empty() {
+                for (_, virtual_path, _) in &effective_missing_children {
+                    if is_blocked_placeholder_path(state, virtual_path) {
                         return Ok(ResolveStatus::Invalid(
                             TransactionError::BlockedPlaceholderRewrite {
                                 virtual_path: virtual_path.clone(),
@@ -179,16 +196,10 @@ impl TransactionResolver {
                 }
             }
 
-            for (_, virtual_path, kind) in missing_children {
-                if skipped_blocked_paths.contains(&virtual_path) {
-                    continue;
-                }
+            for (_, virtual_path, kind) in effective_missing_children {
                 mutations.push(FsMutation::Delete { virtual_path, kind });
             }
-            for entry in parsed_entries {
-                if skipped_cached_names.contains(&entry.name) {
-                    continue;
-                }
+            for entry in effective_parsed_entries {
                 let virtual_path = join_virtual_path(&parent, &entry.name);
                 if let Some(node) = state.lookup_path(&virtual_path) {
                     if entry.is_dir {

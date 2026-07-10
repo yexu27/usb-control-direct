@@ -686,6 +686,107 @@ fn cached_blocked_rename_entry_is_ignored_when_following_create_is_committed() {
 }
 
 #[test]
+fn cached_blocked_rename_does_not_block_following_regular_file_delete() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
+    std::fs::write(tmp.path().join("delete-me.txt"), b"delete-me").unwrap();
+    let tree = vec![
+        controlled_file(
+            tmp.path().join("setup.exe"),
+            "setup.exe",
+            20,
+            Some(ExecFileType::Pe),
+        ),
+        controlled_file(tmp.path().join("delete-me.txt"), "delete-me.txt", 9, None),
+    ];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, exec_control_snapshot(), 16 * 1024 * 1024)
+        .unwrap();
+
+    let setup_cluster = root_entry_cluster(&fs, "setup.exe");
+    let setup_visible_size = root_entry_size(&fs, "setup.exe");
+    let outcome = try_rename_root_entry(&fs, "setup.exe", "1.exe").unwrap();
+    assert_policy_rejected_and_restored(outcome);
+
+    let outcome = try_write_root_entries(
+        &fs,
+        vec![build_file_entry_set(
+            "1.exe",
+            false,
+            setup_cluster,
+            setup_visible_size,
+            false,
+        )],
+    )
+    .unwrap();
+    assert_eq!(outcome, BlockWriteOutcome::Committed);
+
+    assert!(tmp.path().join("setup.exe").exists());
+    assert!(!tmp.path().join("1.exe").exists());
+    assert!(!tmp.path().join("delete-me.txt").exists());
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    assert!(fs.lookup_path("/1.exe").is_none());
+    assert!(fs.lookup_path("/delete-me.txt").is_none());
+
+    let names = root_entry_names(&fs);
+    assert!(names.contains(&"setup.exe".to_string()));
+    assert!(!names.contains(&"1.exe".to_string()));
+    assert!(!names.contains(&"delete-me.txt".to_string()));
+}
+
+#[test]
+fn cached_blocked_rename_does_not_block_following_regular_file_rename() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
+    std::fs::write(tmp.path().join("rename-me.txt"), b"rename-me").unwrap();
+    let tree = vec![
+        controlled_file(
+            tmp.path().join("setup.exe"),
+            "setup.exe",
+            20,
+            Some(ExecFileType::Pe),
+        ),
+        controlled_file(tmp.path().join("rename-me.txt"), "rename-me.txt", 9, None),
+    ];
+    let fs = VirtualExfatFs::build(tmp.path(), &tree, exec_control_snapshot(), 16 * 1024 * 1024)
+        .unwrap();
+
+    let setup_cluster = root_entry_cluster(&fs, "setup.exe");
+    let setup_visible_size = root_entry_size(&fs, "setup.exe");
+    let regular_cluster = root_entry_cluster(&fs, "rename-me.txt");
+    let regular_size = root_entry_size(&fs, "rename-me.txt");
+    let outcome = try_rename_root_entry(&fs, "setup.exe", "1.exe").unwrap();
+    assert_policy_rejected_and_restored(outcome);
+
+    let outcome = try_write_root_entries(
+        &fs,
+        vec![
+            build_file_entry_set("1.exe", false, setup_cluster, setup_visible_size, false),
+            build_file_entry_set("renamed.txt", false, regular_cluster, regular_size, false),
+        ],
+    )
+    .unwrap();
+    assert_eq!(outcome, BlockWriteOutcome::Committed);
+
+    assert!(tmp.path().join("setup.exe").exists());
+    assert!(!tmp.path().join("1.exe").exists());
+    assert!(!tmp.path().join("rename-me.txt").exists());
+    assert_eq!(
+        std::fs::read(tmp.path().join("renamed.txt")).unwrap(),
+        b"rename-me"
+    );
+    assert!(fs.lookup_path("/setup.exe").is_some());
+    assert!(fs.lookup_path("/1.exe").is_none());
+    assert!(fs.lookup_path("/rename-me.txt").is_none());
+    assert!(fs.lookup_path("/renamed.txt").is_some());
+
+    let names = root_entry_names(&fs);
+    assert!(names.contains(&"setup.exe".to_string()));
+    assert!(names.contains(&"renamed.txt".to_string()));
+    assert!(!names.contains(&"1.exe".to_string()));
+    assert!(!names.contains(&"rename-me.txt".to_string()));
+}
+
+#[test]
 fn blocked_rename_then_create_and_write_content_commits_complete_file() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("setup.exe"), b"blocked-real-content").unwrap();
