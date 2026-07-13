@@ -59,13 +59,15 @@ platform/
         └── usb_f_hid.ko
 ```
 
-三个内核模块的用途：
+三个内核模块的服务端 VM 源码目录及用途：
 
-| 文件 | 模块名 | 用途 | 内核基线 |
-|---|---|---|---|
-| `exfat.ko` | `exfat` | 提供真实 U 盘 exFAT 文件系统挂载能力 | `4.19.232 SMP mod_unload aarch64` |
-| `nbd.ko` | `nbd` | 提供 `/dev/nbdX`，供服务端发布虚拟块设备 | `4.19.232 SMP mod_unload aarch64` |
-| `usb_f_hid.ko` | `usb_f_hid` | 提供 USB Gadget 键盘、鼠标 HID function | `4.19.232 SMP mod_unload aarch64` |
+| 文件 | 模块名 | 服务端 VM 源码目录 | 用途 | 内核基线 |
+|---|---|---|---|---|
+| `exfat.ko` | `exfat` | `/root/exfat_build/` | 提供真实 U 盘 exFAT 文件系统挂载能力 | `4.19.232 SMP mod_unload aarch64` |
+| `nbd.ko` | `nbd` | `/root/nbd_build/` | 提供 `/dev/nbdX`，供服务端发布虚拟块设备 | `4.19.232 SMP mod_unload aarch64` |
+| `usb_f_hid.ko` | `usb_f_hid` | `/root/f_hid_build/` | 提供 USB Gadget 键盘、鼠标 HID function | `4.19.232 SMP mod_unload aarch64` |
+
+`platform/rk3568/module/` 保存与目标内核基线匹配的交付模块，模块源码及重新编译所需文件保存在上表对应的服务端 VM 目录中。
 
 ## 4. RK3568 准备与安装
 
