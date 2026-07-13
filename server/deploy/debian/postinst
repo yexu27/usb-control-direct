@@ -53,8 +53,6 @@ chown root:root /opt/usb-control/bin/usb-control
 chmod 0755 /opt/usb-control/bin/usb-control
 chown root:root /opt/usb-control/bin/usb-control-db-migrate /opt/usb-control/bin/usb-control-db-migrate.sh
 chmod 0755 /opt/usb-control/bin/usb-control-db-migrate /opt/usb-control/bin/usb-control-db-migrate.sh
-chown root:root /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
-chmod 0755 /opt/usb-control/smoke.sh /usr/local/bin/usb-control-otg-init.sh
 chown root:root /etc/usb-control/tls/server.crt /etc/usb-control/tls/server.key
 chmod 0644 /etc/usb-control/tls/server.crt
 chmod 0600 /etc/usb-control/tls/server.key
@@ -79,5 +77,4 @@ systemctl is-active --quiet usb-control || {
 }
 
 echo "usb-control postinst: service active"
-echo "usb-control postinst: run smoke check with: sudo /opt/usb-control/smoke.sh"
 exit 0
