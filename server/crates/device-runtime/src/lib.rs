@@ -116,7 +116,7 @@ impl DeviceRuntimeRegistry {
     pub fn list(&self) -> Vec<DeviceRuntimeSnapshot> {
         let entries = self.entries.read().expect("device runtime lock poisoned");
         let mut snapshots = entries.values().cloned().collect::<Vec<_>>();
-        snapshots.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+        snapshots.sort_by_key(|snapshot| std::cmp::Reverse(snapshot.updated_at));
         snapshots
     }
 

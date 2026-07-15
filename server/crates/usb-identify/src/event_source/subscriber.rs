@@ -126,8 +126,7 @@ fn poll_udev_fd(fd: i32, timeout: Duration) -> PollResult {
 }
 
 fn drain_events(socket: &udev::MonitorSocket, tx: &mpsc::UnboundedSender<DeviceEvent>) {
-    let mut iter = socket.iter();
-    while let Some(event) = iter.next() {
+    for event in socket.iter() {
         let action = match event.action() {
             Some(action) => action.to_string_lossy().to_string(),
             None => continue,

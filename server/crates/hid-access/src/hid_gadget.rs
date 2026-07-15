@@ -132,9 +132,9 @@ pub fn configure_hid_function(
         "配置 HID function"
     );
 
-    write_configfs_attr(function_dir, "protocol", &protocol.to_string())?;
+    write_configfs_attr(function_dir, "protocol", protocol.to_string())?;
     write_configfs_attr(function_dir, "subclass", "1")?;
-    write_configfs_attr(function_dir, "report_length", &report_len.to_string())?;
+    write_configfs_attr(function_dir, "report_length", report_len.to_string())?;
     write_configfs_attr(function_dir, "report_desc", report_desc)?;
 
     Ok(())
