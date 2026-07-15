@@ -25,8 +25,6 @@ pub enum UpdaterError {
     MigrationFailed(String),
     #[error("健康检查失败: {0}")]
     HealthFailed(String),
-    #[error("自动回滚失败；原始错误: {original}；回滚错误: {rollback}")]
-    RollbackFailed { original: String, rollback: String },
     #[error("系统升级领域错误: {0}")]
     Domain(#[from] system_upgrade::UpgradeError),
     #[error("updater IO 失败: {0}")]

@@ -12,8 +12,8 @@ use std::thread;
 use std::time::Duration;
 
 use system_upgrade::{
-    certificate_sha256, read_active_release, read_last_known_good, DebInspector, UpgradeError,
-    UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
+    ActiveReleaseStore, UpgradeError, UpgradePreflight, UpgradePreflightFailure,
+    UpgradePreflightRequest,
 };
 use wait_timeout::ChildExt;
 
@@ -261,43 +261,24 @@ impl UpgradeHostProbe for LinuxUpgradeHostProbe {
     }
 }
 
-/// 将严格发布/LKG 一致性与 Linux 状态探测组合成领域预检端口。
+/// 将已提交发布一致性与 Linux 状态探测组合成领域预检端口。
 pub struct SystemUpgradePreflight {
     probe: Arc<dyn UpgradeHostProbe>,
-    deb_inspector: Arc<dyn DebInspector>,
     upgrade_root: PathBuf,
     active_release_path: PathBuf,
-    lkg_metadata_path: PathBuf,
-    lkg_deb_path: PathBuf,
-    tls_cert_path: PathBuf,
 }
 
 impl SystemUpgradePreflight {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         probe: Arc<dyn UpgradeHostProbe>,
-        deb_inspector: Arc<dyn DebInspector>,
         upgrade_root: PathBuf,
         active_release_path: PathBuf,
-        lkg_metadata_path: PathBuf,
-        lkg_deb_path: PathBuf,
-        tls_cert_path: PathBuf,
     ) -> Self {
         Self {
             probe,
-            deb_inspector,
             upgrade_root,
             active_release_path,
-            lkg_metadata_path,
-            lkg_deb_path,
-            tls_cert_path,
         }
-    }
-
-    fn rollback_unavailable<T>(
-        result: Result<T, impl std::fmt::Display>,
-    ) -> Result<T, UpgradeError> {
-        result.map_err(|_| UpgradeError::Preflight(UpgradePreflightFailure::RollbackUnavailable))
     }
 
     fn probe_failure<T>(result: Result<T, String>) -> Result<T, UpgradeError> {
@@ -307,38 +288,31 @@ impl SystemUpgradePreflight {
 
 impl UpgradePreflight for SystemUpgradePreflight {
     fn check(&self, request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {
-        let active = Self::rollback_unavailable(read_active_release(&self.active_release_path))?;
-        let lkg = Self::rollback_unavailable(read_last_known_good(
-            &self.lkg_metadata_path,
-            &self.lkg_deb_path,
-        ))?;
-        let deb = Self::rollback_unavailable(self.deb_inspector.inspect(&self.lkg_deb_path))?;
-        let installed_tls_bytes = Self::rollback_unavailable(fs::read(&self.tls_cert_path))?;
-        let installed_tls = Self::rollback_unavailable(certificate_sha256(&installed_tls_bytes))?;
-        if active.version != request.source_version
-            || active.schema_version != request.schema_from
-            || lkg.version != request.source_version
-            || lkg.schema_version != request.schema_from
-            || active.deb_sha256 != lkg.deb_sha256
-            || deb.package != "usb-control"
-            || deb.architecture != "arm64"
-            || deb.version != request.source_version
-            || deb.migration_schema_to != request.schema_from
-            || deb.supported_schema_min > request.schema_from
-            || deb.supported_schema_max < request.schema_from
-            || lkg.tls_cert_sha256 != deb.tls_cert_sha256
-            || lkg.tls_cert_sha256 != installed_tls
+        let active = ActiveReleaseStore::new(
+            self.active_release_path
+                .parent()
+                .unwrap_or(&self.upgrade_root)
+                .to_path_buf(),
+        )
+        .and_then(|store| store.current())
+        .map_err(|error| {
+            UpgradeError::Preflight(UpgradePreflightFailure::ProbeFailed(error.to_string()))
+        })?
+        .ok_or_else(|| {
+            UpgradeError::Preflight(UpgradePreflightFailure::ProbeFailed(
+                "active-release.json 不存在".into(),
+            ))
+        })?;
+        if active.version != request.source_version || active.schema_version != request.schema_from
         {
             return Err(UpgradeError::Preflight(
-                UpgradePreflightFailure::RollbackUnavailable,
+                UpgradePreflightFailure::ProbeFailed("已提交发布与升级源版本不一致".into()),
             ));
         }
 
-        let lkg_size = Self::rollback_unavailable(fs::metadata(&self.lkg_deb_path))?.len();
         let required = request
             .package_size
             .checked_add(request.deb_size)
-            .and_then(|value| value.checked_add(lkg_size))
             .and_then(|value| value.checked_add(request.expanded_size))
             .and_then(|value| value.checked_add(SAFETY_MARGIN))
             .ok_or_else(|| {

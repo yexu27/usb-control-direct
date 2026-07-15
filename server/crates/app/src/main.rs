@@ -30,9 +30,9 @@ use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use system_upgrade::{
-    read_active_release, DebInspector, DpkgDebInspector, PackageStager, PackageVerifier,
-    ServiceReady, SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradePreflight,
-    UpgradeScheduler, UpgradeTaskStore,
+    read_installed_release, DebInspector, DpkgDebInspector, PackageStager, PackageVerifier,
+    ServiceReady, UpgradeCoordinator, UpgradeEnvironment, UpgradePreflight, UpgradeScheduler,
+    UpgradeTaskStore,
 };
 use usb_control_app::config::AppConfig;
 use usb_control_app::readiness::ReadinessGuard;
@@ -57,12 +57,6 @@ fn load_device_description(storage: &Storage) -> String {
         },
         Ok(None) | Err(_) => DEFAULT_DEVICE_DESCRIPTION.to_string(),
     }
-}
-
-fn read_system_version(upgrade_root: &std::path::Path) -> Result<SystemVersion, String> {
-    read_active_release(&upgrade_root.join("active-release.json"))
-        .map(|active| active.version)
-        .map_err(|error| error.to_string())
 }
 
 fn verify_upgrade_key_files(directory: &std::path::Path) -> Result<(), String> {
@@ -109,15 +103,6 @@ async fn main() {
         config.upgrade.root_dir.clone(),
         Arc::clone(&storage),
     ));
-    if let Err(error) = result_importer.scan_pending() {
-        error!(reason = %error, "扫描系统升级终态结果失败，保留待导入文件");
-        let importer = Arc::clone(&result_importer);
-        tokio::spawn(async move {
-            if let Err(error) = importer.retry_pending_until_done().await {
-                error!(reason = %error, "系统升级历史结果重试任务退出");
-            }
-        });
-    }
     match UpgradeTaskStore::new(config.upgrade.root_dir.clone()).and_then(|store| store.current()) {
         Ok(Some(task)) => {
             let importer = Arc::clone(&result_importer);
@@ -132,8 +117,11 @@ async fn main() {
             error!(reason = %error, "读取活动系统升级任务失败");
         }
     }
-    let current_version =
-        read_system_version(&config.upgrade.root_dir).expect("有效系统版本读取失败");
+    let current_version = read_installed_release(std::path::Path::new(
+        "/opt/usb-control/install-meta/release.json",
+    ))
+    .expect("已安装发布元数据读取失败")
+    .version;
     let device_description = load_device_description(storage.as_ref());
 
     let auth_service = Arc::new(AuthService::new(
@@ -204,15 +192,8 @@ async fn main() {
         Arc::new(LinuxUpgradeHostProbe::production(std::path::PathBuf::from(
             &config.clamdscan_path,
         ))),
-        Arc::clone(&deb_inspector),
         config.upgrade.root_dir.clone(),
         config.upgrade.root_dir.join("active-release.json"),
-        config
-            .upgrade
-            .root_dir
-            .join("rollback/last-known-good.json"),
-        config.upgrade.root_dir.join("rollback/last-known-good.deb"),
-        config.tls_cert_path.clone(),
     ));
     let upgrade_coordinator = Arc::new(
         UpgradeCoordinator::new(

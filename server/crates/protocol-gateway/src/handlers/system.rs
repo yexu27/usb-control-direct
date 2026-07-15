@@ -18,7 +18,7 @@ use crate::codec;
 use crate::context::RequestContext;
 use crate::post_send::{HandlerOutcome, PostSendAction};
 use crate::upgrade_error::map_upgrade_error;
-use system_upgrade::{read_active_release, PrepareUpgradeRequest};
+use system_upgrade::{ActiveReleaseStore, PrepareUpgradeRequest};
 
 /// RspSystemInfo 消息类型。
 const RSP_SYSTEM_INFO: u32 = 0x0501;
@@ -44,17 +44,18 @@ pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let system_version =
-        match read_active_release(&ctx.system_upgrade_root.join("active-release.json")) {
-            Ok(active) => active.version.to_string(),
-            Err(_) => {
-                return sysinfo_error(
-                    ctx.seq_id,
-                    ResultCode::InternalError,
-                    "有效系统版本读取失败",
-                );
-            }
-        };
+    let system_version = match ActiveReleaseStore::new(ctx.system_upgrade_root.clone())
+        .and_then(|store| store.current())
+    {
+        Ok(Some(active)) => active.version.to_string(),
+        Ok(None) | Err(_) => {
+            return sysinfo_error(
+                ctx.seq_id,
+                ResultCode::InternalError,
+                "有效系统版本读取失败",
+            );
+        }
+    };
     let virus_db_version = config_value(storage, "virus_db_version");
     let license = match read_license_snapshot(storage, common::time::now_unix()) {
         Ok(license) => license,

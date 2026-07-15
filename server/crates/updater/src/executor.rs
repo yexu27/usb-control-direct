@@ -1,4 +1,4 @@
-//! 升级命令边界、唯一事务顺序和有效发布提交点。
+//! 升级命令边界、单向安装顺序和有效发布提交点。
 
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -10,19 +10,16 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
 use system_upgrade::{
-    ActiveCommitError, ActiveRelease, DebInspector, DpkgDebInspector, PackageStager,
-    PackageVerifier, ReleaseStateStore, SystemVersion, UpgradeManifest, UpgradeResult,
-    UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
+    read_installed_release, ActiveCommitError, ActiveRelease, ActiveReleaseStore, DebInspector,
+    DpkgDebInspector, InstalledRelease, PackageStager, PackageVerifier, UpgradeManifest,
+    UpgradeResult, UpgradeResultStore, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    VerificationContext,
 };
 use wait_timeout::ChildExt;
 
 use crate::health::{check_health, read_restart_count, HealthExpectation};
 use crate::migration::run_migration;
-use crate::rollback::{
-    read_and_validate_lkg, rollback, FileLkgRepository, LastKnownGoodRelease, LkgRepository,
-};
 use crate::UpdaterError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,10 +130,8 @@ impl CommandRunner for ProcessCommandRunner {
                 child.wait().ok()
             }
         };
-        let (stdout, stdout_truncated) =
-            join_reader(stdout_reader, &command.stage, &program, "stdout")?;
-        let (stderr, stderr_truncated) =
-            join_reader(stderr_reader, &command.stage, &program, "stderr")?;
+        let (stdout, stdout_truncated) = join_reader(stdout_reader, command, "stdout")?;
+        let (stderr, stderr_truncated) = join_reader(stderr_reader, command, "stderr")?;
         if let Some(source) = wait_error {
             return Err(UpdaterError::CommandSpawn {
                 stage: command.stage.clone(),
@@ -183,32 +178,29 @@ fn read_bounded_output(mut reader: impl Read) -> std::io::Result<(Vec<u8>, bool)
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 {
-            break;
+            return Ok((kept, truncated));
         }
-        let remaining = MAX_COMMAND_OUTPUT.saturating_sub(kept.len());
-        let keep = remaining.min(read);
+        let keep = MAX_COMMAND_OUTPUT.saturating_sub(kept.len()).min(read);
         kept.extend_from_slice(&buffer[..keep]);
         truncated |= keep < read;
     }
-    Ok((kept, truncated))
 }
 
 fn join_reader(
     reader: std::thread::JoinHandle<std::io::Result<(Vec<u8>, bool)>>,
-    stage: &str,
-    program: &str,
+    command: &CommandSpec,
     stream: &str,
 ) -> Result<(Vec<u8>, bool), UpdaterError> {
     reader
         .join()
         .map_err(|_| UpdaterError::CommandSpawn {
-            stage: stage.to_string(),
-            program: program.to_string(),
+            stage: command.stage.clone(),
+            program: command.program.to_string_lossy().into_owned(),
             source: std::io::Error::other(format!("{stream} reader thread panic")),
         })?
         .map_err(|source| UpdaterError::CommandSpawn {
-            stage: stage.to_string(),
-            program: program.to_string(),
+            stage: command.stage.clone(),
+            program: command.program.to_string_lossy().into_owned(),
             source,
         })
 }
@@ -220,7 +212,7 @@ pub(crate) fn command(
     timeout: Duration,
 ) -> CommandSpec {
     CommandSpec {
-        stage: stage.to_string(),
+        stage: stage.into(),
         program: program.into(),
         args: args.into_iter().map(Into::into).collect(),
         timeout,
@@ -230,18 +222,9 @@ pub(crate) fn command(
 #[derive(Debug, Clone)]
 pub struct UpgradePaths {
     pub root: PathBuf,
-    pub current_task: PathBuf,
-    pub history_dir: PathBuf,
     pub staging_dir: PathBuf,
-    pub rollback_dir: PathBuf,
-    pub last_known_good_deb: PathBuf,
-    pub last_known_good_metadata: PathBuf,
-    pub next_last_known_good_deb: PathBuf,
-    pub previous_deb: PathBuf,
-    pub active_release: PathBuf,
-    pub managed_marker: PathBuf,
     pub ready_file: PathBuf,
-    pub install_version_file: PathBuf,
+    pub installed_release: PathBuf,
     pub tls_certificate: PathBuf,
     pub database: PathBuf,
     pub sql_root: PathBuf,
@@ -251,20 +234,10 @@ pub struct UpgradePaths {
 
 impl UpgradePaths {
     pub fn for_root(root: PathBuf) -> Self {
-        let rollback_dir = root.join("rollback");
         Self {
-            current_task: root.join("current.json"),
-            history_dir: root.join("history"),
             staging_dir: root.join("staging"),
-            last_known_good_deb: rollback_dir.join("last-known-good.deb"),
-            last_known_good_metadata: rollback_dir.join("last-known-good.json"),
-            next_last_known_good_deb: rollback_dir.join("next-last-known-good.deb"),
-            previous_deb: rollback_dir.join("previous.deb"),
-            rollback_dir,
-            active_release: root.join("active-release.json"),
-            managed_marker: root.join("run/upgrade-managed"),
             ready_file: root.join("run/ready.json"),
-            install_version_file: root.join("install-meta/VERSION"),
+            installed_release: root.join("install-meta/release.json"),
             tls_certificate: root.join("tls/server.crt"),
             database: root.join("device.db"),
             sql_root: PathBuf::from("/opt/usb-control/db"),
@@ -276,9 +249,8 @@ impl UpgradePaths {
 
     pub fn production(root: PathBuf) -> Self {
         let mut paths = Self::for_root(root);
-        paths.managed_marker = PathBuf::from("/run/usb-control/upgrade-managed");
         paths.ready_file = PathBuf::from("/run/usb-control/ready.json");
-        paths.install_version_file = PathBuf::from("/opt/usb-control/install-meta/VERSION");
+        paths.installed_release = PathBuf::from("/opt/usb-control/install-meta/release.json");
         paths.tls_certificate = PathBuf::from("/etc/usb-control/tls/server.crt");
         paths.database = PathBuf::from("/var/lib/usb-control/device.db");
         paths.health_timeout = Duration::from_secs(30);
@@ -286,11 +258,9 @@ impl UpgradePaths {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExecutionDisposition {
-    Committed,
-    CommittedResultPending,
-    RolledBack,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpgradeExecutionReport {
+    pub post_commit_warning: Option<String>,
 }
 
 pub trait Clock {
@@ -314,7 +284,7 @@ impl Clock for SystemClock {
 pub struct RevalidatedPackage {
     pub manifest: UpgradeManifest,
     pub candidate_deb: PathBuf,
-    pub lkg: LastKnownGoodRelease,
+    pub target_release: InstalledRelease,
 }
 
 pub trait PackageRevalidator {
@@ -323,21 +293,6 @@ pub trait PackageRevalidator {
         paths: &UpgradePaths,
         task: &UpgradeTask,
     ) -> Result<RevalidatedPackage, UpdaterError>;
-}
-
-pub trait ActiveReleasePublisher {
-    fn commit(&self, root: &Path, release: &ActiveRelease) -> Result<(), ActiveCommitError>;
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SharedActiveReleasePublisher;
-
-impl ActiveReleasePublisher for SharedActiveReleasePublisher {
-    fn commit(&self, root: &Path, release: &ActiveRelease) -> Result<(), ActiveCommitError> {
-        ReleaseStateStore::new(root.to_path_buf())
-            .map_err(ActiveCommitError::BeforeRename)?
-            .commit_active_release(release)
-    }
 }
 
 pub struct SharedPackageRevalidator {
@@ -349,12 +304,6 @@ pub struct SharedPackageRevalidator {
 }
 
 impl SharedPackageRevalidator {
-    /// 使用明确的信任文件路径创建共享包重验证器。
-    ///
-    /// 参数:
-    /// - `verify_key_dir`: 升级验签公钥目录。
-    /// - `installed_release`: 当前安装发布元数据路径。
-    /// - `active_key_id`: 当前活动升级公钥标识路径。
     pub fn new(
         verify_key_dir: PathBuf,
         installed_release: PathBuf,
@@ -369,7 +318,6 @@ impl SharedPackageRevalidator {
         )
     }
 
-    /// 使用明确的路径、包大小上限和 DEB 检查器创建共享重验证器。
     pub fn with_deb_inspector(
         verify_key_dir: PathBuf,
         installed_release: PathBuf,
@@ -395,76 +343,62 @@ impl SharedPackageRevalidator {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InstalledRelease {
-    format_version: u32,
-    product: String,
-    version: SystemVersion,
-    architecture: String,
-    supported_schema_min: u32,
-    supported_schema_max: u32,
-    tls_cert_sha256: String,
-    upgrade_signing_key_id: String,
-}
-
 impl PackageRevalidator for SharedPackageRevalidator {
     fn revalidate(
         &self,
         paths: &UpgradePaths,
         task: &UpgradeTask,
     ) -> Result<RevalidatedPackage, UpdaterError> {
-        let release_store = ReleaseStateStore::new(paths.root.clone())?;
-        let active = release_store
-            .active_release()?
+        let active = ActiveReleaseStore::new(paths.root.clone())?
+            .current()?
             .ok_or_else(|| UpdaterError::TaskInvalid("active-release.json 不存在".into()))?;
-        let installed: InstalledRelease =
-            serde_json::from_slice(&fs::read(&self.installed_release)?)?;
+        let installed = read_installed_release(&self.installed_release)?;
         let active_key_text = fs::read_to_string(&self.active_key_id)?;
         let active_key_id = strict_line(&active_key_text)?;
-        let lkg = read_and_validate_lkg(paths)?;
         if active.version != task.source_version
-            || active.schema_version != lkg.schema_version
-            || active.version != lkg.version
-            || active.deb_sha256 != lkg.deb_sha256
-            || installed.format_version != 1
-            || installed.product != "usb-control"
-            || installed.architecture != "arm64"
             || installed.version != active.version
             || installed.supported_schema_min > active.schema_version
             || installed.supported_schema_max < active.schema_version
-            || installed.supported_schema_min > installed.supported_schema_max
             || installed.upgrade_signing_key_id != active_key_id
-            || !is_lower_hex_64(&installed.tls_cert_sha256)
-            || installed.tls_cert_sha256 != lkg.tls_cert_sha256
         {
             return Err(UpdaterError::TaskInvalid(
-                "当前有效发布、LKG、信任根和安装元数据不一致".into(),
+                "当前有效发布、信任根和安装元数据不一致".into(),
             ));
         }
-
         let package = PackageStager::new(paths.root.clone(), self.max_package_size)
             .reopen(&task.upgrade_id, &task.package_sha256)?;
-        let verifier =
-            PackageVerifier::new(self.verify_key_dir.clone(), self.deb_inspector.clone());
-        let context = VerificationContext {
-            current_version: active.version,
-            current_schema: active.schema_version,
-            supported_schema_max: installed.supported_schema_max,
-            protocol_version: 1,
-            client_target_version: task.target_version.to_string(),
-            client_sha256: task.package_sha256.clone(),
-        };
-        let verified = verifier.verify(package, &context)?;
+        let verified =
+            PackageVerifier::new(self.verify_key_dir.clone(), self.deb_inspector.clone()).verify(
+                package,
+                &VerificationContext {
+                    current_version: active.version,
+                    current_schema: active.schema_version,
+                    supported_schema_max: installed.supported_schema_max,
+                    protocol_version: 1,
+                    client_target_version: task.target_version.to_string(),
+                    client_sha256: task.package_sha256.clone(),
+                },
+            )?;
         if verified.staged.manifest.package_version != task.target_version {
             return Err(UpdaterError::TaskInvalid(
                 "二次验证目标版本与任务不一致".into(),
             ));
         }
+        let manifest = verified.staged.manifest;
+        let target_release = InstalledRelease {
+            format_version: 1,
+            product: manifest.product.clone(),
+            version: manifest.package_version,
+            architecture: manifest.architecture.clone(),
+            supported_schema_min: verified.deb_metadata.supported_schema_min,
+            supported_schema_max: verified.deb_metadata.supported_schema_max,
+            tls_cert_sha256: verified.deb_metadata.tls_cert_sha256,
+            upgrade_signing_key_id: verified.deb_metadata.upgrade_signing_key_id,
+        };
         Ok(RevalidatedPackage {
-            manifest: verified.staged.manifest,
+            manifest,
             candidate_deb: verified.staged.deb_path,
-            lkg,
+            target_release,
         })
     }
 }
@@ -486,142 +420,59 @@ fn strict_line(value: &str) -> Result<&str, UpdaterError> {
     Ok(line)
 }
 
-pub(crate) fn is_lower_hex_64(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-pub struct UpgradeExecutor<R, V, C, F = FileLkgRepository, P = SharedActiveReleasePublisher> {
-    pub(crate) paths: UpgradePaths,
-    pub(crate) runner: R,
+pub struct UpgradeExecutor<R, V, C> {
+    paths: UpgradePaths,
+    runner: R,
     revalidator: V,
     clock: C,
-    files: F,
-    active_release_publisher: P,
 }
 
-impl<R: CommandRunner, V: PackageRevalidator, C: Clock>
-    UpgradeExecutor<R, V, C, FileLkgRepository>
-{
+impl<R, V, C> UpgradeExecutor<R, V, C> {
     pub fn new(paths: UpgradePaths, runner: R, revalidator: V, clock: C) -> Self {
         Self {
             paths,
             runner,
             revalidator,
             clock,
-            files: FileLkgRepository,
-            active_release_publisher: SharedActiveReleasePublisher,
         }
     }
 }
 
-impl<R: CommandRunner, V: PackageRevalidator, C: Clock, F: LkgRepository>
-    UpgradeExecutor<R, V, C, F>
-{
-    pub fn with_repository(
-        paths: UpgradePaths,
-        runner: R,
-        revalidator: V,
-        clock: C,
-        files: F,
-    ) -> Self {
-        Self {
-            paths,
-            runner,
-            revalidator,
-            clock,
-            files,
-            active_release_publisher: SharedActiveReleasePublisher,
-        }
-    }
-}
-
-impl<R, V, C, F, P> UpgradeExecutor<R, V, C, F, P> {
-    pub fn with_components(
-        paths: UpgradePaths,
-        runner: R,
-        revalidator: V,
-        clock: C,
-        files: F,
-        active_release_publisher: P,
-    ) -> Self {
-        Self {
-            paths,
-            runner,
-            revalidator,
-            clock,
-            files,
-            active_release_publisher,
-        }
-    }
-}
-
-impl<
-        R: CommandRunner,
-        V: PackageRevalidator,
-        C: Clock,
-        F: LkgRepository,
-        P: ActiveReleasePublisher,
-    > UpgradeExecutor<R, V, C, F, P>
-{
-    pub fn execute(&self, upgrade_id: &str) -> Result<ExecutionDisposition, UpdaterError> {
+impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C> {
+    pub fn execute(&self, upgrade_id: &str) -> Result<UpgradeExecutionReport, UpdaterError> {
         let _lock = FileLock::acquire(&self.paths.root.join("lock"))?;
-        let store = UpgradeTaskStore::new(self.paths.root.clone())?;
-        let release_store = ReleaseStateStore::new(self.paths.root.clone())?;
-        let task = store
+        let tasks = UpgradeTaskStore::new(self.paths.root.clone())?;
+        let results = UpgradeResultStore::new(self.paths.root.clone())?;
+        let active_releases = ActiveReleaseStore::new(self.paths.root.clone())?;
+        let task = tasks
             .current()?
             .ok_or_else(|| UpdaterError::TaskInvalid("current.json 不存在".into()))?;
         validate_task(&task, upgrade_id)?;
         let mut last_timestamp = task.updated_at;
         let verified = match self.revalidator.revalidate(&self.paths, &task) {
-            Ok(verified) => verified,
+            Ok(value) => value,
             Err(error) => {
-                return self.finish_before_stop_failure(
-                    &store,
-                    &release_store,
+                return Err(self.finish_failed(
+                    &tasks,
+                    &results,
                     &task,
-                    PreStopFailure {
-                        failed_stage: "revalidating",
-                        original: error,
-                        prepared_transaction: false,
-                    },
+                    "revalidating",
+                    error,
                     &mut last_timestamp,
-                );
+                ));
             }
         };
+        let target_release = verified.target_release;
         let manifest = verified.manifest;
         let candidate = verified.candidate_deb;
-        let candidate_sha = manifest.deb_sha256.clone();
-        let previous_lkg = verified.lkg;
-        if let Err(error) = self.files.prepare(&self.paths, &candidate, &candidate_sha) {
-            return self.finish_before_stop_failure(
-                &store,
-                &release_store,
-                &task,
-                PreStopFailure {
-                    failed_stage: "preparing",
-                    original: error,
-                    prepared_transaction: false,
-                },
-                &mut last_timestamp,
-            );
-        }
 
-        let mut service_stopped = false;
-        let install_result = (|| {
-            let stopping_at = match next_time(&self.clock, &mut last_timestamp) {
-                Ok(timestamp) => timestamp,
-                Err(error) => {
-                    return Err(PreStopBoundary::Finalizable(error));
-                }
-            };
-            if let Err(error) = transition(&store, upgrade_id, UpgradeStatus::Stopping, stopping_at)
-            {
-                return Err(PreStopBoundary::Persistence(error));
-            }
-            service_stopped = true;
+        let install_result = (|| -> Result<(), UpdaterError> {
+            transition(
+                &tasks,
+                upgrade_id,
+                UpgradeStatus::Stopping,
+                next_time(&self.clock, &mut last_timestamp)?,
+            )?;
             run_command(
                 &self.runner,
                 "stopping",
@@ -629,19 +480,31 @@ impl<
                 ["stop", "usb-control.service"],
                 60,
             )?;
-            let installing_at = next_time(&self.clock, &mut last_timestamp)?;
-            transition(&store, upgrade_id, UpgradeStatus::Installing, installing_at)?;
-            install_deb(&self.runner, "installing", &candidate)?;
-            let migrating_at = next_time(&self.clock, &mut last_timestamp)?;
-            transition(&store, upgrade_id, UpgradeStatus::Migrating, migrating_at)?;
+            transition(
+                &tasks,
+                upgrade_id,
+                UpgradeStatus::Installing,
+                next_time(&self.clock, &mut last_timestamp)?,
+            )?;
+            install_deb(&self.runner, &candidate)?;
+            transition(
+                &tasks,
+                upgrade_id,
+                UpgradeStatus::Migrating,
+                next_time(&self.clock, &mut last_timestamp)?,
+            )?;
             run_migration(
                 &self.runner,
                 &self.paths.migrator,
                 &self.paths.database,
                 &self.paths.sql_root,
             )?;
-            let starting_at = next_time(&self.clock, &mut last_timestamp)?;
-            transition(&store, upgrade_id, UpgradeStatus::Starting, starting_at)?;
+            transition(
+                &tasks,
+                upgrade_id,
+                UpgradeStatus::Starting,
+                next_time(&self.clock, &mut last_timestamp)?,
+            )?;
             configure_and_reload(&self.runner)?;
             let restarts_before = read_restart_count(&self.runner, "starting")?;
             let start_attempt_at = next_time(&self.clock, &mut last_timestamp)?;
@@ -652,363 +515,144 @@ impl<
                 ["start", "usb-control.service"],
                 60,
             )?;
-            let health_checking_at = next_time(&self.clock, &mut last_timestamp)?;
             transition(
-                &store,
+                &tasks,
                 upgrade_id,
                 UpgradeStatus::HealthChecking,
-                health_checking_at,
+                next_time(&self.clock, &mut last_timestamp)?,
             )?;
-            let health = HealthExpectation {
-                version: manifest.package_version,
-                schema_version: manifest.schema_to,
-                tls_cert_sha256: manifest.tls_cert_sha256.clone(),
-                start_attempt_at,
-                restarts_before,
-            };
-            check_health(&self.runner, &self.paths, &health)?;
-            self.files.promote(&self.paths, &manifest, &candidate_sha)?;
-            let committed_at = next_time(&self.clock, &mut last_timestamp)?;
-            let active = ActiveRelease {
-                format_version: 1,
-                upgrade_id: upgrade_id.to_string(),
-                version: manifest.package_version,
-                deb_sha256: candidate_sha.clone(),
-                schema_version: manifest.schema_to,
-                committed_at,
-            };
-            let active_release_sync_pending = match self
-                .active_release_publisher
-                .commit(&self.paths.root, &active)
-            {
-                Ok(()) => false,
-                Err(ActiveCommitError::BeforeRename(error)) => {
-                    return Err(UpdaterError::Domain(error).into());
-                }
-                Err(ActiveCommitError::AfterRename(_)) => true,
-            };
-            Ok::<bool, PreStopBoundary>(active_release_sync_pending)
+            check_health(
+                &self.runner,
+                &self.paths,
+                &HealthExpectation {
+                    release: target_release,
+                    schema_version: manifest.schema_to,
+                    start_attempt_at,
+                    restarts_before,
+                },
+            )
         })();
+        if let Err(error) = install_result {
+            let stage = stage_of(&error);
+            return Err(self.finish_failed(
+                &tasks,
+                &results,
+                &task,
+                &stage,
+                error,
+                &mut last_timestamp,
+            ));
+        }
 
-        let active_release_sync_pending = match install_result {
-            Ok(sync_pending) => sync_pending,
-            Err(PreStopBoundary::Finalizable(original)) => {
-                return self.finish_before_stop_failure(
-                    &store,
-                    &release_store,
+        let committed_at = next_time(&self.clock, &mut last_timestamp)?;
+        let active = ActiveRelease {
+            format_version: 1,
+            upgrade_id: upgrade_id.into(),
+            version: manifest.package_version,
+            deb_sha256: manifest.deb_sha256,
+            schema_version: manifest.schema_to,
+            committed_at,
+        };
+        let mut warnings = Vec::new();
+        match active_releases.commit(&active) {
+            Ok(()) => {}
+            Err(ActiveCommitError::BeforeRename(error)) => {
+                return Err(self.finish_failed(
+                    &tasks,
+                    &results,
                     &task,
-                    PreStopFailure {
-                        failed_stage: "preparing",
-                        original,
-                        prepared_transaction: true,
-                    },
+                    "committing",
+                    UpdaterError::Domain(error),
                     &mut last_timestamp,
-                );
+                ));
             }
-            Err(PreStopBoundary::Persistence(original)) => {
-                return match self.files.abort_prepared(&self.paths) {
-                    Ok(()) => Err(original),
-                    Err(cleanup) => Err(combine_errors(
-                        "Stopping 状态持久化失败",
-                        &original,
-                        "准备事务清理失败",
-                        &cleanup,
-                    )),
-                };
-            }
-            Err(PreStopBoundary::Execution(original)) => {
-                if !service_stopped {
-                    return Err(original);
-                }
-                let rolling_back_at = next_time_or_fallback(&self.clock, &mut last_timestamp);
-                let _ = transition(
-                    &store,
-                    upgrade_id,
-                    UpgradeStatus::RollingBack,
-                    rolling_back_at,
-                );
-                let rollback_source = if self.paths.previous_deb.is_file() {
-                    self.paths.previous_deb.clone()
-                } else {
-                    self.paths.last_known_good_deb.clone()
-                };
-                let rollback_result = rollback(
-                    &self.runner,
-                    &self.paths,
-                    &rollback_source,
-                    &previous_lkg,
-                    &self.clock,
-                    last_timestamp,
-                )
-                .and_then(|rollback_started_at| {
-                    last_timestamp = last_timestamp.max(rollback_started_at);
-                    self.files.restore(&self.paths, &previous_lkg)
-                })
-                .and_then(|()| self.files.cleanup_rollback(&self.paths));
-                match rollback_result {
-                    Ok(()) => {
-                        let rolled_back_at =
-                            next_time_or_fallback(&self.clock, &mut last_timestamp);
-                        transition(
-                            &store,
-                            upgrade_id,
-                            UpgradeStatus::RolledBack,
-                            rolled_back_at,
-                        )?;
-                        let finished_at = next_time_or_fallback(&self.clock, &mut last_timestamp);
-                        write_result(
-                            &release_store,
-                            &task,
-                            ResultOutcome {
-                                status: UpgradeStatus::RolledBack,
-                                effective_version: task.source_version,
-                                failed_stage: Some(stage_of(&original)),
-                                original_error: Some(original.to_string()),
-                                rollback_error: None,
-                                finished_at,
-                            },
-                        )?;
-                        return Ok(ExecutionDisposition::RolledBack);
-                    }
-                    Err(rollback_error) => {
-                        let combined = UpdaterError::RollbackFailed {
-                            original: original.to_string(),
-                            rollback: rollback_error.to_string(),
-                        };
-                        let rollback_failed_at =
-                            next_time_or_fallback(&self.clock, &mut last_timestamp);
-                        let _ = transition(
-                            &store,
-                            upgrade_id,
-                            UpgradeStatus::RollbackFailed,
-                            rollback_failed_at,
-                        );
-                        let finished_at = next_time_or_fallback(&self.clock, &mut last_timestamp);
-                        let _ = write_result(
-                            &release_store,
-                            &task,
-                            ResultOutcome {
-                                status: UpgradeStatus::RollbackFailed,
-                                effective_version: task.source_version,
-                                failed_stage: Some(stage_of(&original)),
-                                original_error: Some(original.to_string()),
-                                rollback_error: Some(rollback_error.to_string()),
-                                finished_at,
-                            },
-                        );
-                        let _ = self.files.cleanup_rollback(&self.paths);
-                        return Err(combined);
-                    }
-                }
-            }
+            Err(ActiveCommitError::AfterRename(error)) => warnings.push(error.to_string()),
+        }
+        let finished_at = next_time_or_fallback(&self.clock, &mut last_timestamp);
+        let committed = UpgradeResult {
+            format_version: 1,
+            upgrade_id: task.upgrade_id.clone(),
+            status: UpgradeStatus::Committed,
+            username: task.username.clone(),
+            role: task.role,
+            source_ip: task.source_ip.clone(),
+            source_version: task.source_version,
+            target_version: task.target_version,
+            effective_version: task.target_version,
+            failed_stage: None,
+            original_error: None,
+            finished_at,
         };
-        let committed_at = last_timestamp;
-        let committed_state_at =
-            next_time_or_fallback(&self.clock, &mut last_timestamp).max(committed_at);
-        let mut committed_state = None;
-        for _ in 0..3 {
-            match transition(
-                &store,
-                upgrade_id,
-                UpgradeStatus::Committed,
-                committed_state_at,
-            ) {
-                Ok(()) => {
-                    committed_state = Some(Ok(()));
-                    break;
-                }
-                Err(error) => committed_state = Some(Err(error)),
-            }
+        if let Err(error) = results.write(&committed) {
+            warnings.push(error.to_string());
+        } else if let Err(error) =
+            tasks.ensure_terminal(upgrade_id, UpgradeStatus::Committed, finished_at)
+        {
+            warnings.push(error.to_string());
         }
-        let committed = committed_state
-            .expect("commit retry loop has at least one iteration")
-            .and_then(|_| {
-                let finished_at =
-                    next_time_or_fallback(&self.clock, &mut last_timestamp).max(committed_at);
-                write_result(
-                    &release_store,
-                    &task,
-                    ResultOutcome {
-                        status: UpgradeStatus::Committed,
-                        effective_version: task.target_version,
-                        failed_stage: None,
-                        original_error: None,
-                        rollback_error: None,
-                        finished_at,
-                    },
-                )
-            });
-        if committed.is_err() {
-            let _ = self.files.cleanup_committed(&self.paths);
-            return Ok(ExecutionDisposition::CommittedResultPending);
+        if let Err(error) = remove_staging(&self.paths.staging_dir, upgrade_id) {
+            warnings.push(error.to_string());
         }
-        let cleanup_pending = self.files.cleanup_committed(&self.paths).is_err();
-        if active_release_sync_pending || cleanup_pending {
-            Ok(ExecutionDisposition::CommittedResultPending)
-        } else {
-            Ok(ExecutionDisposition::Committed)
-        }
+        Ok(UpgradeExecutionReport {
+            post_commit_warning: (!warnings.is_empty()).then(|| warnings.join("；")),
+        })
     }
 
-    fn finish_before_stop_failure(
+    fn finish_failed(
         &self,
-        store: &UpgradeTaskStore,
-        releases: &ReleaseStateStore,
+        tasks: &UpgradeTaskStore,
+        results: &UpgradeResultStore,
         task: &UpgradeTask,
-        failure: PreStopFailure<'_>,
+        failed_stage: &str,
+        original: UpdaterError,
         last_timestamp: &mut i64,
-    ) -> Result<ExecutionDisposition, UpdaterError> {
-        let rolling_back_at = next_time_or_increment(&self.clock, last_timestamp)?;
-        transition(
-            store,
-            &task.upgrade_id,
-            UpgradeStatus::RollingBack,
-            rolling_back_at,
-        )
-        .map_err(|state| {
-            combine_errors(
-                "停服前失败终态化",
-                &failure.original,
-                "RollingBack 状态持久化",
-                &state,
-            )
-        })?;
-
-        let cleanup_error = if failure.prepared_transaction {
-            self.files.abort_prepared(&self.paths).err()
-        } else {
-            None
+    ) -> UpdaterError {
+        let finished_at = next_time_or_fallback(&self.clock, last_timestamp);
+        let original_text = original.to_string();
+        let result = UpgradeResult {
+            format_version: 1,
+            upgrade_id: task.upgrade_id.clone(),
+            status: UpgradeStatus::Failed,
+            username: task.username.clone(),
+            role: task.role,
+            source_ip: task.source_ip.clone(),
+            source_version: task.source_version,
+            target_version: task.target_version,
+            effective_version: task.source_version,
+            failed_stage: Some(failed_stage.into()),
+            original_error: Some(original_text.clone()),
+            finished_at,
         };
-        let rolled_back_at = next_time_or_increment(&self.clock, last_timestamp)?;
-        transition(
-            store,
-            &task.upgrade_id,
-            UpgradeStatus::RolledBack,
-            rolled_back_at,
-        )
-        .map_err(|state| {
-            combine_errors(
-                "停服前失败终态化",
-                &failure.original,
-                "RolledBack 状态持久化",
-                &state,
-            )
-        })?;
-        let finished_at = next_time_or_increment(&self.clock, last_timestamp)?;
-        write_result(
-            releases,
-            task,
-            ResultOutcome {
-                status: UpgradeStatus::RolledBack,
-                effective_version: task.source_version,
-                failed_stage: Some(failure.failed_stage.to_string()),
-                original_error: Some(failure.original.to_string()),
-                rollback_error: cleanup_error.map(|error| error.to_string()),
-                finished_at,
-            },
-        )?;
-        Ok(ExecutionDisposition::RolledBack)
+        let mut persistence_errors = Vec::new();
+        if let Err(error) = results.write(&result) {
+            persistence_errors.push(error.to_string());
+        }
+        if let Err(error) =
+            tasks.ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, finished_at)
+        {
+            persistence_errors.push(error.to_string());
+        }
+        if persistence_errors.is_empty() {
+            original
+        } else {
+            UpdaterError::TaskInvalid(format!(
+                "{original_text}；失败终态持久化错误: {}",
+                persistence_errors.join("；")
+            ))
+        }
     }
 }
 
-struct PreStopFailure<'a> {
-    failed_stage: &'a str,
-    original: UpdaterError,
-    prepared_transaction: bool,
+fn next_time(clock: &dyn Clock, last: &mut i64) -> Result<i64, UpdaterError> {
+    *last = (*last).max(clock.now()?);
+    Ok(*last)
 }
 
-enum PreStopBoundary {
-    Finalizable(UpdaterError),
-    Persistence(UpdaterError),
-    Execution(UpdaterError),
-}
-
-impl From<UpdaterError> for PreStopBoundary {
-    fn from(error: UpdaterError) -> Self {
-        Self::Execution(error)
-    }
-}
-
-fn next_time(clock: &dyn Clock, last_timestamp: &mut i64) -> Result<i64, UpdaterError> {
-    let now = clock.now()?.max(*last_timestamp);
-    *last_timestamp = now;
-    Ok(now)
-}
-
-fn next_time_or_fallback(clock: &dyn Clock, last_timestamp: &mut i64) -> i64 {
+fn next_time_or_fallback(clock: &dyn Clock, last: &mut i64) -> i64 {
     if let Ok(now) = clock.now() {
-        *last_timestamp = (*last_timestamp).max(now);
+        *last = (*last).max(now);
     }
-    *last_timestamp
-}
-
-fn next_time_or_increment(
-    clock: &dyn Clock,
-    last_timestamp: &mut i64,
-) -> Result<i64, UpdaterError> {
-    match clock.now() {
-        Ok(now) => {
-            *last_timestamp = (*last_timestamp).max(now);
-        }
-        Err(_) => {
-            *last_timestamp = last_timestamp.checked_add(1).ok_or_else(|| {
-                UpdaterError::TaskInvalid("升级任务时间戳溢出，无法持久化终态".into())
-            })?;
-        }
-    }
-    Ok(*last_timestamp)
-}
-
-fn combine_errors(
-    first_context: &str,
-    first: &UpdaterError,
-    second_context: &str,
-    second: &UpdaterError,
-) -> UpdaterError {
-    UpdaterError::TaskInvalid(format!(
-        "{first_context}: {first}；{second_context}: {second}"
-    ))
-}
-
-pub(crate) fn run_command(
-    runner: &dyn CommandRunner,
-    stage: &str,
-    program: &str,
-    args: impl IntoIterator<Item = impl Into<OsString>>,
-    timeout_secs: u64,
-) -> Result<(), UpdaterError> {
-    runner.run(&command(
-        stage,
-        program,
-        args,
-        Duration::from_secs(timeout_secs),
-    ))?;
-    Ok(())
-}
-
-pub(crate) fn install_deb(
-    runner: &dyn CommandRunner,
-    stage: &str,
-    deb: &Path,
-) -> Result<(), UpdaterError> {
-    run_command(
-        runner,
-        stage,
-        "dpkg",
-        [OsString::from("--unpack"), deb.as_os_str().to_os_string()],
-        300,
-    )
-}
-
-pub(crate) fn configure_and_reload(runner: &dyn CommandRunner) -> Result<(), UpdaterError> {
-    run_command(
-        runner,
-        "starting",
-        "dpkg",
-        ["--configure", "usb-control"],
-        300,
-    )?;
-    run_command(runner, "starting", "systemctl", ["daemon-reload"], 60)
+    *last
 }
 
 fn transition(
@@ -1033,45 +677,6 @@ fn validate_task(task: &UpgradeTask, upgrade_id: &str) -> Result<(), UpdaterErro
     Ok(())
 }
 
-struct ResultOutcome {
-    status: UpgradeStatus,
-    effective_version: SystemVersion,
-    failed_stage: Option<String>,
-    original_error: Option<String>,
-    rollback_error: Option<String>,
-    finished_at: i64,
-}
-
-fn write_result(
-    store: &ReleaseStateStore,
-    task: &UpgradeTask,
-    outcome: ResultOutcome,
-) -> Result<(), UpdaterError> {
-    let result = UpgradeResult {
-        format_version: 1,
-        upgrade_id: task.upgrade_id.clone(),
-        status: outcome.status,
-        username: task.username.clone(),
-        role: task.role,
-        source_ip: task.source_ip.clone(),
-        source_version: task.source_version,
-        target_version: task.target_version,
-        effective_version: outcome.effective_version,
-        failed_stage: outcome.failed_stage,
-        original_error: outcome.original_error,
-        rollback_error: outcome.rollback_error,
-        finished_at: outcome.finished_at,
-    };
-    let mut last = None;
-    for _ in 0..3 {
-        match store.write_result(&result) {
-            Ok(()) => return Ok(()),
-            Err(error) => last = Some(UpdaterError::Domain(error)),
-        }
-    }
-    Err(last.expect("result retry loop has at least one iteration"))
-}
-
 fn stage_of(error: &UpdaterError) -> String {
     match error {
         UpdaterError::CommandSpawn { stage, .. }
@@ -1081,6 +686,52 @@ fn stage_of(error: &UpdaterError) -> String {
         UpdaterError::HealthFailed(_) => "health_checking".into(),
         _ => "updater".into(),
     }
+}
+
+pub(crate) fn run_command(
+    runner: &dyn CommandRunner,
+    stage: &str,
+    program: &str,
+    args: impl IntoIterator<Item = impl Into<OsString>>,
+    timeout_secs: u64,
+) -> Result<(), UpdaterError> {
+    runner.run(&command(
+        stage,
+        program,
+        args,
+        Duration::from_secs(timeout_secs),
+    ))?;
+    Ok(())
+}
+
+fn install_deb(runner: &dyn CommandRunner, deb: &Path) -> Result<(), UpdaterError> {
+    run_command(
+        runner,
+        "installing",
+        "dpkg",
+        [OsString::from("--unpack"), deb.as_os_str().to_os_string()],
+        300,
+    )
+}
+
+fn configure_and_reload(runner: &dyn CommandRunner) -> Result<(), UpdaterError> {
+    run_command(
+        runner,
+        "starting",
+        "dpkg",
+        ["--configure", "usb-control"],
+        300,
+    )?;
+    run_command(runner, "starting", "systemctl", ["daemon-reload"], 60)
+}
+
+fn remove_staging(parent: &Path, upgrade_id: &str) -> Result<(), UpdaterError> {
+    let path = parent.join(upgrade_id);
+    if path.exists() {
+        fs::remove_dir_all(&path)?;
+        File::open(parent)?.sync_all()?;
+    }
+    Ok(())
 }
 
 fn create_private_dir_all(path: &Path) -> Result<(), UpdaterError> {
@@ -1106,7 +757,6 @@ impl FileLock {
             .truncate(false)
             .mode(0o600)
             .open(path)?;
-        // SAFETY: flock only observes the valid descriptor owned by `file`.
         let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if result != 0 {
             return Err(UpdaterError::TaskInvalid("已有 updater 正在执行".into()));
@@ -1117,7 +767,6 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        // SAFETY: descriptor remains valid for the lifetime of this guard.
         let _ = unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_UN) };
     }
 }

@@ -18,13 +18,16 @@ fn run() -> Result<(), UpdaterError> {
     let root = parse_args(std::env::args())?;
     // 这里只取得调度标识；executor 获取全局锁后会重新严格读取并验证完整任务。
     let task: UpgradeTask = serde_json::from_slice(&fs::read(root.join("current.json"))?)?;
-    UpgradeExecutor::new(
+    let report = UpgradeExecutor::new(
         UpgradePaths::production(root),
         ProcessCommandRunner,
         SharedPackageRevalidator::production(),
         SystemClock,
     )
     .execute(&task.upgrade_id)?;
+    if let Some(warning) = report.post_commit_warning {
+        eprintln!("usb-control-updater: 升级已提交，但元数据收敛待重试: {warning}");
+    }
     Ok(())
 }
 

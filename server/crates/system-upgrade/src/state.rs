@@ -31,9 +31,7 @@ pub enum UpgradeStatus {
     Starting,
     HealthChecking,
     Committed,
-    RollingBack,
-    RolledBack,
-    RollbackFailed,
+    Failed,
 }
 
 impl UpgradeStatus {
@@ -49,19 +47,17 @@ impl UpgradeStatus {
                 | (Prepared, Accepted)
                 | (Accepted, ScheduleFailed)
                 | (Accepted, Stopping)
-                | (Accepted, RollingBack)
+                | (Accepted, Failed)
                 | (Stopping, Installing)
-                | (Stopping, RollingBack)
+                | (Stopping, Failed)
                 | (Installing, Migrating)
-                | (Installing, RollingBack)
+                | (Installing, Failed)
                 | (Migrating, Starting)
-                | (Migrating, RollingBack)
+                | (Migrating, Failed)
                 | (Starting, HealthChecking)
-                | (Starting, RollingBack)
+                | (Starting, Failed)
                 | (HealthChecking, Committed)
-                | (HealthChecking, RollingBack)
-                | (RollingBack, RolledBack)
-                | (RollingBack, RollbackFailed)
+                | (HealthChecking, Failed)
         )
     }
 
@@ -73,8 +69,7 @@ impl UpgradeStatus {
                 | Self::Cancelled
                 | Self::ScheduleFailed
                 | Self::Committed
-                | Self::RolledBack
-                | Self::RollbackFailed
+                | Self::Failed
         )
     }
 }
@@ -201,10 +196,34 @@ impl UpgradeTaskStore {
                 PublishMode::CreateHistory,
             )?;
             remove_file_and_sync_parent(&self.root.join("current.json"))?;
+            self.prune_history()?;
         } else {
             atomic_write_json(&self.root.join("current.json"), &task, PublishMode::Replace)?;
         }
         Ok(task)
+    }
+
+    /// 幂等完成同一任务的终态；不同任务或不同终态仍视为状态错误。
+    pub fn ensure_terminal(
+        &self,
+        upgrade_id: &str,
+        status: UpgradeStatus,
+        updated_at: i64,
+    ) -> Result<UpgradeTask, UpgradeError> {
+        if !status.is_terminal() {
+            return Err(UpgradeError::State("目标状态不是终态".into()));
+        }
+        match self.current()? {
+            Some(task) if task.upgrade_id == upgrade_id => {
+                self.transition(upgrade_id, status, updated_at)
+            }
+            Some(_) => Err(UpgradeError::State("当前升级任务标识不一致".into())),
+            None => match self.history(upgrade_id)? {
+                Some(task) if task.status == status => Ok(task),
+                Some(_) => Err(UpgradeError::State("升级任务已处于其他终态".into())),
+                None => Err(UpgradeError::State("升级任务不存在".into())),
+            },
+        }
     }
 
     pub(crate) fn record_rejected(&self, task: &UpgradeTask) -> Result<(), UpgradeError> {
@@ -216,7 +235,8 @@ impl UpgradeTaskStore {
             &self.history_path(&task.upgrade_id),
             task,
             PublishMode::CreateHistory,
-        )
+        )?;
+        self.prune_history()
     }
 
     pub(crate) fn remove_staging(&self, upgrade_id: &str) -> Result<(), UpgradeError> {
@@ -232,6 +252,34 @@ impl UpgradeTaskStore {
 
     fn history_path(&self, upgrade_id: &str) -> PathBuf {
         self.root.join("history").join(format!("{upgrade_id}.json"))
+    }
+
+    fn prune_history(&self) -> Result<(), UpgradeError> {
+        const LIMIT: usize = 20;
+        let directory = self.root.join("history");
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(&directory)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            if let Ok(Some(task)) = read_optional_json::<UpgradeTask>(&path) {
+                entries.push((task.updated_at, task.upgrade_id, path));
+            }
+        }
+        entries.sort_by(|left, right| (left.0, &left.1).cmp(&(right.0, &right.1)));
+        let remove_count = entries.len().saturating_sub(LIMIT);
+        for (_, _, path) in entries.into_iter().take(remove_count) {
+            fs::remove_file(path)?;
+        }
+        if remove_count > 0 {
+            sync_dir(&directory)?;
+        }
+        Ok(())
     }
 }
 
@@ -286,11 +334,11 @@ pub(crate) fn atomic_write_json<T: Serialize>(
                     return Err(UpgradeError::Io(error));
                 }
                 if let Err(error) = fs::remove_file(&temporary) {
-                    rollback_created_file(path, parent);
+                    remove_partial_publish(path, parent);
                     return Err(UpgradeError::Io(error));
                 }
                 if let Err(error) = sync_dir(parent) {
-                    rollback_created_file(path, parent);
+                    remove_partial_publish(path, parent);
                     return Err(UpgradeError::Io(error));
                 }
             }
@@ -334,7 +382,7 @@ impl PersistedFormat for UpgradeTask {
     }
 }
 
-fn create_private_dir_all(path: &Path) -> io::Result<()> {
+pub(crate) fn create_private_dir_all(path: &Path) -> io::Result<()> {
     fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
@@ -350,12 +398,12 @@ fn remove_file_and_sync_parent(path: &Path) -> io::Result<()> {
     sync_dir(parent)
 }
 
-fn rollback_created_file(path: &Path, parent: &Path) {
+fn remove_partial_publish(path: &Path, parent: &Path) {
     let _ = fs::remove_file(path);
     let _ = sync_dir(parent);
 }
 
-fn sync_dir(path: &Path) -> io::Result<()> {
+pub(crate) fn sync_dir(path: &Path) -> io::Result<()> {
     File::open(path)?.sync_all()
 }
 

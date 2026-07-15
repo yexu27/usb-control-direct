@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use crate::state::TASK_FORMAT_VERSION;
 use crate::{
-    PackageStager, PackageVerifier, ReleaseStateStore, SystemVersion, UpgradeError, UpgradeResult,
+    PackageStager, PackageVerifier, SystemVersion, UpgradeError, UpgradeResult, UpgradeResultStore,
     UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
 };
 
@@ -70,7 +70,7 @@ pub struct UpgradeCoordinator {
     preflight: Arc<dyn UpgradePreflight>,
     scheduler: Arc<dyn UpgradeScheduler>,
     store: UpgradeTaskStore,
-    results: ReleaseStateStore,
+    results: UpgradeResultStore,
     admission_lock: Mutex<()>,
 }
 
@@ -85,7 +85,7 @@ impl UpgradeCoordinator {
         scheduler: Arc<dyn UpgradeScheduler>,
     ) -> Result<Self, UpgradeError> {
         let store = UpgradeTaskStore::new(root.clone())?;
-        let results = ReleaseStateStore::new(root)?;
+        let results = UpgradeResultStore::new(root)?;
         Ok(Self {
             stager,
             verifier,
@@ -219,26 +219,37 @@ impl UpgradeCoordinator {
         match self.scheduler.start(upgrade_id) {
             Ok(()) => Ok(()),
             Err(schedule_error) => {
-                let failed = self.store.transition(
-                    upgrade_id,
-                    UpgradeStatus::ScheduleFailed,
-                    unix_timestamp()?,
-                )?;
-                self.results.write_result(&UpgradeResult {
+                let finished_at = unix_timestamp()?;
+                let result = UpgradeResult {
                     format_version: 1,
-                    upgrade_id: failed.upgrade_id.clone(),
+                    upgrade_id: task.upgrade_id.clone(),
                     status: UpgradeStatus::ScheduleFailed,
-                    username: failed.username.clone(),
-                    role: failed.role,
-                    source_ip: failed.source_ip.clone(),
-                    source_version: failed.source_version,
-                    target_version: failed.target_version,
-                    effective_version: failed.source_version,
+                    username: task.username.clone(),
+                    role: task.role,
+                    source_ip: task.source_ip.clone(),
+                    source_version: task.source_version,
+                    target_version: task.target_version,
+                    effective_version: task.source_version,
                     failed_stage: Some("scheduling".into()),
                     original_error: Some(schedule_error.to_string()),
-                    rollback_error: None,
-                    finished_at: failed.updated_at,
-                })?;
+                    finished_at,
+                };
+                let result_error = self.results.write(&result).err();
+                let state_error = self
+                    .store
+                    .ensure_terminal(upgrade_id, UpgradeStatus::ScheduleFailed, finished_at)
+                    .err();
+                let persistence_errors = [result_error, state_error]
+                    .into_iter()
+                    .flatten()
+                    .map(|error| error.to_string())
+                    .collect::<Vec<_>>();
+                if !persistence_errors.is_empty() {
+                    return Err(UpgradeError::State(format!(
+                        "updater 调度失败且终态持久化不完整: {schedule_error}; {}",
+                        persistence_errors.join("；")
+                    )));
+                }
                 Err(schedule_error)
             }
         }

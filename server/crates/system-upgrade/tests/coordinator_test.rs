@@ -8,9 +8,9 @@ use std::thread;
 
 use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, PrepareUpgradeRequest,
-    ReleaseStateStore, SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradeError,
-    UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest, UpgradeScheduler,
-    UpgradeStatus, UpgradeTask,
+    SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradeError, UpgradePreflight,
+    UpgradePreflightFailure, UpgradePreflightRequest, UpgradeResultStore, UpgradeScheduler,
+    UpgradeStatus, UpgradeTask, UpgradeTaskStore,
 };
 
 use support::{sha256_hex, MatchingDebInspector, PackageFixture};
@@ -28,19 +28,17 @@ fn accepts_only_legal_state_transitions() {
         (Prepared, Accepted),
         (Accepted, ScheduleFailed),
         (Accepted, Stopping),
-        (Accepted, RollingBack),
+        (Accepted, Failed),
         (Stopping, Installing),
-        (Stopping, RollingBack),
+        (Stopping, Failed),
         (Installing, Migrating),
-        (Installing, RollingBack),
+        (Installing, Failed),
         (Migrating, Starting),
-        (Migrating, RollingBack),
+        (Migrating, Failed),
         (Starting, HealthChecking),
-        (Starting, RollingBack),
+        (Starting, Failed),
         (HealthChecking, Committed),
-        (HealthChecking, RollingBack),
-        (RollingBack, RolledBack),
-        (RollingBack, RollbackFailed),
+        (HealthChecking, Failed),
     ];
 
     for (from, to) in legal {
@@ -63,9 +61,7 @@ fn accepts_only_legal_state_transitions() {
         Starting,
         HealthChecking,
         Committed,
-        RollingBack,
-        RolledBack,
-        RollbackFailed,
+        Failed,
     ];
     for from in all {
         for to in all {
@@ -77,6 +73,126 @@ fn accepts_only_legal_state_transitions() {
             );
         }
     }
+}
+
+#[test]
+fn failed_is_terminal_and_releases_current_slot() {
+    let root = tempfile::tempdir().unwrap();
+    let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let task = accepted_task("upgrade-failed-terminal");
+    store
+        .create(&UpgradeTask {
+            status: UpgradeStatus::Prepared,
+            ..task.clone()
+        })
+        .unwrap();
+    store
+        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .unwrap();
+
+    let failed = store
+        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .unwrap();
+
+    assert_eq!(failed.status, UpgradeStatus::Failed);
+    assert!(store.current().unwrap().is_none());
+    assert_eq!(
+        store.history(&task.upgrade_id).unwrap().unwrap().status,
+        UpgradeStatus::Failed
+    );
+}
+
+#[test]
+fn ensure_terminal_is_idempotent_for_same_task_and_status() {
+    let root = tempfile::tempdir().unwrap();
+    let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let task = accepted_task("upgrade-idempotent-terminal");
+    store
+        .create(&UpgradeTask {
+            status: UpgradeStatus::Prepared,
+            ..task.clone()
+        })
+        .unwrap();
+    store
+        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .unwrap();
+
+    let first = store
+        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .unwrap();
+    let second = store
+        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 103)
+        .unwrap();
+
+    assert_eq!(first, second);
+}
+
+#[test]
+fn ensure_terminal_rejects_different_status() {
+    let root = tempfile::tempdir().unwrap();
+    let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let task = accepted_task("upgrade-terminal-mismatch");
+    store
+        .create(&UpgradeTask {
+            status: UpgradeStatus::Prepared,
+            ..task.clone()
+        })
+        .unwrap();
+    store
+        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .unwrap();
+    store
+        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .unwrap();
+
+    assert!(store
+        .ensure_terminal(&task.upgrade_id, UpgradeStatus::ScheduleFailed, 103)
+        .is_err());
+}
+
+#[test]
+fn ensure_terminal_rejects_different_current_task() {
+    let root = tempfile::tempdir().unwrap();
+    let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let task = accepted_task("upgrade-current-task");
+    store
+        .create(&UpgradeTask {
+            status: UpgradeStatus::Prepared,
+            ..task
+        })
+        .unwrap();
+
+    assert!(store
+        .ensure_terminal("upgrade-another-task", UpgradeStatus::Failed, 102)
+        .is_err());
+}
+
+#[test]
+fn task_history_keeps_latest_twenty_by_updated_at() {
+    let root = tempfile::tempdir().unwrap();
+    let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    for index in 0..22 {
+        let task = accepted_task(&format!("upgrade-{index:02}"));
+        store
+            .create(&UpgradeTask {
+                status: UpgradeStatus::Prepared,
+                ..task.clone()
+            })
+            .unwrap();
+        store
+            .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101 + index)
+            .unwrap();
+        store
+            .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 200 + index)
+            .unwrap();
+    }
+
+    assert_eq!(
+        fs::read_dir(root.path().join("history")).unwrap().count(),
+        20
+    );
+    assert!(store.history("upgrade-00").unwrap().is_none());
+    assert!(store.history("upgrade-21").unwrap().is_some());
 }
 
 #[test]
@@ -385,9 +501,9 @@ fn scheduler_failure_records_schedule_failed_without_stopping_service() {
             .join(format!("{}.json", prepared.upgrade_id)),
     );
     assert_eq!(failed.status, UpgradeStatus::ScheduleFailed);
-    let result = ReleaseStateStore::new(root)
+    let result = UpgradeResultStore::new(root)
         .unwrap()
-        .result(&prepared.upgrade_id)
+        .get(&prepared.upgrade_id)
         .unwrap()
         .expect("schedule failure must persist an importable result");
     assert_eq!(result.status, UpgradeStatus::ScheduleFailed);
@@ -397,6 +513,22 @@ fn scheduler_failure_records_schedule_failed_without_stopping_service() {
         .unwrap()
         .contains("scheduler rejected start"));
     assert_eq!(result.effective_version, failed.source_version);
+}
+
+fn accepted_task(upgrade_id: &str) -> UpgradeTask {
+    UpgradeTask {
+        format_version: 1,
+        upgrade_id: upgrade_id.into(),
+        status: UpgradeStatus::Accepted,
+        username: "admin".into(),
+        role: 1,
+        source_ip: "127.0.0.1".into(),
+        source_version: version("3.0.1"),
+        target_version: version("3.0.2"),
+        package_sha256: "a".repeat(64),
+        created_at: 100,
+        updated_at: 100,
+    }
 }
 
 fn coordinator(

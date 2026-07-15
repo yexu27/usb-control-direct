@@ -35,7 +35,6 @@ pub fn map_upgrade_error(error: &UpgradeError) -> UpgradeProtocolError {
             }
             UpgradePreflightFailure::DpkgDamaged
             | UpgradePreflightFailure::ClamAvUnavailable
-            | UpgradePreflightFailure::RollbackUnavailable
             | UpgradePreflightFailure::PlatformIncompatible
             | UpgradePreflightFailure::ProbeFailed(_) => {
                 (ResultCode::InternalError, "装置升级环境不可用")

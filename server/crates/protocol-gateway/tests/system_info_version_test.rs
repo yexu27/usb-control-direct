@@ -4,7 +4,7 @@ use common::proto::{CmdGetSystemInfo, RspSystemInfo};
 use prost::Message;
 use protocol_gateway::codec;
 use protocol_gateway::handlers::system::handle_get_system_info;
-use system_upgrade::{ActiveRelease, ReleaseStateStore, SystemVersion};
+use system_upgrade::{ActiveRelease, ActiveReleaseStore, SystemVersion};
 
 use support::request_fixture;
 
@@ -17,9 +17,9 @@ fn system_info_reads_committed_release_not_candidate_version() {
         .unwrap()
         .config_set("system_version", "3.0.1")
         .unwrap();
-    ReleaseStateStore::new(fixture.upgrade_root.path().to_path_buf())
+    ActiveReleaseStore::new(fixture.upgrade_root.path().to_path_buf())
         .unwrap()
-        .commit_active_release(&ActiveRelease {
+        .commit(&ActiveRelease {
             format_version: 1,
             upgrade_id: "upgrade-system-info".into(),
             version: SystemVersion::parse("3.0.2").unwrap(),

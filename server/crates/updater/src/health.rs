@@ -1,12 +1,12 @@
 //! 主服务启动后的严格健康判定。
 
 use std::fs;
-use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use system_upgrade::{
-    certificate_sha256 as shared_certificate_sha256, ServiceReady, SystemVersion,
+    certificate_sha256 as shared_certificate_sha256, read_installed_release, InstalledRelease,
+    ServiceReady,
 };
 
 use crate::executor::command;
@@ -14,9 +14,8 @@ use crate::{CommandRunner, UpdaterError, UpgradePaths};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthExpectation {
-    pub version: SystemVersion,
+    pub release: InstalledRelease,
     pub schema_version: u32,
-    pub tls_cert_sha256: String,
     pub start_attempt_at: i64,
     pub restarts_before: u64,
 }
@@ -27,7 +26,7 @@ pub struct ServiceSnapshot {
     pub main_pid: u32,
     pub restarts_after: u64,
     pub ready: ServiceReady,
-    pub installed_version: SystemVersion,
+    pub installed_release: InstalledRelease,
     pub tls_cert_sha256: String,
     pub tls_handshake_ok: bool,
 }
@@ -50,7 +49,9 @@ pub fn validate_health_snapshot(
     if actual.ready.started_at < expected.start_attempt_at {
         return Err(UpdaterError::HealthFailed("ready 早于本次启动尝试".into()));
     }
-    if actual.ready.version != expected.version || actual.installed_version != expected.version {
+    if actual.ready.version != expected.release.version
+        || actual.installed_release != expected.release
+    {
         return Err(UpdaterError::HealthFailed(
             "服务或安装元数据版本不匹配".into(),
         ));
@@ -60,7 +61,7 @@ pub fn validate_health_snapshot(
             "数据库 Schema 版本不匹配".into(),
         ));
     }
-    if actual.tls_cert_sha256 != expected.tls_cert_sha256 || !actual.tls_handshake_ok {
+    if actual.tls_cert_sha256 != expected.release.tls_cert_sha256 || !actual.tls_handshake_ok {
         return Err(UpdaterError::HealthFailed("TLS 身份或握手不匹配".into()));
     }
     if actual.restarts_after != expected.restarts_before {
@@ -136,7 +137,7 @@ fn check_health_once(
         .map_err(|_| UpdaterError::HealthFailed("MainPID 超出范围".into()))?;
     let restarts_after = read_restart_count(runner, "health_checking")?;
     let ready: ServiceReady = serde_json::from_slice(&fs::read(&paths.ready_file)?)?;
-    let installed_version = parse_version_file(&paths.install_version_file)?;
+    let installed_release = read_installed_release(&paths.installed_release)?;
     let tls_cert_sha256 = certificate_sha256(&fs::read(&paths.tls_certificate)?)?;
     let tls_output = runner.run(&command(
         "health_checking",
@@ -160,21 +161,11 @@ fn check_health_once(
         main_pid,
         restarts_after,
         ready,
-        installed_version,
+        installed_release,
         tls_cert_sha256,
         tls_handshake_ok: tls_output.success,
     };
     validate_health_snapshot(expected, &snapshot)
-}
-
-fn parse_version_file(path: &Path) -> Result<SystemVersion, UpdaterError> {
-    let text = fs::read_to_string(path)?;
-    let value = text.trim();
-    let value = value
-        .strip_prefix('V')
-        .or_else(|| value.strip_prefix('v'))
-        .unwrap_or(value);
-    SystemVersion::parse(value).map_err(UpdaterError::Domain)
 }
 
 fn parse_number(bytes: &[u8], field: &str) -> Result<u64, UpdaterError> {

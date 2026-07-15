@@ -15,8 +15,6 @@ pub enum UpgradePreflightFailure {
     ServiceUnavailable,
     #[error("ClamAV 基础依赖不可用")]
     ClamAvUnavailable,
-    #[error("最后有效回滚包不可用")]
-    RollbackUnavailable,
     #[error("装置运行平台不兼容")]
     PlatformIncompatible,
     #[error("升级环境探测失败: {0}")]
