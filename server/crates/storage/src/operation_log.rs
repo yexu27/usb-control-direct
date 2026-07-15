@@ -7,6 +7,13 @@ use crate::error::StorageError;
 use crate::model::{LogQueryParams, OperationLog, OperationLogInsert};
 use crate::{escape_like_keyword, MAX_PAGE_SIZE, Storage};
 
+/// 按 request ID 原子幂等插入操作日志的结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertOnceResult {
+    Inserted(i64),
+    AlreadyExists(i64),
+}
+
 impl Storage {
     /// 插入操作日志。
     pub fn operation_log_insert(&self, item: &OperationLogInsert) -> Result<i64, StorageError> {
@@ -30,6 +37,67 @@ impl Storage {
                 ],
             )?;
             Ok(tx.last_insert_rowid())
+        })
+    }
+
+    /// 在同一 `BEGIN IMMEDIATE` 事务内按 request ID 查重并插入操作日志。
+    pub fn operation_log_insert_once_by_request_id(
+        &self,
+        item: &OperationLogInsert,
+    ) -> Result<InsertOnceResult, StorageError> {
+        if item.username.is_empty() {
+            return Err(StorageError::Validation("username 不能为空".into()));
+        }
+        if item.log_type.is_empty() {
+            return Err(StorageError::Validation("log_type 不能为空".into()));
+        }
+        let request_id = item
+            .request_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| StorageError::Validation("request_id 不能为空".into()))?;
+
+        self.pool().with_immediate_transaction(|tx| {
+            let existing = tx.query_row(
+                "SELECT id, log_type, action_type, target FROM operation_log WHERE request_id = ?1 ORDER BY id ASC LIMIT 1",
+                params![request_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                    ))
+                },
+            );
+            match existing {
+                Ok((id, log_type, action_type, target)) => {
+                    if log_type != item.log_type
+                        || action_type != item.action_type
+                        || target != item.target
+                    {
+                        return Err(StorageError::Validation(
+                            "request_id 已被不同操作日志占用".into(),
+                        ));
+                    }
+                    Ok(InsertOnceResult::AlreadyExists(id))
+                }
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    tx.execute(
+                        "INSERT INTO operation_log (op_time, username, role, log_type, action_type, target, before_value, after_value, related_file, related_version, result, fail_reason, source_ip, app_version, session_id, request_id, detail) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                        params![
+                            item.op_time, item.username, item.role, item.log_type,
+                            item.action_type, item.target, item.before_value, item.after_value,
+                            item.related_file, item.related_version, item.result,
+                            item.fail_reason, item.source_ip, item.app_version,
+                            item.session_id, request_id, item.detail,
+                        ],
+                    )?;
+                    Ok(InsertOnceResult::Inserted(tx.last_insert_rowid()))
+                }
+                Err(error) => Err(StorageError::Sqlite(error)),
+            }
         })
     }
 

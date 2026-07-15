@@ -12,7 +12,7 @@ use file_access::startup_recovery::{
 };
 use hid_access::hid_gadget::{discover_hidg_nodes_for_functions, HidFunctionNames, HidgNodes};
 
-use crate::config::AppConfig;
+use usb_control_app::config::AppConfig;
 
 /// USB runtime 启动结果。
 pub struct UsbBootstrapResult {

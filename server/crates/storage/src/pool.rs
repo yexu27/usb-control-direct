@@ -7,7 +7,7 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 use tracing::debug;
 
 use crate::StorageError;
@@ -161,6 +161,26 @@ impl Pool {
                 // tx 在此处 Drop，自动 ROLLBACK
                 Err(err)
             }
+        }
+    }
+
+    /// 通过唯一写连接执行 `BEGIN IMMEDIATE` 事务。
+    ///
+    /// 在读取幂等键之前获取 SQLite RESERVED 锁，保证“查重 + 插入”不会被
+    /// 另一个写连接穿插执行。
+    pub(crate) fn with_immediate_transaction<T, F>(&self, f: F) -> Result<T, StorageError>
+    where
+        F: FnOnce(&Connection) -> Result<T, StorageError>,
+    {
+        let mut conn = self.lock_write()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let result = f(&tx);
+        match result {
+            Ok(value) => {
+                tx.commit()?;
+                Ok(value)
+            }
+            Err(error) => Err(error),
         }
     }
 

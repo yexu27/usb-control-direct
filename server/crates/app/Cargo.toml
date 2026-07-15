@@ -23,14 +23,22 @@ device-runtime = { workspace = true }
 usb-identify = { path = "../usb-identify" }
 policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }
+libc = { workspace = true }
 protocol-gateway = { path = "../protocol-gateway" }
+system-upgrade = { path = "../system-upgrade" }
 tokio = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 tracing-appender = "0.2"
 rolling-file = "0.2"
 toml = "0.8"
+wait-timeout = { workspace = true }
 
 [dev-dependencies]
+hex = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
+storage-test-support = { path = "../storage-test-support" }
+tokio = { workspace = true, features = ["test-util"] }

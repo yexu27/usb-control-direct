@@ -24,6 +24,7 @@ pub(crate) mod policy_import;
 
 pub use error::StorageError;
 pub use extension::normalize_extension;
+pub use operation_log::InsertOnceResult;
 
 use std::path::Path;
 
@@ -54,6 +55,18 @@ impl Storage {
             Ok(())
         })?;
         Ok(Storage { pool })
+    }
+
+    /// 返回数据库当前 `PRAGMA user_version`，供启动健康契约使用。
+    pub fn schema_version(&self) -> Result<u32, StorageError> {
+        self.pool.with_read(|connection| {
+            let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+            u32::try_from(version).map_err(|_| {
+                StorageError::DatabaseNotInitialized(format!(
+                    "PRAGMA user_version 非法: {version}"
+                ))
+            })
+        })
     }
 
     /// 获取底层连接池引用（仅 crate 内部使用）。

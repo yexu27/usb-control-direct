@@ -182,7 +182,7 @@ pub fn register_system_handlers(router: &mut Router) {
     );
 
     // 系统升级（仅管理员）
-    router.register_with_roles(
+    router.register_outcome_with_roles(
         CMD_UPLOAD_SYSTEM_UPGRADE,
         Box::new(super::system::handle_upload_system_upgrade),
         vec![0],

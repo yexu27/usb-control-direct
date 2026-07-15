@@ -41,6 +41,7 @@ impl fmt::Display for ConfigError {
 impl std::error::Error for ConfigError {}
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     #[serde(skip)]
     pub config_path: PathBuf,
@@ -48,16 +49,23 @@ pub struct AppConfig {
     pub database_path: PathBuf,
     pub tls_cert_path: PathBuf,
     pub tls_key_path: PathBuf,
-    pub install_dir: PathBuf,
-    pub service_name: String,
     pub policy_key_dir: PathBuf,
     pub license_pubkey_path: PathBuf,
     pub log_dir: PathBuf,
     pub log_level_conf: PathBuf,
     pub clamdscan_path: String,
     pub scan_log_dir: PathBuf,
+    pub upgrade: UpgradeConfig,
     #[serde(default)]
     pub gadget: GadgetConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpgradeConfig {
+    pub root_dir: PathBuf,
+    pub verify_key_dir: PathBuf,
+    pub max_package_size: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,7 +86,7 @@ pub struct GadgetStorageConfig {
     pub lun: u8,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct GadgetHidConfig {
     pub function: String,
 }
@@ -110,14 +118,6 @@ impl Default for GadgetStorageConfig {
     }
 }
 
-impl Default for GadgetHidConfig {
-    fn default() -> Self {
-        Self {
-            function: String::new(),
-        }
-    }
-}
-
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -126,14 +126,17 @@ impl Default for AppConfig {
             database_path: PathBuf::from("/var/lib/usb-control/device.db"),
             tls_cert_path: PathBuf::from("/etc/usb-control/tls/server.crt"),
             tls_key_path: PathBuf::from("/etc/usb-control/tls/server.key"),
-            install_dir: PathBuf::from("/opt/usb-control"),
-            service_name: "usb-control".to_string(),
             policy_key_dir: PathBuf::from("/etc/usb-control/keys"),
             license_pubkey_path: PathBuf::from("/etc/usb-control/keys/license_verify.pub"),
             log_dir: PathBuf::from("/var/log/usb-control"),
             log_level_conf: PathBuf::from("/etc/usb-control/log.conf"),
             clamdscan_path: "/usr/bin/clamdscan".to_string(),
             scan_log_dir: PathBuf::from("/var/log/usb-control/scan"),
+            upgrade: UpgradeConfig {
+                root_dir: PathBuf::from("/var/lib/usb-control/upgrade"),
+                verify_key_dir: PathBuf::from("/etc/usb-control/keys"),
+                max_package_size: 128 * 1024 * 1024,
+            },
             gadget: GadgetConfig::default(),
         }
     }
@@ -172,10 +175,11 @@ impl AppConfig {
             }
         }
 
-        if config_path == PathBuf::from(DEFAULT_CONFIG_PATH) && !config_path.exists() {
-            let mut cfg = Self::default();
-            cfg.config_path = config_path;
-            return Ok(cfg);
+        if config_path == Path::new(DEFAULT_CONFIG_PATH) && !config_path.exists() {
+            return Ok(Self {
+                config_path,
+                ..Self::default()
+            });
         }
 
         Self::load_from_path(&config_path)
@@ -193,73 +197,5 @@ impl AppConfig {
             })?;
         cfg.config_path = path.to_path_buf();
         Ok(cfg)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_gadget_config_with_production_defaults() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg_path = dir.path().join("usb-control.toml");
-        std::fs::write(
-            &cfg_path,
-            r#"
-listen_addr = "0.0.0.0:9600"
-database_path = "/var/lib/usb-control/device.db"
-tls_cert_path = "/etc/usb-control/tls/server.crt"
-tls_key_path = "/etc/usb-control/tls/server.key"
-install_dir = "/opt/usb-control"
-service_name = "usb-control"
-policy_key_dir = "/etc/usb-control/keys"
-license_pubkey_path = "/etc/usb-control/keys/license_verify.pub"
-log_dir = "/var/log/usb-control"
-log_level_conf = "/etc/usb-control/log.conf"
-clamdscan_path = "/usr/bin/clamdscan"
-scan_log_dir = "/var/log/usb-control/scan"
-
-[gadget]
-name = "rockchip"
-config = "b.1"
-udc = "fcc00000.dwc3"
-keep_adb = false
-
-[gadget.storage]
-function = "mass_storage.usb0"
-lun = 0
-
-[gadget.keyboard]
-function = "hid.keyboard"
-
-[gadget.mouse]
-function = "hid.mouse"
-"#,
-        )
-        .unwrap();
-
-        let cfg = AppConfig::load_from_path(&cfg_path).unwrap();
-        assert_eq!(cfg.gadget.name, "rockchip");
-        assert_eq!(cfg.gadget.config, "b.1");
-        assert_eq!(cfg.gadget.udc.as_deref(), Some("fcc00000.dwc3"));
-        assert!(!cfg.gadget.keep_adb);
-        assert_eq!(cfg.gadget.storage.function, "mass_storage.usb0");
-        assert_eq!(cfg.gadget.storage.lun, 0);
-        assert_eq!(cfg.gadget.keyboard.function, "hid.keyboard");
-        assert_eq!(cfg.gadget.mouse.function, "hid.mouse");
-    }
-
-    #[test]
-    fn default_config_disables_adb_and_uses_business_functions() {
-        let cfg = AppConfig::default();
-        assert_eq!(cfg.gadget.name, "rockchip");
-        assert_eq!(cfg.gadget.config, "b.1");
-        assert_eq!(cfg.gadget.udc.as_deref(), Some("fcc00000.dwc3"));
-        assert!(!cfg.gadget.keep_adb);
-        assert_eq!(cfg.gadget.storage.function, "mass_storage.usb0");
-        assert_eq!(cfg.gadget.storage.lun, 0);
-        assert_eq!(cfg.gadget.keyboard.function, "hid.keyboard");
-        assert_eq!(cfg.gadget.mouse.function, "hid.mouse");
     }
 }

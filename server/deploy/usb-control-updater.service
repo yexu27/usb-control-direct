@@ -1,0 +1,9 @@
+[Unit]
+Description=USB Control Online Upgrade Executor
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/usb-control/bin/usb-control-updater run --root /var/lib/usb-control/upgrade
+TimeoutStartSec=1200

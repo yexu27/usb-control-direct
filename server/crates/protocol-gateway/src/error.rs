@@ -41,6 +41,14 @@ pub enum GatewayError {
     /// 未知命令。
     #[error("未知命令: 0x{0:04X}")]
     UnknownCommand(u32),
+
+    /// 帧头声明的 payload 超过协议上限。
+    #[error("Payload 超过 128 MiB 上限: {declared} bytes")]
+    PayloadTooLarge { declared: u32 },
+
+    /// 响应发送后的应用动作执行失败。
+    #[error("发送后动作执行失败: {0}")]
+    PostSendAction(String),
 }
 
 impl GatewayError {

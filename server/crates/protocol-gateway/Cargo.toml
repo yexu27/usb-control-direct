@@ -16,12 +16,15 @@ usb-identify = { path = "../usb-identify" }
 device-runtime = { workspace = true }
 policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }
+system-upgrade = { path = "../system-upgrade" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 thiserror = { workspace = true }
 crc32fast = { workspace = true }
+hex = { workspace = true }
 prost = { workspace = true }
+serde_json = { workspace = true }
 tracing = "0.1"
 sha2 = { workspace = true }
 
@@ -29,3 +32,5 @@ sha2 = { workspace = true }
 storage-test-support = { path = "../storage-test-support" }
 tempfile = { workspace = true }
 rcgen = { workspace = true }
+smcrypto = { workspace = true }
+tar = { workspace = true }

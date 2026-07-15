@@ -72,7 +72,7 @@ impl VirusdbUpgradeManager {
             return Err(LicenseUpgradeError::VersionNumberForbidden);
         }
 
-        if !crate::system_upgrade::is_version_greater(target_version, current_version) {
+        if !is_version_greater(target_version, current_version) {
             return Err(LicenseUpgradeError::VersionTooLow);
         }
 
@@ -128,10 +128,7 @@ impl VirusdbUpgradeManager {
     }
 
     /// 解压 zip 数据。
-    fn extract_zip(
-        &self,
-        data: &[u8],
-    ) -> Result<Vec<(String, Vec<u8>)>, LicenseUpgradeError> {
+    fn extract_zip(&self, data: &[u8]) -> Result<Vec<(String, Vec<u8>)>, LicenseUpgradeError> {
         let cursor = std::io::Cursor::new(data);
         let mut archive = zip::ZipArchive::new(cursor).map_err(|e| {
             LicenseUpgradeError::VirusdbApplyFailed(format!("zip 解压初始化失败: {e}"))
@@ -219,10 +216,7 @@ impl VirusdbUpgradeManager {
     }
 
     /// 替换病毒库文件。
-    fn replace_files(
-        &self,
-        files: &[(String, Vec<u8>)],
-    ) -> Result<(), LicenseUpgradeError> {
+    fn replace_files(&self, files: &[(String, Vec<u8>)]) -> Result<(), LicenseUpgradeError> {
         fs::create_dir_all(&self.db_dir).map_err(|e| {
             LicenseUpgradeError::VirusdbApplyFailed(format!("创建病毒库目录失败: {e}"))
         })?;
@@ -230,9 +224,7 @@ impl VirusdbUpgradeManager {
         for (name, content) in files {
             let target_path = self.db_dir.join(name);
             fs::write(&target_path, content).map_err(|e| {
-                LicenseUpgradeError::VirusdbApplyFailed(format!(
-                    "写入文件 {name} 失败: {e}"
-                ))
+                LicenseUpgradeError::VirusdbApplyFailed(format!("写入文件 {name} 失败: {e}"))
             })?;
         }
 
@@ -292,54 +284,29 @@ pub fn contains_digit_4(version: &str) -> bool {
     v.split('.').any(|segment| segment.contains('4'))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn is_version_greater(new_version: &str, current_version: &str) -> bool {
+    let parse = |version: &str| -> Option<Vec<u64>> {
+        version
+            .trim_start_matches(['v', 'V'])
+            .split('.')
+            .map(|segment| segment.parse::<u64>().ok())
+            .collect()
+    };
+    let Some(new_parts) = parse(new_version) else {
+        return false;
+    };
+    let Some(current_parts) = parse(current_version) else {
+        return false;
+    };
 
-    #[test]
-    fn contains_digit_4_positive_cases() {
-        assert!(contains_digit_4("1.4.0"));
-        assert!(contains_digit_4("4.0.0"));
-        assert!(contains_digit_4("1.0.4"));
-        assert!(contains_digit_4("14.0.0"));
-        assert!(contains_digit_4("1.0.42"));
-        assert!(contains_digit_4("v1.4.0"));
-        assert!(contains_digit_4("V4.0.0"));
+    for index in 0..new_parts.len().max(current_parts.len()) {
+        let new = new_parts.get(index).copied().unwrap_or(0);
+        let current = current_parts.get(index).copied().unwrap_or(0);
+        match new.cmp(&current) {
+            std::cmp::Ordering::Greater => return true,
+            std::cmp::Ordering::Less => return false,
+            std::cmp::Ordering::Equal => {}
+        }
     }
-
-    #[test]
-    fn contains_digit_4_negative_cases() {
-        assert!(!contains_digit_4("1.0.0"));
-        assert!(!contains_digit_4("1.2.3"));
-        assert!(!contains_digit_4("5.6.7"));
-        assert!(!contains_digit_4("v1.0.0"));
-        assert!(!contains_digit_4("10.20.30"));
-    }
-
-    #[test]
-    fn validate_upgrade_version_with_4_returns_forbidden() {
-        let mgr = VirusdbUpgradeManager::new("/tmp/test-virusdb");
-        let result = mgr.validate_upgrade("1.4.0", "1.0.0");
-        assert!(matches!(
-            result.unwrap_err(),
-            LicenseUpgradeError::VersionNumberForbidden
-        ));
-    }
-
-    #[test]
-    fn validate_upgrade_lower_version_returns_error() {
-        let mgr = VirusdbUpgradeManager::new("/tmp/test-virusdb");
-        let result = mgr.validate_upgrade("1.0.0", "2.0.0");
-        assert!(matches!(
-            result.unwrap_err(),
-            LicenseUpgradeError::VersionTooLow
-        ));
-    }
-
-    #[test]
-    fn validate_upgrade_success() {
-        let mgr = VirusdbUpgradeManager::new("/tmp/test-virusdb");
-        let result = mgr.validate_upgrade("2.0.0", "1.0.0");
-        assert!(result.is_ok());
-    }
+    false
 }

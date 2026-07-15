@@ -65,8 +65,7 @@ chmod 0644 /etc/usb-control/keys/sm2_policy.pub
 assert_clamav_runtime
 /opt/usb-control/bin/usb-control-db-migrate.sh \
   /var/lib/usb-control/device.db \
-  /opt/usb-control/db \
-  /opt/usb-control/install-meta/VERSION
+  /opt/usb-control/db
 systemctl daemon-reload
 systemctl enable --now usb-control
 

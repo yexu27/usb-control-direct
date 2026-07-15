@@ -1,6 +1,5 @@
 //! USB 安全管理装置端服务入口。
 
-mod config;
 mod logging;
 mod shutdown;
 mod usb_bootstrap;
@@ -13,12 +12,9 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 
 use auth_session::{AuthService, SessionManager};
-use config::AppConfig;
 use device_runtime::DeviceRuntimeRegistry;
 use file_access::StorageSessionManager;
-use license_upgrade::{
-    LicenseValidator, ProductionLicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager,
-};
+use license_upgrade::{LicenseValidator, ProductionLicenseValidator, VirusdbUpgradeManager};
 use log_audit::AuditService;
 use malware_scan::clam_scanner::ClamScanner;
 use malware_scan::scan_service::ScanService;
@@ -33,11 +29,25 @@ use protocol_gateway::handlers::register::{
 use protocol_gateway::router::Router;
 use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
+use system_upgrade::{
+    read_active_release, DebInspector, DpkgDebInspector, PackageStager, PackageVerifier,
+    ServiceReady, SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradePreflight,
+    UpgradeScheduler, UpgradeTaskStore,
+};
+use usb_control_app::config::AppConfig;
+use usb_control_app::readiness::ReadinessGuard;
+use usb_control_app::upgrade_dispatch::{AuditUpgradeStart, UpgradeDispatch};
+use usb_control_app::upgrade_preflight::{LinuxUpgradeHostProbe, SystemUpgradePreflight};
+use usb_control_app::upgrade_result::{TokioUpgradeResultObserver, UpgradeResultImporter};
+use usb_control_app::upgrade_scheduler::SystemdUpgradeScheduler;
 use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
 
 const DEFAULT_DEVICE_DESCRIPTION: &str = "(AD USB protection dev)USB Device";
+const READY_PATH: &str = "/run/usb-control/ready.json";
+const PROTOCOL_VERSION: u32 = 1;
+const SUPPORTED_SCHEMA_MAX: u32 = 1;
 
 fn load_device_description(storage: &Storage) -> String {
     match storage.config_get("device_description") {
@@ -49,8 +59,37 @@ fn load_device_description(storage: &Storage) -> String {
     }
 }
 
+fn read_system_version(upgrade_root: &std::path::Path) -> Result<SystemVersion, String> {
+    read_active_release(&upgrade_root.join("active-release.json"))
+        .map(|active| active.version)
+        .map_err(|error| error.to_string())
+}
+
+fn verify_upgrade_key_files(directory: &std::path::Path) -> Result<(), String> {
+    let key_id = std::fs::read_to_string(directory.join("upgrade_verify.id"))
+        .map_err(|error| error.to_string())?;
+    let key_id = key_id.trim_end_matches(['\r', '\n']);
+    if key_id.is_empty()
+        || key_id.len() > 64
+        || !key_id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err("upgrade_verify.id 格式非法".into());
+    }
+    let public_key = std::fs::read_to_string(directory.join("upgrade_verify.pub"))
+        .map_err(|error| error.to_string())?;
+    let public_key = public_key.trim_end_matches(['\r', '\n']);
+    if public_key.len() != 128 || !public_key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("upgrade_verify.pub 格式非法".into());
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
+    let started_at = common::time::now_unix();
+    ReadinessGuard::clear_stale(READY_PATH).expect("清理旧 ready 文件失败");
     let config = AppConfig::load_from_args(std::env::args()).expect("启动配置加载失败");
     let _log_guards = logging::init_logging(&config.log_dir, &config.log_level_conf);
 
@@ -63,6 +102,38 @@ async fn main() {
     let db_path = config.database_path.clone();
 
     let storage = Arc::new(Storage::open_with_pool_size(&db_path, 8).expect("数据库未就绪"));
+    let schema_version = storage
+        .schema_version()
+        .expect("数据库 Schema 版本读取失败");
+    let result_importer = Arc::new(UpgradeResultImporter::new(
+        config.upgrade.root_dir.clone(),
+        Arc::clone(&storage),
+    ));
+    if let Err(error) = result_importer.scan_pending() {
+        error!(reason = %error, "扫描系统升级终态结果失败，保留待导入文件");
+        let importer = Arc::clone(&result_importer);
+        tokio::spawn(async move {
+            if let Err(error) = importer.retry_pending_until_done().await {
+                error!(reason = %error, "系统升级历史结果重试任务退出");
+            }
+        });
+    }
+    match UpgradeTaskStore::new(config.upgrade.root_dir.clone()).and_then(|store| store.current()) {
+        Ok(Some(task)) => {
+            let importer = Arc::clone(&result_importer);
+            tokio::spawn(async move {
+                if let Err(error) = importer.monitor_active_task(task).await {
+                    error!(reason = %error, "系统升级终态结果观察器退出");
+                }
+            });
+        }
+        Ok(None) => {}
+        Err(error) => {
+            error!(reason = %error, "读取活动系统升级任务失败");
+        }
+    }
+    let current_version =
+        read_system_version(&config.upgrade.root_dir).expect("有效系统版本读取失败");
     let device_description = load_device_description(storage.as_ref());
 
     let auth_service = Arc::new(AuthService::new(
@@ -82,10 +153,6 @@ async fn main() {
         Arc::clone(&whitelist_manager),
     ));
 
-    let system_upgrade_mgr = Arc::new(SystemUpgradeManager::new(
-        config.install_dir.clone(),
-        config.service_name.clone(),
-    ));
     let virusdb_upgrade_mgr = Arc::new(VirusdbUpgradeManager::with_default_path());
 
     let license_validator: Arc<dyn LicenseValidator> = Arc::new(
@@ -114,8 +181,10 @@ async fn main() {
     );
 
     // ===== 实例化下游服务 =====
+    let clam_scanner = ClamScanner::new(&config.clamdscan_path);
+    clam_scanner.ping().await.expect("ClamAV 服务不可用");
     let scan_service = Arc::new(ScanService::new(
-        ClamScanner::new(&config.clamdscan_path),
+        clam_scanner,
         Arc::clone(&audit_service),
         &config.scan_log_dir,
     ));
@@ -128,6 +197,50 @@ async fn main() {
         Arc::clone(&device_runtime_registry),
     ));
 
+    verify_upgrade_key_files(&config.upgrade.verify_key_dir).expect("系统升级验签公钥未就绪");
+    let scheduler: Arc<dyn UpgradeScheduler> = Arc::new(SystemdUpgradeScheduler);
+    let deb_inspector: Arc<dyn DebInspector> = Arc::new(DpkgDebInspector::default());
+    let upgrade_preflight: Arc<dyn UpgradePreflight> = Arc::new(SystemUpgradePreflight::new(
+        Arc::new(LinuxUpgradeHostProbe::production(std::path::PathBuf::from(
+            &config.clamdscan_path,
+        ))),
+        Arc::clone(&deb_inspector),
+        config.upgrade.root_dir.clone(),
+        config.upgrade.root_dir.join("active-release.json"),
+        config
+            .upgrade
+            .root_dir
+            .join("rollback/last-known-good.json"),
+        config.upgrade.root_dir.join("rollback/last-known-good.deb"),
+        config.tls_cert_path.clone(),
+    ));
+    let upgrade_coordinator = Arc::new(
+        UpgradeCoordinator::new(
+            config.upgrade.root_dir.clone(),
+            PackageStager::new(
+                config.upgrade.root_dir.clone(),
+                config.upgrade.max_package_size,
+            ),
+            PackageVerifier::new(config.upgrade.verify_key_dir.clone(), deb_inspector),
+            UpgradeEnvironment {
+                current_version,
+                current_schema: schema_version,
+                supported_schema_max: SUPPORTED_SCHEMA_MAX,
+                protocol_version: PROTOCOL_VERSION,
+            },
+            upgrade_preflight,
+            scheduler,
+        )
+        .expect("系统升级协调器初始化失败"),
+    );
+    let post_send_action_executor = Arc::new(UpgradeDispatch::new(
+        Arc::clone(&upgrade_coordinator),
+        Arc::new(AuditUpgradeStart::new(Arc::clone(&audit_service))),
+        Arc::new(TokioUpgradeResultObserver::new(Arc::clone(
+            &result_importer,
+        ))),
+    ));
+
     let state = Arc::new(AppState {
         auth_service,
         audit_service,
@@ -137,8 +250,10 @@ async fn main() {
         storage,
         policy_service,
         license_validator,
-        system_upgrade_mgr,
+        system_upgrade_coordinator: upgrade_coordinator,
+        system_upgrade_root: config.upgrade.root_dir.clone(),
         virusdb_upgrade_mgr,
+        post_send_action_executor,
     });
 
     // 启动 USB 事件源与主编排器
@@ -196,6 +311,17 @@ async fn main() {
     let addr: SocketAddr = config.listen_addr.parse().expect("监听地址解析失败");
     let listener = TcpListener::bind(addr).await.expect("端口绑定失败");
     info!("TLS 监听: {}", addr);
+    let _readiness_guard = ReadinessGuard::publish(
+        READY_PATH,
+        &ServiceReady {
+            format_version: 1,
+            version: current_version,
+            schema_version,
+            pid: std::process::id(),
+            started_at,
+        },
+    )
+    .expect("发布 ready 文件失败");
     let shutdown_signal = shutdown::wait_for_shutdown_signal();
     tokio::pin!(shutdown_signal);
 

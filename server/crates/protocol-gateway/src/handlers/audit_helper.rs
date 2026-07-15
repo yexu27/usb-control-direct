@@ -17,6 +17,13 @@ pub struct OperationDetail {
     pub detail: Option<String>,
 }
 
+/// 操作结果及失败原因。
+#[derive(Clone, Copy)]
+pub struct OperationOutcome<'a> {
+    pub result: i32,
+    pub fail_reason: Option<&'a str>,
+}
+
 /// 记录操作日志（完整版，支持扩展字段）。
 ///
 /// 参数:
@@ -25,8 +32,7 @@ pub struct OperationDetail {
 ///   - log_type: 日志分类（如 "user_management"、"system_management"）。
 ///   - action_type: 操作类型（如 "login"、"whitelist_add"）。
 ///   - target: 操作目标。
-///   - result: 0=成功，1=失败。
-///   - fail_reason: 失败原因（成功时为 None）。
+///   - outcome: 操作结果及失败原因。
 ///   - ext: 扩展字段（before_value、after_value、related_file、related_version、detail）。
 pub fn log_operation_full(
     ctx: &RequestContext,
@@ -34,8 +40,7 @@ pub fn log_operation_full(
     log_type: &str,
     action_type: &str,
     target: &str,
-    result: i32,
-    fail_reason: Option<&str>,
+    outcome: OperationOutcome<'_>,
     ext: &OperationDetail,
 ) {
     let mut log = OperationLogInsert {
@@ -49,8 +54,8 @@ pub fn log_operation_full(
         after_value: ext.after_value.clone(),
         related_file: ext.related_file.clone(),
         related_version: ext.related_version.clone(),
-        result,
-        fail_reason: fail_reason.map(|s| s.to_string()),
+        result: outcome.result,
+        fail_reason: outcome.fail_reason.map(str::to_string),
         source_ip: Some(ctx.source_ip.clone()),
         app_version: None,
         session_id: None,
@@ -87,8 +92,10 @@ pub fn log_operation(
         log_type,
         action_type,
         target,
-        result,
-        fail_reason,
+        OperationOutcome {
+            result,
+            fail_reason,
+        },
         &OperationDetail::default(),
     );
 }

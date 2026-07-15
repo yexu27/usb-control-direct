@@ -2,6 +2,7 @@
 //!
 //! 每个请求帧经过 token 中间件后，生成 RequestContext 传递给 handler。
 
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use common::code::ResultCode;
@@ -9,12 +10,15 @@ use common::code::ResultCode;
 use auth_session::session::SessionInfo;
 use auth_session::AuthService;
 use device_runtime::DeviceRuntimeRegistry;
-use license_upgrade::{LicenseValidator, SystemUpgradeManager, VirusdbUpgradeManager};
+use license_upgrade::{LicenseValidator, VirusdbUpgradeManager};
 use log_audit::AuditService;
 use policy_import_export::PolicyService;
 use storage::Storage;
+use system_upgrade::UpgradeCoordinator;
 use usb_identify::monitor::DeviceManager;
 use whitelist::WhitelistManager;
+
+use crate::post_send::PostSendActionExecutor;
 
 /// 应用全局共享状态。
 ///
@@ -29,8 +33,10 @@ pub struct AppState {
     pub storage: Arc<Storage>,
     pub policy_service: Arc<PolicyService>,
     pub license_validator: Arc<dyn LicenseValidator>,
-    pub system_upgrade_mgr: Arc<SystemUpgradeManager>,
+    pub system_upgrade_coordinator: Arc<UpgradeCoordinator>,
+    pub system_upgrade_root: PathBuf,
     pub virusdb_upgrade_mgr: Arc<VirusdbUpgradeManager>,
+    pub post_send_action_executor: Arc<dyn PostSendActionExecutor>,
 }
 
 /// 请求上下文。
@@ -57,8 +63,10 @@ pub struct RequestContext {
     pub policy_service: Option<Arc<PolicyService>>,
     /// 授权校验器。
     pub license_validator: Option<Arc<dyn LicenseValidator>>,
-    /// 系统升级管理器。
-    pub system_upgrade_mgr: Option<Arc<SystemUpgradeManager>>,
+    /// 系统升级受理协调器。
+    pub system_upgrade_coordinator: Arc<UpgradeCoordinator>,
+    /// 系统升级已提交状态根目录。
+    pub system_upgrade_root: PathBuf,
     /// 病毒库升级管理器。
     pub virusdb_upgrade_mgr: Option<Arc<VirusdbUpgradeManager>>,
 }

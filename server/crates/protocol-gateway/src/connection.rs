@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prost::Message;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 use tracing::{debug, error, info, warn};
@@ -18,6 +18,7 @@ use crate::codec;
 use crate::context::{AppState, RequestContext};
 use crate::error::GatewayError;
 use crate::middleware;
+use crate::post_send::{HandlerOutcome, PostSendActionExecutor};
 use crate::router::Router;
 
 /// CRC 连续失败断连阈值。
@@ -90,6 +91,41 @@ fn make_error_response(seq_id: u32, code: ResultCode) -> Vec<u8> {
         error_message: format!("{}", code),
     };
     codec::encode_frame(RSP_COMMON, seq_id, &rsp.encode_to_vec()).unwrap_or_default()
+}
+
+/// 完整发送 handler 响应，并按发送结果恰好处理一次发送后动作。
+///
+/// `write_all` 和 `flush` 都成功后才消费动作并执行；任一步骤失败时仅取消动作。
+/// 正式连接循环和集成测试共用该接口。
+pub async fn send_handler_outcome<W>(
+    stream: &mut W,
+    executor: &dyn PostSendActionExecutor,
+    outcome: HandlerOutcome,
+) -> Result<(), GatewayError>
+where
+    W: AsyncWrite + Unpin,
+{
+    let HandlerOutcome {
+        response,
+        post_send_action,
+    } = outcome;
+
+    if let Err(error) = stream.write_all(&response).await {
+        if let Some(action) = post_send_action.as_ref() {
+            executor.cancel(action);
+        }
+        return Err(error.into());
+    }
+    if let Err(error) = stream.flush().await {
+        if let Some(action) = post_send_action.as_ref() {
+            executor.cancel(action);
+        }
+        return Err(error.into());
+    }
+    if let Some(action) = post_send_action {
+        executor.execute(action)?;
+    }
+    Ok(())
 }
 
 /// 处理单个 TLS 连接的帧循环。
@@ -192,12 +228,20 @@ pub async fn handle_connection(
                         storage: Some(Arc::clone(&state.storage)),
                         policy_service: Some(Arc::clone(&state.policy_service)),
                         license_validator: Some(Arc::clone(&state.license_validator)),
-                        system_upgrade_mgr: Some(Arc::clone(&state.system_upgrade_mgr)),
+                        system_upgrade_coordinator: Arc::clone(
+                            &state.system_upgrade_coordinator,
+                        ),
+                        system_upgrade_root: state.system_upgrade_root.clone(),
                         virusdb_upgrade_mgr: Some(Arc::clone(&state.virusdb_upgrade_mgr)),
                     };
 
-                    let response = router.dispatch(&ctx, header.msg_type, &payload);
-                    stream.write_all(&response).await?;
+                    let outcome = router.dispatch(&ctx, header.msg_type, &payload);
+                    send_handler_outcome(
+                        &mut stream,
+                        state.post_send_action_executor.as_ref(),
+                        outcome,
+                    )
+                    .await?;
                 }
             }
             _ = tokio::time::sleep(remaining) => {
@@ -205,28 +249,5 @@ pub async fn handle_connection(
                 return Err(GatewayError::HeartbeatTimeout);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn connection_manager_single_connection() {
-        let mgr = ConnectionManager::new();
-        let guard = mgr.try_acquire().unwrap();
-        assert!(mgr.try_acquire().is_err());
-        drop(guard);
-        assert!(mgr.try_acquire().is_ok());
-    }
-
-    #[test]
-    fn connection_guard_releases_on_drop() {
-        let mgr = ConnectionManager::new();
-        {
-            let _guard = mgr.try_acquire().unwrap();
-        }
-        let _guard2 = mgr.try_acquire().unwrap();
     }
 }

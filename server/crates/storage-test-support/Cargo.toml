@@ -6,5 +6,5 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-rusqlite = { workspace = true }
 tempfile = { workspace = true }
+usb-control-db-migrate = { path = "../db-migrate" }

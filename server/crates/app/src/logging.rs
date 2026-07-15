@@ -13,10 +13,10 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
 use tracing_subscriber::reload;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 
 /// 单个日志文件最大字节数（10 MB）。
 const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
@@ -72,7 +72,9 @@ fn load_log_filter(log_level_conf: &Path) -> String {
 
 /// 获取配置文件的修改时间，文件不存在返回 None。
 fn conf_mtime(log_level_conf: &Path) -> Option<SystemTime> {
-    std::fs::metadata(log_level_conf).ok().and_then(|m| m.modified().ok())
+    std::fs::metadata(log_level_conf)
+        .ok()
+        .and_then(|m| m.modified().ok())
 }
 
 /// 启动配置文件轮询任务，检测到变化时热切换日志级别。
@@ -124,14 +126,15 @@ pub fn init_logging(log_dir: &Path, log_level_conf: &Path) -> Vec<WorkerGuard> {
     let mut guards = Vec::new();
 
     let initial_filter_str = load_log_filter(log_level_conf);
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| initial_filter_str.parse().unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_FILTER)));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        initial_filter_str
+            .parse()
+            .unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG_FILTER))
+    });
 
     let (reload_filter, reload_handle) = reload::Layer::new(env_filter);
 
-    let stdout_layer = fmt::layer()
-        .with_target(true)
-        .with_ansi(true);
+    let stdout_layer = fmt::layer().with_target(true).with_ansi(true);
 
     let mut file_layers: Vec<Box<dyn tracing_subscriber::Layer<_> + Send + Sync>> = Vec::new();
 

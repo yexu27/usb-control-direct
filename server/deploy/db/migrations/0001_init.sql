@@ -1,7 +1,3 @@
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 5000;
-
 CREATE TABLE IF NOT EXISTS usb_whitelist (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     serial_number   TEXT    NOT NULL UNIQUE,
@@ -145,5 +141,3 @@ CREATE TABLE IF NOT EXISTS log_retention_event (
 );
 CREATE INDEX IF NOT EXISTS idx_log_retention_time ON log_retention_event(trigger_time);
 CREATE INDEX IF NOT EXISTS idx_log_retention_cat ON log_retention_event(log_category);
-
-PRAGMA user_version = 1;

@@ -3,9 +3,9 @@
 use common::code::ResultCode;
 use thiserror::Error;
 
-/// 授权与系统维护错误。
+/// 授权与病毒库维护错误。
 ///
-/// 覆盖机器码生成、授权校验、系统升级和病毒库升级全链路错误场景。
+/// 覆盖机器码生成、授权校验和病毒库升级错误场景。
 #[derive(Debug, Error)]
 pub enum LicenseUpgradeError {
     /// 机器码生成失败（CPU 序列号或 MAC 地址读取异常）。
@@ -28,18 +28,6 @@ pub enum LicenseUpgradeError {
     #[error("升级包版本低于当前版本")]
     VersionTooLow,
 
-    /// 升级包文件格式错误。
-    #[error("升级包文件格式错误")]
-    UpgradeFormatError,
-
-    /// SHA256 校验和不匹配。
-    #[error("SHA256 校验和不匹配")]
-    UpgradeChecksumError,
-
-    /// 系统升级安装失败（已回滚至原版本）。
-    #[error("系统升级安装失败: {0}")]
-    UpgradeApplyFailed(String),
-
     /// 病毒库版本号命中逢 4 跳过规则。
     #[error("病毒库版本号命中逢 4 跳过规则")]
     VersionNumberForbidden,
@@ -59,7 +47,6 @@ pub enum LicenseUpgradeError {
     /// 设备描述格式不合法。
     #[error("设备描述格式不合法")]
     DeviceDescFormatError,
-
 
     /// 存储层错误。
     #[error("存储错误: {0}")]
@@ -86,9 +73,6 @@ impl LicenseUpgradeError {
             LicenseUpgradeError::LicenseVerifyFailed(_) => ResultCode::LicenseVerifyFailed,
             LicenseUpgradeError::LicenseExpired => ResultCode::LicenseExpired,
             LicenseUpgradeError::VersionTooLow => ResultCode::VersionTooLow,
-            LicenseUpgradeError::UpgradeFormatError => ResultCode::UpgradeFormatError,
-            LicenseUpgradeError::UpgradeChecksumError => ResultCode::UpgradeChecksumError,
-            LicenseUpgradeError::UpgradeApplyFailed(_) => ResultCode::UpgradeApplyFailed,
             LicenseUpgradeError::VersionNumberForbidden => ResultCode::VersionNumberForbidden,
             LicenseUpgradeError::VirusdbIntegrityError => ResultCode::VirusdbIntegrityError,
             LicenseUpgradeError::ClamdReloadFailed => ResultCode::ClamdReloadFailed,
@@ -99,28 +83,5 @@ impl LicenseUpgradeError {
             }
             LicenseUpgradeError::Internal(_) => ResultCode::InternalError,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn error_to_result_code_license_format() {
-        let err = LicenseUpgradeError::LicenseFormatError;
-        assert_eq!(err.to_result_code(), ResultCode::LicenseFormatError);
-    }
-
-    #[test]
-    fn error_to_result_code_version_too_low() {
-        let err = LicenseUpgradeError::VersionTooLow;
-        assert_eq!(err.to_result_code(), ResultCode::VersionTooLow);
-    }
-
-    #[test]
-    fn error_display_includes_detail() {
-        let err = LicenseUpgradeError::UpgradeApplyFailed("写入失败".into());
-        assert!(format!("{err}").contains("写入失败"));
     }
 }
