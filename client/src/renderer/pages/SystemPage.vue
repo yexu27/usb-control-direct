@@ -19,7 +19,7 @@ import {
   parseSystemUpgradeVersion,
   parseVirusdbUpgradeVersion,
 } from '@/utils/upgrade-package'
-import { alertAction, confirmAction } from '@/utils/confirm-action'
+import { confirmAction } from '@/utils/confirm-action'
 import { errorMessage, showErrorDialog, showSuccessToast } from '@/utils/operation-feedback'
 import type { usb_control } from '../../shared/proto/usb_control'
 
@@ -182,7 +182,7 @@ async function uploadSystemUpgradePackage(): Promise<void> {
   }
 
   if (caughtError == null) {
-    await showUploadResult('系统升级完成', '升级完成，请重新连接', 'success')
+    await showUploadResult('升级包已接收', 'Server 开始升级，请等待服务恢复后重新连接', 'success')
     await connection.disconnect(true).catch(() => {})
   } else {
     await showUploadResult('系统升级失败', errorMessage(caughtError, '系统升级失败'), 'error')

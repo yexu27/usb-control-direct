@@ -181,7 +181,7 @@ describe('SystemPage', () => {
 
   it('uploads system upgrade package immediately after selecting a valid file', async () => {
     vi.useFakeTimers()
-    openFile.mockResolvedValue({ canceled: false, filePaths: ['C:\\pkg\\usb-control-system-v1.2.3.bin'] })
+    openFile.mockResolvedValue({ canceled: false, filePaths: ['C:\\pkg\\usb-control_V1.2.3_arm64.bin'] })
     vi.mocked(uploadSystemUpgrade).mockResolvedValue(undefined)
     const connection = useConnectionStore()
     const disconnect = vi.spyOn(connection, 'disconnect').mockResolvedValue(undefined)
@@ -207,7 +207,7 @@ describe('SystemPage', () => {
 
   it('keeps system upgrade progress dialog visible for at least 3 seconds', async () => {
     vi.useFakeTimers()
-    openFile.mockResolvedValue({ canceled: false, filePaths: ['C:\\pkg\\usb-control-system-v1.2.3.bin'] })
+    openFile.mockResolvedValue({ canceled: false, filePaths: ['C:\\pkg\\usb-control_V1.2.3_arm64.bin'] })
     vi.mocked(uploadSystemUpgrade).mockResolvedValue(undefined)
     const connection = useConnectionStore()
     vi.spyOn(connection, 'disconnect').mockResolvedValue(undefined)
@@ -227,7 +227,7 @@ describe('SystemPage', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="progress"]').attributes('data-visible')).toBe('false')
-    expect(showSuccessToast).toHaveBeenCalledWith('升级完成，请重新连接')
+    expect(showSuccessToast).toHaveBeenCalledWith('Server 开始升级，请等待服务恢复后重新连接')
   })
 
   it('uploads virusdb package immediately after selecting a valid file and refreshes system info', async () => {
@@ -302,13 +302,13 @@ describe('SystemPage', () => {
 
     openFile.mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\pkg\\bad-system.bin'] })
     vi.mocked(parseSystemUpgradeVersion).mockImplementationOnce(() => {
-      throw new Error('系统升级包文件名格式错误，请使用 usb-control-system-vX.Y.Z.bin')
+      throw new Error('系统升级包文件名格式错误，请使用 usb-control_VX.Y.Z_arm64.bin')
     })
     await wrapper.get('[data-testid="system-upgrade-upload"]').trigger('click')
     await flushPromises()
 
     expect(ElMessageBox.alert).toHaveBeenCalledWith(
-      '系统升级包文件名格式错误，请使用 usb-control-system-vX.Y.Z.bin',
+      '系统升级包文件名格式错误，请使用 usb-control_VX.Y.Z_arm64.bin',
       '系统升级包文件名错误',
       expect.objectContaining({
         customClass: 'app-confirm-message-box',

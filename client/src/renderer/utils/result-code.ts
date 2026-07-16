@@ -38,7 +38,7 @@ const RESULT_CODE_MESSAGES: Record<number, string | null> = {
   [ResultCode.VERSION_TOO_LOW]: '升级包版本低于当前版本，不允许降版本',
   [ResultCode.FORMAT_ERROR_UPGRADE]: '升级包格式错误',
   [ResultCode.UPGRADE_CHECKSUM_ERROR]: '升级包完整性校验失败',
-  [ResultCode.UPGRADE_APPLY_FAILED]: '系统升级失败，已回滚至原版本',
+  [ResultCode.UPGRADE_APPLY_FAILED]: '系统升级失败，请检查服务端升级日志',
   [ResultCode.VERSION_NUMBER_FORBIDDEN]: '病毒库版本号不合法',
   [ResultCode.VIRUSDB_INTEGRITY_ERROR]: '病毒库文件完整性校验失败',
   [ResultCode.CLAMD_RELOAD_FAILED]: '病毒库更新成功但加载失败，已回滚至旧版本',

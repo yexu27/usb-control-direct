@@ -168,8 +168,8 @@ test.describe('管理员与审计员页面业务闭环', () => {
   test('系统升级失败不掉线且成功升级后需要重新连接', async () => {
     await withDevice(async (_device, app, page) => {
       const directory = await mkdtemp(join(tmpdir(), 'system-upgrade-'))
-      const failedPackage = join(directory, 'usb-control-system-v9.9.9.bin')
-      const successPackage = join(directory, 'usb-control-system-v1.1.0.bin')
+      const failedPackage = join(directory, 'usb-control_V9.9.9_arm64.bin')
+      const successPackage = join(directory, 'usb-control_V1.1.0_arm64.bin')
       try {
         await writeFile(failedPackage, Buffer.from('failed package'))
         await writeFile(successPackage, Buffer.from('success package'))
@@ -185,7 +185,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await page.getByTestId('system-upgrade-upload').click()
         await expect(progressDialog(page)).toBeVisible()
         await expect(progressDialog(page)).toBeHidden()
-        await expectAppDialog(page, '系统升级失败', '系统升级失败，已回滚至原版本')
+        await expectAppDialog(page, '系统升级失败', '系统升级失败，请检查服务端升级日志')
         await closeAppDialog(page)
         await expect(page.getByTestId('connection-status')).toContainText('已连接')
         await expect(page.getByText(/当前版本: v1\.0\.0/)).toBeVisible()
@@ -200,7 +200,7 @@ test.describe('管理员与审计员页面业务闭环', () => {
         await systemButton.click()
         await expect(progressDialog(page)).toBeVisible()
         await expect(progressDialog(page)).toBeHidden()
-        await expectLatestMessage(page, '升级完成，请重新连接')
+        await expectLatestMessage(page, 'Server 开始升级，请等待服务恢复后重新连接')
         await expect(systemButton).not.toHaveClass(/is-loading/)
         await expect(systemButton).not.toBeFocused()
         await expect(page.getByTestId('connection-status')).toContainText('未连接')

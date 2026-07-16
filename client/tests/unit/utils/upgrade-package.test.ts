@@ -7,15 +7,15 @@ import {
 
 describe('upgrade package utils', () => {
   it('parses system upgrade version from confirmed filename pattern', () => {
-    expect(parseSystemUpgradeVersion('C:\\pkg\\usb-control-system-v1.2.3.bin')).toBe('v1.2.3')
+    expect(parseSystemUpgradeVersion('C:\\pkg\\usb-control_V1.2.3_arm64.bin')).toBe('v1.2.3')
   })
 
   it('rejects invalid system upgrade filename', () => {
     expect(() => parseSystemUpgradeVersion('system.bin')).toThrow('系统升级包文件名格式错误')
-    expect(() => parseSystemUpgradeVersion('/tmp/usb-control-system-1.2.3.bin')).toThrow(
+    expect(() => parseSystemUpgradeVersion('/tmp/usb-control_1.2.3_arm64.bin')).toThrow(
       '系统升级包文件名格式错误',
     )
-    expect(() => parseSystemUpgradeVersion('usb-control-system-v1.2.bin')).toThrow(
+    expect(() => parseSystemUpgradeVersion('usb-control_V1.2_arm64.bin')).toThrow(
       '系统升级包文件名格式错误',
     )
   })

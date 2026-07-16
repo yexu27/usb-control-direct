@@ -14,11 +14,12 @@ function parseVersion(filePath: string, pattern: RegExp, errorMessage: string): 
 }
 
 export function parseSystemUpgradeVersion(filePath: string): string {
-  return parseVersion(
+  const version = parseVersion(
     filePath,
-    /^usb-control-system-(v\d+\.\d+\.\d+)\.bin$/i,
-    '系统升级包文件名格式错误，请使用 usb-control-system-vX.Y.Z.bin',
+    /^usb-control_v(\d+\.\d+\.\d+)_arm64\.bin$/i,
+    '系统升级包文件名格式错误，请使用 usb-control_VX.Y.Z_arm64.bin',
   )
+  return `v${version}`
 }
 
 export function parseVirusdbUpgradeVersion(filePath: string): string {
