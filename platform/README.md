@@ -29,7 +29,7 @@ Windows 受控机
 
 | 软件或组件 | 版本或要求 |
 |---|---|
-| 产品版本 | 3.0.1 |
+| 产品版本 | 由正式发布构建参数确定；本文以 3.0.1 和 3.0.2 为示例 |
 | RK3568 CPU 架构 | ARM64 / aarch64 |
 | RK3568 操作系统 | Ubuntu 22.04.4 LTS |
 | RK3568 Linux 内核 | 4.19.232 |
@@ -45,7 +45,7 @@ Windows 受控机
 | Vue | 3.4 |
 | TypeScript | 5 |
 
-服务端版本由 `server/Cargo.toml` 管理，客户端版本由 `client/package.json` 管理。生成 3.0.1 服务端安装包时，`build-deb.sh` 的版本参数必须使用 `3.0.1`。
+服务端交付版本由 `build-deb.sh` 和 `build-bin.sh` 的参数注入，不通过修改业务代码或 Rust workspace 版本出包。客户端版本由 `client/package.json` 管理。
 
 ## 3. 目录结构
 
@@ -568,12 +568,23 @@ deploy/assets/keys/license_verify.pub
 deploy/assets/keys/sm4_policy.key
 deploy/assets/keys/sm2_policy.key
 deploy/assets/keys/sm2_policy.pub
+deploy/assets/keys/upgrade_verify.pub
+deploy/assets/keys/upgrade_verify.id
 ```
+
+生成在线升级包时还需要升级签名私钥：
+
+```text
+deploy/assets/keys/upgrade_sign.key
+```
+
+`upgrade_sign.key` 仅在受控发布环境中用于签名，不会写入 DEB 或 `.bin`。DEB 只携带对应的 `upgrade_verify.pub` 和 `upgrade_verify.id`，供 RK3568 验证在线升级包。
 
 执行：
 
 ```bash
 bash server/deploy/build-deb.sh 3.0.1
+bash server/deploy/build-deb.sh 3.0.2
 ```
 
 输出：
@@ -581,7 +592,26 @@ bash server/deploy/build-deb.sh 3.0.1
 ```text
 server/deploy/build/out/usb-control_V3.0.1_arm64.deb
 server/deploy/build/out/usb-control_V3.0.1_arm64.deb.sha256
+server/deploy/build/out/usb-control_V3.0.2_arm64.deb
+server/deploy/build/out/usb-control_V3.0.2_arm64.deb.sha256
 ```
+
+`build-deb.sh` 的参数就是发布版本。相同源码可以分别生成 3.0.1 和 3.0.2，不需要修改 `server/Cargo.toml` 或业务代码。
+
+生成由 V3.0.1 在线升级到 V3.0.2 的签名 `.bin`：
+
+```bash
+bash server/deploy/build-bin.sh 3.0.2 3.0.1 1
+```
+
+三个参数依次是目标版本、允许升级的最低当前版本和升级前数据库 Schema 版本。`schema-from` 必须根据数据库兼容性显式填写，构建脚本不会根据产品版本号推断 Schema。输出：
+
+```text
+server/deploy/build/out/usb-control_V3.0.2_arm64.bin
+server/deploy/build/out/usb-control_V3.0.2_arm64.bin.sha256
+```
+
+`.bin` 是 Windows Client 在线上传的签名封装，内部唯一安装载荷仍是同版本正式 DEB。
 
 检查安装包：
 
@@ -617,7 +647,7 @@ cd /tmp/usb-control-package
 EXPECTED_SHA256="$(awk '{print $1}' usb-control_V3.0.1_arm64.deb.sha256)"
 ACTUAL_SHA256="$(sha256sum usb-control_V3.0.1_arm64.deb | awk '{print $1}')"
 test "$EXPECTED_SHA256" = "$ACTUAL_SHA256"
-sudo dpkg -i usb-control_V3.0.1_arm64.deb
+sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 ```
 
 安装脚本检查：
@@ -640,13 +670,14 @@ usb-control.service
 
 | 路径 | 内容 |
 |---|---|
-| `/opt/usb-control/bin/` | 服务端程序和数据库迁移程序 |
+| `/opt/usb-control/bin/` | 主服务、短周期 updater 和数据库迁移程序 |
 | `/opt/usb-control/db/` | 数据库迁移和初始化 SQL |
 | `/opt/usb-control/install-meta/` | 版本及组件信息 |
 | `/etc/usb-control/usb-control.toml` | 服务配置 |
 | `/etc/usb-control/tls/` | TLS 证书和私钥 |
 | `/etc/usb-control/keys/` | 许可校验和策略密钥 |
 | `/var/lib/usb-control/device.db` | SQLite 数据库 |
+| `/var/lib/usb-control/upgrade/` | 当前发布状态、在线升级任务历史和结果 |
 | `/var/log/usb-control/` | 服务日志和扫描日志 |
 
 ### 6.3 服务配置
@@ -684,17 +715,25 @@ journalctl -u usb-control -n 200 --no-pager
 
 ### 6.5 升级与卸载
 
-升级：
+直接安装 V3.0.1：
 
 ```bash
-sudo dpkg -i ./usb-control_V*_arm64.deb
+sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 ```
 
-升级时旧二进制、配置、TLS 文件和安装元数据备份到：
+直接升级到 V3.0.2：
 
-```text
-/var/lib/usb-control/upgrade-backup/{旧版本号}/
+```bash
+sudo apt-get install -y ./usb-control_V3.0.2_arm64.deb
 ```
+
+直接安装和直接升级均由 DEB 完成数据库迁移、服务启动、健康检查和当前发布状态提交。升级保留 `/etc/usb-control` 中的现场配置与密钥、`/var/lib/usb-control` 中的数据库和授权状态，以及 `/var/log/usb-control` 中的日志。未过期授权不需要重新办理。
+
+在线升级时，在 Windows Client 的“系统升级”界面选择 `usb-control_V3.0.2_arm64.bin`。Client 根据文件内容计算 SHA-256 并将升级包、目标版本和摘要上传到 RK3568。服务端完整接收、校验并持久化升级任务后先返回受理结果，Client 应显示“升级包已接收，Server 开始升级”。随后主服务停止，Client 按正常连接机制显示断开；新服务启动后重新连接，在操作日志中查询最终成功或失败结果。
+
+在线升级由主服务受理任务并启动短周期 `usb-control-updater`。updater 复验签名包和内部 DEB，调用系统包管理器安装，再执行数据库迁移、服务启动、健康检查和发布状态提交。updater 完成后退出，不作为常驻服务运行。
+
+直接安装或在线升级失败时，不恢复旧版本。检查 `journalctl -u usb-control -u usb-control-updater` 和 `/var/lib/usb-control/upgrade/` 中的任务结果，处理故障后人工重新安装可信的正式 DEB。直接 DEB 安装失败时无需通过 Client 处理。
 
 普通卸载：
 
@@ -702,13 +741,13 @@ sudo dpkg -i ./usb-control_V*_arm64.deb
 sudo dpkg -r usb-control
 ```
 
-普通卸载保留数据和日志。完全清除：
+普通卸载保留配置、授权、数据库和日志，重新安装后继续使用。完全清除：
 
 ```bash
 sudo dpkg --purge usb-control
 ```
 
-完全清除会删除 `/etc/usb-control`、`/var/lib/usb-control` 和 `/var/log/usb-control`。
+完全清除会删除 `/etc/usb-control`、`/var/lib/usb-control` 和 `/var/log/usb-control`，仅在确定不再保留现场状态时执行。
 
 ## 7. Windows 客户端开发、编译与测试
 
@@ -953,8 +992,10 @@ dmesg | grep -E 'nbd[0-9]+' | tail -n 100
 - [ ] Buildroot 编译器和 sysroot 可用；
 - [ ] ARM64 `libudev` 可被 pkg-config 找到；
 - [ ] fmt、clippy 和构建前代码检查通过；
-- [ ] `.deb` 和 `.sha256` 已生成并校验；
-- [ ] 安装包版本与 Rust workspace 版本一致。
+- [ ] V3.0.1、V3.0.2 `.deb` 及 V3.0.2 `.bin` 已生成并校验；
+- [ ] DEB 中不包含升级签名私钥、测试脚本或测试数据；
+- [ ] `.bin` 内部 DEB 与同版本独立 DEB 字节一致；
+- [ ] 发布版本、最低当前版本和 `schema-from` 参数已经发布负责人复核。
 
 ### Windows 客户端开发测试机
 
@@ -962,4 +1003,5 @@ dmesg | grep -E 'nbd[0-9]+' | tail -n 100
 - [ ] `npm ci`、typecheck、lint、测试和 build 通过；
 - [ ] NSIS 安装包和 `.sha256` 已生成；
 - [ ] 客户端证书指纹与服务端证书一致；
+- [ ] 在线升级受理后显示开始升级提示，断连后可重新连接并查询最终业务日志；
 - [ ] 客户端连接、U 盘识别、病毒扫描、策略控制和 OTG 映射验证通过。
