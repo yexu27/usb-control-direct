@@ -15,7 +15,11 @@ pub fn map_upgrade_error(error: &UpgradeError) -> UpgradeProtocolError {
         UpgradeError::InvalidVersion(_) => (ResultCode::UpgradeFormatError, "系统版本格式无效"),
         UpgradeError::VersionNotGreater => (ResultCode::VersionTooLow, "目标版本必须高于当前版本"),
         UpgradeError::DigestMismatch => (ResultCode::UpgradeChecksumError, "升级包摘要不匹配"),
-        UpgradeError::SignatureInvalid => (ResultCode::UpgradeFormatError, "升级包签名无效"),
+        UpgradeError::SignatureInvalid
+        | UpgradeError::SigningDigest(_)
+        | UpgradeError::InvalidSigningDigestLength => {
+            (ResultCode::UpgradeFormatError, "升级包签名无效")
+        }
         UpgradeError::ProductMismatch => (ResultCode::UpgradeFormatError, "升级包产品不匹配"),
         UpgradeError::ArchitectureMismatch => (ResultCode::UpgradeFormatError, "升级包架构不匹配"),
         UpgradeError::SchemaIncompatible => {

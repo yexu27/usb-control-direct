@@ -4,7 +4,7 @@ use storage::Storage;
 use storage_test_support::TestDb;
 use system_upgrade::{
     ActiveRelease, ActiveReleaseStore, SystemVersion, UpgradeResult, UpgradeResultStore,
-    UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
 };
 use usb_control_app::upgrade_result::{ImportDisposition, UpgradeResultImporter};
 
@@ -12,14 +12,17 @@ fn version(value: &str) -> SystemVersion {
     SystemVersion::parse(value).unwrap()
 }
 
-fn active(upgrade_id: &str, version_value: &str, committed_at: i64) -> ActiveRelease {
+fn active(
+    online_upgrade_id: Option<&str>,
+    version_value: &str,
+    committed_at: i64,
+) -> ActiveRelease {
     ActiveRelease {
         format_version: 1,
-        upgrade_id: upgrade_id.into(),
         version: version(version_value),
-        deb_sha256: "a".repeat(64),
         schema_version: 1,
         committed_at,
+        online_upgrade_id: online_upgrade_id.map(str::to_owned),
     }
 }
 
@@ -90,6 +93,10 @@ impl Fixture {
     fn results(&self) -> UpgradeResultStore {
         UpgradeResultStore::new(self.root.path().to_path_buf()).unwrap()
     }
+
+    fn lock(&self) -> UpgradeStateLock {
+        UpgradeStateLock::acquire(self.root.path()).unwrap()
+    }
 }
 
 #[test]
@@ -97,7 +104,7 @@ fn imports_failed_result_once_without_changing_system_version() {
     let fixture = Fixture::new();
     fixture
         .releases()
-        .commit(&active("factory-install", "3.0.1", 50))
+        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
         .unwrap();
     let value = result("upgrade-failed", UpgradeStatus::Failed);
 
@@ -138,7 +145,10 @@ fn committed_result_requires_matching_active_release() {
     let fixture = Fixture::new();
     fixture
         .releases()
-        .commit(&active("another-upgrade", "3.0.2", 200))
+        .commit(
+            &fixture.lock(),
+            &active(Some("another-upgrade"), "3.0.2", 200),
+        )
         .unwrap();
 
     assert!(fixture
@@ -153,18 +163,20 @@ async fn observer_persists_failed_terminal_before_importing_log() {
     let fixture = Fixture::new();
     fixture
         .releases()
-        .commit(&active("factory-install", "3.0.1", 50))
+        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
         .unwrap();
     let tasks = fixture.tasks();
+    let guard = fixture.lock();
     let prepared = task("upgrade-failed-observed");
-    tasks.create(&prepared).unwrap();
+    tasks.create(&guard, &prepared).unwrap();
     let accepted = tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Accepted, 110)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Accepted, 110)
         .unwrap();
     fixture
         .results()
-        .write(&result(&prepared.upgrade_id, UpgradeStatus::Failed))
+        .write(&guard, &result(&prepared.upgrade_id, UpgradeStatus::Failed))
         .unwrap();
+    drop(guard);
 
     fixture
         .importer
@@ -185,18 +197,23 @@ async fn live_observer_imports_schedule_failed_while_service_is_running() {
     let fixture = Fixture::new();
     fixture
         .releases()
-        .commit(&active("factory-install", "3.0.1", 50))
+        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
         .unwrap();
     let tasks = fixture.tasks();
+    let guard = fixture.lock();
     let prepared = task("upgrade-schedule-failed");
-    tasks.create(&prepared).unwrap();
+    tasks.create(&guard, &prepared).unwrap();
     let accepted = tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Accepted, 110)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Accepted, 110)
         .unwrap();
     fixture
         .results()
-        .write(&result(&prepared.upgrade_id, UpgradeStatus::ScheduleFailed))
+        .write(
+            &guard,
+            &result(&prepared.upgrade_id, UpgradeStatus::ScheduleFailed),
+        )
         .unwrap();
+    drop(guard);
 
     fixture
         .importer
@@ -224,30 +241,37 @@ async fn live_observer_imports_schedule_failed_while_service_is_running() {
 async fn observer_reconstructs_committed_result_after_active_publish() {
     let fixture = Fixture::new();
     let tasks = fixture.tasks();
+    let guard = fixture.lock();
     let prepared = task("upgrade-committed-observed");
-    tasks.create(&prepared).unwrap();
+    tasks.create(&guard, &prepared).unwrap();
     tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Accepted, 110)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Accepted, 110)
         .unwrap();
     tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Stopping, 120)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Stopping, 120)
         .unwrap();
     tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Installing, 130)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Installing, 130)
         .unwrap();
     tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Migrating, 140)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Migrating, 140)
         .unwrap();
     tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Starting, 150)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Starting, 150)
         .unwrap();
     let health_checking = tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::HealthChecking, 160)
+        .transition(
+            &guard,
+            &prepared.upgrade_id,
+            UpgradeStatus::HealthChecking,
+            160,
+        )
         .unwrap();
     fixture
         .releases()
-        .commit(&active(&prepared.upgrade_id, "3.0.2", 200))
+        .commit(&guard, &active(Some(&prepared.upgrade_id), "3.0.2", 200))
         .unwrap();
+    drop(guard);
 
     fixture
         .importer
@@ -273,22 +297,24 @@ async fn observer_does_not_scan_or_import_unrelated_results() {
     let fixture = Fixture::new();
     fixture
         .releases()
-        .commit(&active("factory-install", "3.0.1", 50))
+        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
         .unwrap();
+    let guard = fixture.lock();
     fixture
         .results()
-        .write(&result("unrelated-upgrade", UpgradeStatus::Failed))
+        .write(&guard, &result("unrelated-upgrade", UpgradeStatus::Failed))
         .unwrap();
     let tasks = fixture.tasks();
     let prepared = task("observed-upgrade");
-    tasks.create(&prepared).unwrap();
+    tasks.create(&guard, &prepared).unwrap();
     let accepted = tasks
-        .transition(&prepared.upgrade_id, UpgradeStatus::Accepted, 110)
+        .transition(&guard, &prepared.upgrade_id, UpgradeStatus::Accepted, 110)
         .unwrap();
     fixture
         .results()
-        .write(&result(&prepared.upgrade_id, UpgradeStatus::Failed))
+        .write(&guard, &result(&prepared.upgrade_id, UpgradeStatus::Failed))
         .unwrap();
+    drop(guard);
 
     fixture
         .importer

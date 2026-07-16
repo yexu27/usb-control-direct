@@ -6,6 +6,7 @@ mod package;
 mod readiness;
 mod release;
 mod result;
+mod signing;
 mod staging;
 mod state;
 mod verifier;
@@ -25,7 +26,8 @@ pub use release::{
     read_installed_release, ActiveCommitError, ActiveRelease, ActiveReleaseStore, InstalledRelease,
 };
 pub use result::{UpgradeResult, UpgradeResultStore};
+pub use signing::upgrade_signing_digest;
 pub use staging::PackageStager;
-pub use state::{UpgradeStatus, UpgradeTask, UpgradeTaskStore};
+pub use state::{UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore};
 pub use verifier::{PackageVerifier, VerificationContext, VerifiedPackage};
 pub use version::SystemVersion;

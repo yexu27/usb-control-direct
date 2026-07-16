@@ -7,8 +7,8 @@ use support::{
     TEST_CERTIFICATE_PEM,
 };
 use system_upgrade::{
-    certificate_sha256, ActiveRelease, ActiveReleaseStore, UpgradeResultStore, UpgradeStatus,
-    UpgradeTask, UpgradeTaskStore,
+    certificate_sha256, ActiveRelease, ActiveReleaseStore, UpgradeResultStore, UpgradeStateLock,
+    UpgradeStatus, UpgradeTask, UpgradeTaskStore,
 };
 use usb_control_updater::{UpgradeExecutor, UpgradePaths};
 
@@ -16,6 +16,7 @@ fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
     let dir = tempfile::tempdir().unwrap();
     let paths = UpgradePaths::for_root(dir.path().to_path_buf());
     let tasks = UpgradeTaskStore::new(paths.root.clone()).unwrap();
+    let guard = UpgradeStateLock::acquire(&paths.root).unwrap();
     let task = UpgradeTask {
         format_version: 1,
         upgrade_id: "upgrade-test".into(),
@@ -29,9 +30,9 @@ fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
         created_at: 100,
         updated_at: 100,
     };
-    tasks.create(&task).unwrap();
+    tasks.create(&guard, &task).unwrap();
     tasks
-        .transition("upgrade-test", UpgradeStatus::Accepted, 101)
+        .transition(&guard, "upgrade-test", UpgradeStatus::Accepted, 101)
         .unwrap();
     fs::create_dir_all(paths.staging_dir.join("upgrade-test")).unwrap();
     fs::write(
@@ -41,14 +42,16 @@ fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
     .unwrap();
     ActiveReleaseStore::new(paths.root.clone())
         .unwrap()
-        .commit(&ActiveRelease {
-            format_version: 1,
-            upgrade_id: "installed-baseline".into(),
-            version: version("3.0.1"),
-            deb_sha256: "a".repeat(64),
-            schema_version: 1,
-            committed_at: 100,
-        })
+        .commit(
+            &guard,
+            &ActiveRelease {
+                format_version: 1,
+                version: version("3.0.1"),
+                schema_version: 1,
+                committed_at: 100,
+                online_upgrade_id: None,
+            },
+        )
         .unwrap();
     for path in [
         &paths.ready_file,
@@ -99,6 +102,7 @@ fn success_runner() -> FakeCommandRunner {
 fn successful_upgrade_runs_one_install_chain_and_commits() {
     let (_dir, paths, revalidator) = arrange();
     let runner = success_runner();
+    runner.observe_path(paths.managed_marker.clone());
     let report = UpgradeExecutor::new(
         paths.clone(),
         runner.clone(),
@@ -136,15 +140,15 @@ fn successful_upgrade_runs_one_install_chain_and_commits() {
             .status,
         UpgradeStatus::Committed
     );
-    assert_eq!(
-        ActiveReleaseStore::new(paths.root)
-            .unwrap()
-            .current()
-            .unwrap()
-            .unwrap()
-            .version,
-        version("3.0.2")
-    );
+    let active = ActiveReleaseStore::new(paths.root)
+        .unwrap()
+        .current()
+        .unwrap()
+        .unwrap();
+    assert_eq!(active.version, version("3.0.2"));
+    assert_eq!(active.online_upgrade_id.as_deref(), Some("upgrade-test"));
+    assert!(runner.observations().into_iter().all(|exists| exists));
+    assert!(!paths.managed_marker.exists());
 }
 
 #[test]
@@ -161,6 +165,7 @@ fn revalidation_failure_records_failed_without_commands() {
     .execute("upgrade-test")
     .is_err());
     assert!(runner.calls().is_empty());
+    assert!(!paths.managed_marker.exists());
     assert_failed(&paths, "revalidating");
 }
 
@@ -178,6 +183,7 @@ fn stop_failure_records_failed_and_never_runs_dpkg() {
     .execute("upgrade-test")
     .is_err());
     assert_eq!(runner.calls().len(), 1);
+    assert!(!paths.managed_marker.exists());
     assert_failed(&paths, "stopping");
 }
 
@@ -203,6 +209,7 @@ fn unpack_failure_records_failed_and_never_installs_old_deb() {
             .count(),
         1
     );
+    assert!(!paths.managed_marker.exists());
     assert_failed(&paths, "installing");
     assert_eq!(
         ActiveReleaseStore::new(paths.root.clone())
@@ -231,6 +238,7 @@ fn migration_failure_records_failed_without_configure_or_start() {
     .execute("upgrade-test")
     .is_err());
     assert_eq!(runner.calls().len(), 3);
+    assert!(!paths.managed_marker.exists());
     assert_failed(&paths, "migrating");
 }
 
@@ -256,6 +264,7 @@ fn health_failure_records_failed_without_changing_active_release() {
             .version,
         version("3.0.1")
     );
+    assert!(!paths.managed_marker.exists());
 }
 
 fn assert_failed(paths: &UpgradePaths, stage: &str) {

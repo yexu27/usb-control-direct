@@ -10,7 +10,8 @@ use crate::state::{
     PersistedFormat, PublishMode,
 };
 use crate::{
-    ActiveRelease, SystemVersion, UpgradeError, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    ActiveRelease, SystemVersion, UpgradeError, UpgradeStateLock, UpgradeStatus, UpgradeTask,
+    UpgradeTaskStore,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -45,7 +46,7 @@ impl UpgradeResult {
     ) -> Result<Self, UpgradeError> {
         task.validate()?;
         active.validate_persisted()?;
-        if task.upgrade_id != active.upgrade_id
+        if active.online_upgrade_id.as_deref() != Some(task.upgrade_id.as_str())
             || task.target_version != active.version
             || !matches!(
                 task.status,
@@ -91,7 +92,12 @@ impl UpgradeResultStore {
         read_optional_json(&self.path(upgrade_id))
     }
 
-    pub fn write(&self, result: &UpgradeResult) -> Result<(), UpgradeError> {
+    pub fn write(
+        &self,
+        lock: &UpgradeStateLock,
+        result: &UpgradeResult,
+    ) -> Result<(), UpgradeError> {
+        lock.require_root(&self.root)?;
         result.validate_persisted()?;
         atomic_write_json(&self.path(&result.upgrade_id), result, PublishMode::Replace)?;
         self.prune()

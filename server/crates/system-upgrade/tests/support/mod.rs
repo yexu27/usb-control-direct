@@ -259,12 +259,11 @@ pub fn required_deb_files() -> BTreeSet<PathBuf> {
         "opt/usb-control/bin/usb-control-updater",
         "opt/usb-control/bin/usb-control-db-migrate",
         "opt/usb-control/install-meta/release.json",
-        "opt/usb-control/install-meta/VERSION",
         "lib/systemd/system/usb-control.service",
         "lib/systemd/system/usb-control-updater.service",
-        "etc/usb-control/keys/upgrade_verify.id",
-        "etc/usb-control/keys/upgrade_verify.pub",
-        "etc/usb-control/tls/server.crt",
+        "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.id",
+        "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.pub",
+        "opt/usb-control/defaults/etc/usb-control/tls/server.crt",
     ]
     .into_iter()
     .map(PathBuf::from)
@@ -284,6 +283,7 @@ pub struct DebFixtureOptions {
     pub upgrade_key_id: &'static str,
     pub upgrade_public_key: Option<&'static str>,
     pub migration_paths: Vec<&'static str>,
+    pub seed_paths: Vec<&'static str>,
     pub extra_paths: Vec<&'static str>,
     pub omit_path: Option<&'static str>,
     pub release_extra_field: bool,
@@ -311,6 +311,7 @@ impl Default for DebFixtureOptions {
                 "opt/usb-control/db/migrations/0001_init.sql",
                 "opt/usb-control/db/migrations/0002_upgrade.sql",
             ],
+            seed_paths: vec!["opt/usb-control/db/seeds/0001_default.sql"],
             extra_paths: Vec::new(),
             omit_path: None,
             release_extra_field: false,
@@ -376,10 +377,6 @@ pub fn write_deb_fixture(options: DebFixtureOptions) -> DebFixture {
             "opt/usb-control/bin/usb-control-db-migrate".into(),
             b"migrate".to_vec(),
         ),
-        (
-            "opt/usb-control/install-meta/VERSION".into(),
-            b"3.1.0\n".to_vec(),
-        ),
         ("opt/usb-control/install-meta/release.json".into(), release),
         (
             "lib/systemd/system/usb-control.service".into(),
@@ -390,20 +387,51 @@ pub fn write_deb_fixture(options: DebFixtureOptions) -> DebFixture {
             b"[Service]".to_vec(),
         ),
         (
-            "etc/usb-control/keys/upgrade_verify.id".into(),
+            "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.id".into(),
             format!("{}\n", options.upgrade_key_id).into_bytes(),
         ),
         (
-            "etc/usb-control/keys/upgrade_verify.pub".into(),
+            "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.pub".into(),
             format!("{upgrade_public_key}\n").into_bytes(),
         ),
         (
-            "etc/usb-control/tls/server.crt".into(),
+            "opt/usb-control/defaults/etc/usb-control/tls/server.crt".into(),
             certificate.to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/tls/server.key".into(),
+            b"tls-private-key".to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/tls/server.crt.sha256".into(),
+            format!("{tls_sha256}\n").into_bytes(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/usb-control.toml".into(),
+            b"[server]\n".to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/keys/license_verify.pub".into(),
+            b"license-public-key".to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/keys/sm4_policy.key".into(),
+            b"sm4-policy-key".to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/keys/sm2_policy.key".into(),
+            b"sm2-policy-private-key".to_vec(),
+        ),
+        (
+            "opt/usb-control/defaults/etc/usb-control/keys/sm2_policy.pub".into(),
+            b"sm2-policy-public-key".to_vec(),
         ),
     ];
     for migration in &options.migration_paths {
         data_entries.push(((*migration).to_string(), b"SELECT 1;".to_vec()));
+    }
+    for seed in &options.seed_paths {
+        data_entries.push(((*seed).to_string(), b"SELECT 1;".to_vec()));
     }
     for extra in &options.extra_paths {
         data_entries.push(((*extra).to_string(), b"forbidden".to_vec()));

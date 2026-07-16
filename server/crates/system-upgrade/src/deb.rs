@@ -13,16 +13,15 @@ use smcrypto::sm2;
 use crate::{SystemVersion, UpgradeError};
 
 const RELEASE_METADATA_PATH: &str = "opt/usb-control/install-meta/release.json";
-const VERSION_PATH: &str = "opt/usb-control/install-meta/VERSION";
-const CERTIFICATE_PATH: &str = "etc/usb-control/tls/server.crt";
-const UPGRADE_KEY_ID_PATH: &str = "etc/usb-control/keys/upgrade_verify.id";
-const UPGRADE_PUBLIC_KEY_PATH: &str = "etc/usb-control/keys/upgrade_verify.pub";
+const CERTIFICATE_PATH: &str = "opt/usb-control/defaults/etc/usb-control/tls/server.crt";
+const UPGRADE_KEY_ID_PATH: &str = "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.id";
+const UPGRADE_PUBLIC_KEY_PATH: &str =
+    "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.pub";
 const DEFAULT_MAX_ENTRIES: usize = 4096;
 const DEFAULT_MAX_EXPANDED_SIZE: u64 = 512 * 1024 * 1024;
 const DEFAULT_MAX_SELECTED_FILE_SIZE: u64 = 1024 * 1024;
 const MAX_CONTROL_FIELD_SIZE: u64 = 16 * 1024;
 const MAX_RELEASE_METADATA_SIZE: u64 = 64 * 1024;
-const MAX_VERSION_FILE_SIZE: u64 = 64;
 const MAX_CERTIFICATE_SIZE: u64 = 256 * 1024;
 const MAX_UPGRADE_KEY_ID_SIZE: u64 = 66;
 const MAX_UPGRADE_PUBLIC_KEY_SIZE: u64 = 130;
@@ -76,23 +75,20 @@ impl DebInspector for DpkgDebInspector {
             .map_err(|error| UpgradeError::DebInspection(format!("release.json 无效: {error}")))?;
         validate_release_metadata(&release)?;
 
-        let installed_version = std::str::from_utf8(&archive.version)
-            .map_err(|_| UpgradeError::DebInspection("VERSION 不是 UTF-8".into()))?
-            .trim_end_matches(['\r', '\n']);
         if package != "usb-control"
             || package != release.product
             || architecture != "arm64"
             || architecture != release.architecture
             || version != release.version
-            || installed_version != release.version.to_string()
         {
             return Err(UpgradeError::DebInspection(
-                "DEB 控制字段、VERSION 与 release.json 不一致".into(),
+                "DEB 控制字段与 release.json 不一致".into(),
             ));
         }
 
         validate_required_files(&archive.files)?;
         let migration_schema_to = validate_migrations(&archive.files)?;
+        validate_seeds(&archive.files)?;
         validate_upgrade_trust_root(
             &archive.upgrade_key_id,
             &archive.upgrade_public_key,
@@ -198,7 +194,6 @@ struct InspectedArchive {
     expanded_size: u64,
     files: BTreeSet<PathBuf>,
     release_json: Vec<u8>,
-    version: Vec<u8>,
     certificate: Vec<u8>,
     upgrade_key_id: Vec<u8>,
     upgrade_public_key: Vec<u8>,
@@ -213,7 +208,6 @@ fn inspect_tar_stream<R: Read>(
     let mut reader = reader;
     let mut files = BTreeSet::new();
     let mut release_json = None;
-    let mut version = None;
     let mut certificate = None;
     let mut upgrade_key_id = None;
     let mut upgrade_public_key = None;
@@ -250,10 +244,16 @@ fn inspect_tar_stream<R: Read>(
         }
         let path = parse_ustar_path(&header)?;
         match entry_type {
-            b'5' => {
+            b'5' if is_allowed_release_directory(&path) => {
                 skip_exact(&mut reader, size)?;
                 skip_tar_padding(&mut reader, size)?;
                 continue;
+            }
+            b'5' => {
+                return Err(UpgradeError::DebInspection(format!(
+                    "DEB 包含发布边界外目录: {}",
+                    path.display()
+                )));
             }
             0 | b'0' if is_allowed_release_file(&path) => {}
             0 | b'0' => {
@@ -274,7 +274,6 @@ fn inspect_tar_stream<R: Read>(
         }
         let selected = match path.to_str() {
             Some(RELEASE_METADATA_PATH) => Some((&mut release_json, MAX_RELEASE_METADATA_SIZE)),
-            Some(VERSION_PATH) => Some((&mut version, MAX_VERSION_FILE_SIZE)),
             Some(CERTIFICATE_PATH) => Some((&mut certificate, MAX_CERTIFICATE_SIZE)),
             Some(UPGRADE_KEY_ID_PATH) => Some((&mut upgrade_key_id, MAX_UPGRADE_KEY_ID_SIZE)),
             Some(UPGRADE_PUBLIC_KEY_PATH) => {
@@ -300,7 +299,6 @@ fn inspect_tar_stream<R: Read>(
         files,
         release_json: release_json
             .ok_or_else(|| UpgradeError::DebInspection("缺少 release.json".into()))?,
-        version: version.ok_or_else(|| UpgradeError::DebInspection("缺少 VERSION".into()))?,
         certificate: certificate
             .ok_or_else(|| UpgradeError::DebInspection("缺少 TLS 证书".into()))?,
         upgrade_key_id: upgrade_key_id
@@ -351,7 +349,6 @@ fn validate_required_files(files: &BTreeSet<PathBuf>) -> Result<(), UpgradeError
         "opt/usb-control/bin/usb-control-db-migrate",
         "lib/systemd/system/usb-control.service",
         "lib/systemd/system/usb-control-updater.service",
-        VERSION_PATH,
         RELEASE_METADATA_PATH,
         UPGRADE_KEY_ID_PATH,
         UPGRADE_PUBLIC_KEY_PATH,
@@ -364,41 +361,58 @@ fn validate_required_files(files: &BTreeSet<PathBuf>) -> Result<(), UpgradeError
 }
 
 fn validate_migrations(files: &BTreeSet<PathBuf>) -> Result<u32, UpgradeError> {
-    let migration_dir = Path::new("opt/usb-control/db/migrations");
+    validate_sql_sequence(files, Path::new("opt/usb-control/db/migrations"), "迁移")
+}
+
+fn validate_seeds(files: &BTreeSet<PathBuf>) -> Result<u32, UpgradeError> {
+    validate_sql_sequence(files, Path::new("opt/usb-control/db/seeds"), "种子")
+}
+
+fn validate_sql_sequence(
+    files: &BTreeSet<PathBuf>,
+    directory: &Path,
+    label: &str,
+) -> Result<u32, UpgradeError> {
     let mut versions = BTreeSet::new();
-    for path in files.iter().filter(|path| path.starts_with(migration_dir)) {
-        if path.parent() != Some(migration_dir) {
-            return Err(UpgradeError::DebInspection("迁移文件不得嵌套目录".into()));
+    for path in files.iter().filter(|path| path.starts_with(directory)) {
+        if path.parent() != Some(directory) {
+            return Err(UpgradeError::DebInspection(format!(
+                "{label}文件不得嵌套目录"
+            )));
         }
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or_else(|| UpgradeError::DebInspection("迁移文件名不是 UTF-8".into()))?;
+            .ok_or_else(|| UpgradeError::DebInspection(format!("{label}文件名不是 UTF-8")))?;
         let (prefix, suffix) = name
             .split_once('_')
-            .ok_or_else(|| UpgradeError::DebInspection("迁移文件名格式非法".into()))?;
+            .ok_or_else(|| UpgradeError::DebInspection(format!("{label}文件名格式非法")))?;
         if prefix.len() != 4
             || !prefix.bytes().all(|byte| byte.is_ascii_digit())
             || suffix.is_empty()
             || !suffix.ends_with(".sql")
         {
-            return Err(UpgradeError::DebInspection("迁移文件名格式非法".into()));
+            return Err(UpgradeError::DebInspection(format!(
+                "{label}文件名格式非法"
+            )));
         }
         let version: u32 = prefix
             .parse()
-            .map_err(|_| UpgradeError::DebInspection("迁移版本非法".into()))?;
+            .map_err(|_| UpgradeError::DebInspection(format!("{label}版本非法")))?;
         if version == 0 || !versions.insert(version) {
-            return Err(UpgradeError::DebInspection("迁移版本重复或为零".into()));
+            return Err(UpgradeError::DebInspection(format!(
+                "{label}版本重复或为零"
+            )));
         }
     }
     let maximum = versions
         .last()
         .copied()
-        .ok_or_else(|| UpgradeError::DebInspection("DEB 缺少数据库迁移".into()))?;
+        .ok_or_else(|| UpgradeError::DebInspection(format!("DEB 缺少数据库{label}")))?;
     if versions.len() != maximum as usize
         || !(1..=maximum).all(|version| versions.contains(&version))
     {
-        return Err(UpgradeError::DebInspection("迁移版本存在缺口".into()));
+        return Err(UpgradeError::DebInspection(format!("{label}版本存在缺口")));
     }
     Ok(maximum)
 }
@@ -443,40 +457,54 @@ fn is_allowed_release_file(path: &Path) -> bool {
         "opt/usb-control/bin/usb-control",
         "opt/usb-control/bin/usb-control-updater",
         "opt/usb-control/bin/usb-control-db-migrate",
-        VERSION_PATH,
         RELEASE_METADATA_PATH,
         "lib/systemd/system/usb-control.service",
         "lib/systemd/system/usb-control-updater.service",
-        "etc/usb-control/keys/license_verify.pub",
-        "etc/usb-control/keys/sm4_policy.key",
-        "etc/usb-control/keys/sm2_policy.key",
-        "etc/usb-control/keys/sm2_policy.pub",
+        "opt/usb-control/defaults/etc/usb-control/keys/license_verify.pub",
+        "opt/usb-control/defaults/etc/usb-control/keys/sm4_policy.key",
+        "opt/usb-control/defaults/etc/usb-control/keys/sm2_policy.key",
+        "opt/usb-control/defaults/etc/usb-control/keys/sm2_policy.pub",
         UPGRADE_KEY_ID_PATH,
         UPGRADE_PUBLIC_KEY_PATH,
         CERTIFICATE_PATH,
-        "etc/usb-control/tls/server.key",
-        "etc/usb-control/tls/server.crt.sha256",
-        "etc/usb-control/usb-control.toml",
+        "opt/usb-control/defaults/etc/usb-control/tls/server.key",
+        "opt/usb-control/defaults/etc/usb-control/tls/server.crt.sha256",
+        "opt/usb-control/defaults/etc/usb-control/usb-control.toml",
     ];
     if EXACT.iter().any(|allowed| path == Path::new(allowed)) {
         return true;
     }
-    if path.parent() == Some(Path::new("opt/usb-control/db/migrations")) {
+    if matches!(
+        path.parent(),
+        Some(parent)
+            if parent == Path::new("opt/usb-control/db/migrations")
+                || parent == Path::new("opt/usb-control/db/seeds")
+    ) {
         return path.extension().is_some_and(|extension| extension == "sql");
     }
-    path.starts_with("opt/usb-control/defaults")
-        && path != Path::new("opt/usb-control/defaults")
-        && matches!(
-            path.extension().and_then(|value| value.to_str()),
-            Some("toml" | "json" | "yaml" | "yml")
-        )
-        && !path.components().any(|component| {
-            matches!(
-                component,
-                Component::Normal(value)
-                    if matches!(value.to_str(), Some("test" | "tests" | "fixture" | "fixtures" | "testdata"))
-            )
-        })
+    false
+}
+
+fn is_allowed_release_directory(path: &Path) -> bool {
+    const EXACT: &[&str] = &[
+        ".",
+        "opt",
+        "opt/usb-control",
+        "opt/usb-control/bin",
+        "opt/usb-control/install-meta",
+        "opt/usb-control/defaults",
+        "opt/usb-control/defaults/etc",
+        "opt/usb-control/defaults/etc/usb-control",
+        "opt/usb-control/defaults/etc/usb-control/keys",
+        "opt/usb-control/defaults/etc/usb-control/tls",
+        "opt/usb-control/db",
+        "opt/usb-control/db/migrations",
+        "opt/usb-control/db/seeds",
+        "lib",
+        "lib/systemd",
+        "lib/systemd/system",
+    ];
+    EXACT.iter().any(|allowed| path == Path::new(allowed))
 }
 
 fn read_tar_block<R: Read>(reader: &mut R) -> Result<[u8; 512], UpgradeError> {
@@ -607,6 +635,10 @@ fn normalize_deb_path(path: &Path) -> Result<PathBuf, UpgradeError> {
             Component::Normal(value) => normalized.push(value),
             _ => return Err(UpgradeError::DebInspection("DEB 文件路径非法".into())),
         }
+    }
+    if normalized.as_os_str().is_empty() && path.components().all(|part| part == Component::CurDir)
+    {
+        return Ok(PathBuf::from("."));
     }
     if normalized.as_os_str().is_empty() {
         return Err(UpgradeError::DebInspection("DEB 文件路径为空".into()));

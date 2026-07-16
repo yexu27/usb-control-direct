@@ -2,6 +2,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -14,6 +15,58 @@ use crate::{SystemVersion, UpgradeError};
 
 pub(crate) const TASK_FORMAT_VERSION: u32 = 1;
 const MAX_JSON_SIZE: u64 = 1024 * 1024;
+
+/// 跨进程串行化升级状态写入的独占锁。
+#[derive(Debug)]
+pub struct UpgradeStateLock {
+    root: PathBuf,
+    file: File,
+}
+
+impl UpgradeStateLock {
+    /// 获取升级根目录的 `state.lock`。已有进程持锁时立即返回 Busy。
+    pub fn acquire(root: impl AsRef<Path>) -> Result<Self, UpgradeError> {
+        create_private_dir_all(root.as_ref())?;
+        let root = fs::canonicalize(root.as_ref())?;
+        let path = root.join("state.lock");
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(&path)?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if result != 0 {
+            let error = io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(code) if code == libc::EWOULDBLOCK || code == libc::EAGAIN)
+            {
+                return Err(UpgradeError::Busy);
+            }
+            return Err(UpgradeError::Io(error));
+        }
+
+        Ok(Self { root, file })
+    }
+
+    pub(crate) fn require_root(&self, root: &Path) -> Result<(), UpgradeError> {
+        if fs::canonicalize(root)? == self.root {
+            Ok(())
+        } else {
+            Err(UpgradeError::State("状态锁不属于当前升级根目录".into()))
+        }
+    }
+}
+
+impl Drop for UpgradeStateLock {
+    fn drop(&mut self) {
+        unsafe {
+            libc::flock(self.file.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
 
 /// 系统升级任务状态。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -158,7 +211,8 @@ impl UpgradeTaskStore {
     }
 
     /// 创建唯一的活动任务；已有 current 时不会覆盖。
-    pub fn create(&self, task: &UpgradeTask) -> Result<(), UpgradeError> {
+    pub fn create(&self, lock: &UpgradeStateLock, task: &UpgradeTask) -> Result<(), UpgradeError> {
+        self.require_lock(lock)?;
         task.validate()?;
         if task.status != UpgradeStatus::Prepared {
             return Err(UpgradeError::State(
@@ -175,10 +229,12 @@ impl UpgradeTaskStore {
     /// 按唯一状态机转换当前任务；终态原子写入 history 后清除 current。
     pub fn transition(
         &self,
+        lock: &UpgradeStateLock,
         upgrade_id: &str,
         target: UpgradeStatus,
         updated_at: i64,
     ) -> Result<UpgradeTask, UpgradeError> {
+        self.require_lock(lock)?;
         validate_upgrade_id(upgrade_id)?;
         let mut task = self
             .current()?
@@ -206,16 +262,39 @@ impl UpgradeTaskStore {
     /// 幂等完成同一任务的终态；不同任务或不同终态仍视为状态错误。
     pub fn ensure_terminal(
         &self,
+        lock: &UpgradeStateLock,
         upgrade_id: &str,
         status: UpgradeStatus,
         updated_at: i64,
     ) -> Result<UpgradeTask, UpgradeError> {
+        self.require_lock(lock)?;
         if !status.is_terminal() {
             return Err(UpgradeError::State("目标状态不是终态".into()));
         }
         match self.current()? {
+            Some(task) if task.upgrade_id == upgrade_id && task.status == status => {
+                match self.history(upgrade_id)? {
+                    Some(history) if history == task => {
+                        remove_file_and_sync_parent(&self.root.join("current.json"))?;
+                        Ok(history)
+                    }
+                    Some(_) => Err(UpgradeError::State(
+                        "升级任务 current 与 history 终态不一致".into(),
+                    )),
+                    None => {
+                        atomic_write_json(
+                            &self.history_path(upgrade_id),
+                            &task,
+                            PublishMode::CreateHistory,
+                        )?;
+                        remove_file_and_sync_parent(&self.root.join("current.json"))?;
+                        self.prune_history()?;
+                        Ok(task)
+                    }
+                }
+            }
             Some(task) if task.upgrade_id == upgrade_id => {
-                self.transition(upgrade_id, status, updated_at)
+                self.transition(lock, upgrade_id, status, updated_at)
             }
             Some(_) => Err(UpgradeError::State("当前升级任务标识不一致".into())),
             None => match self.history(upgrade_id)? {
@@ -226,7 +305,12 @@ impl UpgradeTaskStore {
         }
     }
 
-    pub(crate) fn record_rejected(&self, task: &UpgradeTask) -> Result<(), UpgradeError> {
+    pub(crate) fn record_rejected(
+        &self,
+        lock: &UpgradeStateLock,
+        task: &UpgradeTask,
+    ) -> Result<(), UpgradeError> {
+        self.require_lock(lock)?;
         task.validate()?;
         if task.status != UpgradeStatus::Rejected {
             return Err(UpgradeError::State("拒绝历史必须处于 rejected".into()));
@@ -239,7 +323,12 @@ impl UpgradeTaskStore {
         self.prune_history()
     }
 
-    pub(crate) fn remove_staging(&self, upgrade_id: &str) -> Result<(), UpgradeError> {
+    pub(crate) fn remove_staging(
+        &self,
+        lock: &UpgradeStateLock,
+        upgrade_id: &str,
+    ) -> Result<(), UpgradeError> {
+        self.require_lock(lock)?;
         validate_upgrade_id(upgrade_id)?;
         let staging_parent = self.root.join("staging");
         let path = staging_parent.join(upgrade_id);
@@ -252,6 +341,10 @@ impl UpgradeTaskStore {
 
     fn history_path(&self, upgrade_id: &str) -> PathBuf {
         self.root.join("history").join(format!("{upgrade_id}.json"))
+    }
+
+    pub(crate) fn require_lock(&self, lock: &UpgradeStateLock) -> Result<(), UpgradeError> {
+        lock.require_root(&self.root)
     }
 
     fn prune_history(&self) -> Result<(), UpgradeError> {

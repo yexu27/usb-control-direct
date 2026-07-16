@@ -8,7 +8,8 @@ use support::{
     manifest_json, raw_container, MatchingDebInspector, PackageFixture, TarEntry, DEB_NAME,
 };
 use system_upgrade::{
-    DebInspector, DebMetadata, PackageStager, PackageVerifier, SystemVersion, UpgradeError,
+    upgrade_signing_digest, DebInspector, DebMetadata, PackageStager, PackageVerifier,
+    SystemVersion, UpgradeError,
 };
 use tar::EntryType;
 
@@ -18,6 +19,29 @@ fn verify(fixture: &PackageFixture) -> Result<(), system_upgrade::UpgradeError> 
     PackageVerifier::new(fixture.key_dir(), Arc::new(MatchingDebInspector))
         .verify(staged, &fixture.context())?;
     Ok(())
+}
+
+#[test]
+fn signing_digest_matches_server_verifier_vector() {
+    use sha2::{Digest, Sha256};
+    use smcrypto::sm3;
+
+    let manifest = br#"{"format_version":1,"product":"usb-control"}"#;
+    let deb_sha256: [u8; 32] = Sha256::digest(b"fixed-deb-vector").into();
+    let mut legacy_input = Vec::new();
+    legacy_input.extend_from_slice(b"USB-CONTROL-UPGRADE-V1\0");
+    legacy_input.extend_from_slice(&(manifest.len() as u64).to_be_bytes());
+    legacy_input.extend_from_slice(manifest);
+    legacy_input.extend_from_slice(&deb_sha256);
+    let expected: [u8; 32] = hex::decode(sm3::sm3_hash(&legacy_input))
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    assert_eq!(
+        upgrade_signing_digest(manifest, &deb_sha256).unwrap(),
+        expected
+    );
 }
 
 #[test]

@@ -11,8 +11,8 @@ use common::audit_const::{action_type, log_type};
 use storage::model::OperationLogInsert;
 use storage::{InsertOnceResult, Storage};
 use system_upgrade::{
-    ActiveReleaseStore, UpgradeResult, UpgradeResultStore, UpgradeStatus, UpgradeTask,
-    UpgradeTaskStore,
+    ActiveReleaseStore, UpgradeResult, UpgradeResultStore, UpgradeStateLock, UpgradeStatus,
+    UpgradeTask, UpgradeTaskStore,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,11 +85,16 @@ impl UpgradeResultImporter {
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "active-release.json 不存在".to_string())?;
         if active.version != result.effective_version
-            || (result.status == UpgradeStatus::Committed && active.upgrade_id != result.upgrade_id)
+            || (result.status == UpgradeStatus::Committed
+                && active.online_upgrade_id.as_deref() != Some(result.upgrade_id.as_str()))
         {
             return Err("升级结果与当前有效发布不一致".into());
         }
         let insert = self.storage.insert_once(&operation_log(result))?;
+        let _guard = UpgradeStateLock::acquire(&self.root).map_err(|error| error.to_string())?;
+        if done.is_file() {
+            return Ok(ImportDisposition::AlreadyImported);
+        }
         write_done_marker(&done, &result.upgrade_id).map_err(|error| error.to_string())?;
         Ok(match insert {
             InsertOnceResult::Inserted(_) => ImportDisposition::Imported,
@@ -108,9 +113,17 @@ impl UpgradeResultImporter {
                 .get(&initial.upgrade_id)
                 .map_err(|e| e.to_string())?
             {
+                let guard =
+                    UpgradeStateLock::acquire(&self.root).map_err(|error| error.to_string())?;
                 tasks
-                    .ensure_terminal(&initial.upgrade_id, result.status, result.finished_at)
+                    .ensure_terminal(
+                        &guard,
+                        &initial.upgrade_id,
+                        result.status,
+                        result.finished_at,
+                    )
                     .map_err(|error| error.to_string())?;
+                drop(guard);
                 match self.import_result(&result) {
                     Ok(_) => return Ok(()),
                     Err(_) => {
@@ -122,7 +135,7 @@ impl UpgradeResultImporter {
 
             let current = tasks.current().map_err(|error| error.to_string())?;
             if let Some(active) = releases.current().map_err(|error| error.to_string())? {
-                if active.upgrade_id == initial.upgrade_id {
+                if active.online_upgrade_id.as_deref() == Some(initial.upgrade_id.as_str()) {
                     let task = match current
                         .as_ref()
                         .filter(|task| task.upgrade_id == initial.upgrade_id)
@@ -139,14 +152,20 @@ impl UpgradeResultImporter {
                         common::time::now_unix(),
                     )
                     .map_err(|error| error.to_string())?;
-                    results.write(&result).map_err(|error| error.to_string())?;
+                    let guard =
+                        UpgradeStateLock::acquire(&self.root).map_err(|error| error.to_string())?;
+                    results
+                        .write(&guard, &result)
+                        .map_err(|error| error.to_string())?;
                     tasks
                         .ensure_terminal(
+                            &guard,
                             &initial.upgrade_id,
                             UpgradeStatus::Committed,
                             result.finished_at,
                         )
                         .map_err(|error| error.to_string())?;
+                    drop(guard);
                     match self.import_result(&result) {
                         Ok(_) => return Ok(()),
                         Err(_) => {

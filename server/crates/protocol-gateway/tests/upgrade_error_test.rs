@@ -21,6 +21,16 @@ fn maps_admission_errors_to_existing_result_codes_and_stable_messages() {
             "升级包签名无效",
         ),
         (
+            UpgradeError::SigningDigest("internal digest failure".into()),
+            ResultCode::UpgradeFormatError,
+            "升级包签名无效",
+        ),
+        (
+            UpgradeError::InvalidSigningDigestLength,
+            ResultCode::UpgradeFormatError,
+            "升级包签名无效",
+        ),
+        (
             UpgradeError::Busy,
             ResultCode::DeviceBusy,
             "已有系统升级任务正在处理",

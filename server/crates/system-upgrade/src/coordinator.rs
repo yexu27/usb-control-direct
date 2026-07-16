@@ -1,7 +1,7 @@
 //! 主服务侧系统升级受理与发送后调度协调器。
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::rngs::OsRng;
@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::state::TASK_FORMAT_VERSION;
 use crate::{
     PackageStager, PackageVerifier, SystemVersion, UpgradeError, UpgradeResult, UpgradeResultStore,
-    UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
+    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
 };
 
 /// 装置端固定的升级兼容性上下文。
@@ -71,7 +71,6 @@ pub struct UpgradeCoordinator {
     scheduler: Arc<dyn UpgradeScheduler>,
     store: UpgradeTaskStore,
     results: UpgradeResultStore,
-    admission_lock: Mutex<()>,
 }
 
 impl UpgradeCoordinator {
@@ -94,13 +93,12 @@ impl UpgradeCoordinator {
             scheduler,
             store,
             results,
-            admission_lock: Mutex::new(()),
         })
     }
 
     /// 完成安全落盘、验签和 prepared 任务的原子持久化。
     pub fn prepare(&self, request: PrepareUpgradeRequest) -> Result<PreparedUpgrade, UpgradeError> {
-        let _guard = self.lock()?;
+        let guard = UpgradeStateLock::acquire(self.store.root())?;
         if self.store.current()?.is_some() {
             return Err(UpgradeError::Busy);
         }
@@ -116,7 +114,7 @@ impl UpgradeCoordinator {
                 if let Ok(target_version) = requested_target_version {
                     let mut task =
                         self.new_task(&upgrade_id, &request, target_version, package_sha256, now);
-                    let _ = self.reject_and_clean(&mut task);
+                    let _ = self.reject_and_clean(&guard, &mut task);
                 }
                 return Err(error);
             }
@@ -129,7 +127,7 @@ impl UpgradeCoordinator {
             now,
         );
         if let Err(error) = requested_target_version {
-            let _ = self.reject_and_clean(&mut task);
+            let _ = self.reject_and_clean(&guard, &mut task);
             return Err(error);
         }
         let context = VerificationContext {
@@ -143,7 +141,7 @@ impl UpgradeCoordinator {
         let verified = match self.verifier.verify(staged, &context) {
             Ok(verified) => verified,
             Err(error) => {
-                let _ = self.reject_and_clean(&mut task);
+                let _ = self.reject_and_clean(&guard, &mut task);
                 return Err(error);
             }
         };
@@ -157,13 +155,13 @@ impl UpgradeCoordinator {
             schema_to: verified.staged.manifest.schema_to,
         };
         if let Err(error) = self.preflight.check(&preflight_request) {
-            let _ = self.reject_and_clean(&mut task);
+            let _ = self.reject_and_clean(&guard, &mut task);
             return Err(error);
         }
         task.target_version = verified.staged.manifest.package_version;
         task.transition_to(UpgradeStatus::Prepared, unix_timestamp()?)?;
-        if let Err(error) = self.store.create(&task) {
-            let _ = self.store.remove_staging(&upgrade_id);
+        if let Err(error) = self.store.create(&guard, &task) {
+            let _ = self.store.remove_staging(&guard, &upgrade_id);
             return Err(error);
         }
 
@@ -198,27 +196,35 @@ impl UpgradeCoordinator {
 
     /// 仅在响应已完成发送后把 prepared 转为 accepted。
     pub fn accept_after_response(&self, upgrade_id: &str) -> Result<UpgradeTask, UpgradeError> {
-        let _guard = self.lock()?;
-        self.store
-            .transition(upgrade_id, UpgradeStatus::Accepted, unix_timestamp()?)
+        let guard = UpgradeStateLock::acquire(self.store.root())?;
+        self.store.transition(
+            &guard,
+            upgrade_id,
+            UpgradeStatus::Accepted,
+            unix_timestamp()?,
+        )
     }
 
     /// 仅调度 accepted 任务；调度失败落入终态且保留 staging。
     pub fn schedule(&self, upgrade_id: &str) -> Result<(), UpgradeError> {
-        let _guard = self.lock()?;
-        let task = self
-            .store
-            .current()?
-            .ok_or_else(|| UpgradeError::State("当前没有升级任务".into()))?;
-        if task.upgrade_id != upgrade_id || task.status != UpgradeStatus::Accepted {
-            return Err(UpgradeError::State(
-                "只有 accepted 任务可以调度 updater".into(),
-            ));
-        }
+        let task = {
+            let _guard = UpgradeStateLock::acquire(self.store.root())?;
+            let task = self
+                .store
+                .current()?
+                .ok_or_else(|| UpgradeError::State("当前没有升级任务".into()))?;
+            if task.upgrade_id != upgrade_id || task.status != UpgradeStatus::Accepted {
+                return Err(UpgradeError::State(
+                    "只有 accepted 任务可以调度 updater".into(),
+                ));
+            }
+            task
+        };
 
         match self.scheduler.start(upgrade_id) {
             Ok(()) => Ok(()),
             Err(schedule_error) => {
+                let guard = UpgradeStateLock::acquire(self.store.root())?;
                 let finished_at = unix_timestamp()?;
                 let result = UpgradeResult {
                     format_version: 1,
@@ -234,10 +240,15 @@ impl UpgradeCoordinator {
                     original_error: Some(schedule_error.to_string()),
                     finished_at,
                 };
-                let result_error = self.results.write(&result).err();
+                let result_error = self.results.write(&guard, &result).err();
                 let state_error = self
                     .store
-                    .ensure_terminal(upgrade_id, UpgradeStatus::ScheduleFailed, finished_at)
+                    .ensure_terminal(
+                        &guard,
+                        upgrade_id,
+                        UpgradeStatus::ScheduleFailed,
+                        finished_at,
+                    )
                     .err();
                 let persistence_errors = [result_error, state_error]
                     .into_iter()
@@ -257,7 +268,7 @@ impl UpgradeCoordinator {
 
     /// 响应发送失败时取消 prepared 任务并删除其 staging。
     pub fn response_failed(&self, upgrade_id: &str) -> Result<(), UpgradeError> {
-        let _guard = self.lock()?;
+        let guard = UpgradeStateLock::acquire(self.store.root())?;
         let task = self
             .store
             .current()?
@@ -265,23 +276,25 @@ impl UpgradeCoordinator {
         if task.upgrade_id != upgrade_id || task.status != UpgradeStatus::Prepared {
             return Err(UpgradeError::State("只有 prepared 任务可以取消响应".into()));
         }
-        self.store.remove_staging(upgrade_id)?;
-        self.store
-            .transition(upgrade_id, UpgradeStatus::Cancelled, unix_timestamp()?)?;
+        self.store.remove_staging(&guard, upgrade_id)?;
+        self.store.transition(
+            &guard,
+            upgrade_id,
+            UpgradeStatus::Cancelled,
+            unix_timestamp()?,
+        )?;
         Ok(())
     }
 
-    fn reject_and_clean(&self, task: &mut UpgradeTask) -> Result<(), UpgradeError> {
+    fn reject_and_clean(
+        &self,
+        lock: &UpgradeStateLock,
+        task: &mut UpgradeTask,
+    ) -> Result<(), UpgradeError> {
         task.transition_to(UpgradeStatus::Rejected, unix_timestamp()?)?;
-        let history_result = self.store.record_rejected(task);
-        let cleanup_result = self.store.remove_staging(&task.upgrade_id);
+        let history_result = self.store.record_rejected(lock, task);
+        let cleanup_result = self.store.remove_staging(lock, &task.upgrade_id);
         history_result.and(cleanup_result)
-    }
-
-    fn lock(&self) -> Result<MutexGuard<'_, ()>, UpgradeError> {
-        self.admission_lock
-            .lock()
-            .map_err(|_| UpgradeError::State("升级受理锁已损坏".into()))
     }
 }
 

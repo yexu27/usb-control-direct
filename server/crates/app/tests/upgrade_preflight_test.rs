@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use system_upgrade::{
     ActiveRelease, ActiveReleaseStore, SystemVersion, UpgradeError, UpgradePreflight,
-    UpgradePreflightFailure, UpgradePreflightRequest,
+    UpgradePreflightFailure, UpgradePreflightRequest, UpgradeStateLock,
 };
 use usb_control_app::upgrade_preflight::{SystemUpgradePreflight, UpgradeHostProbe};
 
@@ -60,16 +60,19 @@ impl Fixture {
     fn new() -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("upgrade");
-        ActiveReleaseStore::new(root.clone())
-            .unwrap()
-            .commit(&ActiveRelease {
-                format_version: 1,
-                upgrade_id: "upgrade-active".into(),
-                version: version("3.0.1"),
-                deb_sha256: "a".repeat(64),
-                schema_version: 1,
-                committed_at: 100,
-            })
+        let releases = ActiveReleaseStore::new(root.clone()).unwrap();
+        let guard = UpgradeStateLock::acquire(&root).unwrap();
+        releases
+            .commit(
+                &guard,
+                &ActiveRelease {
+                    format_version: 1,
+                    version: version("3.0.1"),
+                    schema_version: 1,
+                    committed_at: 100,
+                    online_upgrade_id: None,
+                },
+            )
             .unwrap();
         Self { _temp: temp, root }
     }

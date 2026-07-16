@@ -6,152 +6,164 @@ fail() {
   exit 1
 }
 
+test "$#" -eq 1 || fail 'usage: server/deploy/build-deb.sh <major.minor.patch>'
+VERSION="$1"
+printf '%s' "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail "invalid release version: $VERSION"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$SERVER_DIR/.." && pwd)"
-SHARED_ASSETS="$REPO_DIR/deploy/assets"
+ASSETS="$REPO_DIR/deploy/assets"
+: "${SYSROOT:?SYSROOT is required}"
+: "${TOOLCHAIN:?TOOLCHAIN is required}"
+test -d "$SYSROOT" || fail "SYSROOT not found: $SYSROOT"
+test -d "$TOOLCHAIN" || fail "TOOLCHAIN not found: $TOOLCHAIN"
+LINKER="$TOOLCHAIN/aarch64-buildroot-linux-gnu-gcc"
+READELF="$TOOLCHAIN/aarch64-buildroot-linux-gnu-readelf"
+test -x "$LINKER" || fail "cross linker not found: $LINKER"
+test -x "$READELF" || fail "cross readelf not found: $READELF"
+for command in cargo dpkg-deb sha256sum openssl python3; do
+  command -v "$command" >/dev/null 2>&1 || fail "$command not found"
+done
 
-REQUESTED_VERSION="${1:-}"
-REQUESTED_VERSION="$(printf '%s' "$REQUESTED_VERSION" | tr -d '\r')"
-test -n "$REQUESTED_VERSION" || fail "usage: server/deploy/build-deb.sh <version>"
-VERSION="${REQUESTED_VERSION#V}"
-VERSION="${VERSION#v}"
-DISPLAY_VERSION="V${VERSION}"
+TLS_CERT="$ASSETS/tls/server.crt"
+TLS_KEY="$ASSETS/tls/server.key"
+TLS_CERT_SHA256="$ASSETS/tls/server.crt.sha256"
+LICENSE_PUBKEY="$ASSETS/keys/license_verify.pub"
+SM4_POLICY_KEY="$ASSETS/keys/sm4_policy.key"
+SM2_POLICY_KEY="$ASSETS/keys/sm2_policy.key"
+SM2_POLICY_PUB="$ASSETS/keys/sm2_policy.pub"
+UPGRADE_PUBKEY="$ASSETS/keys/upgrade_verify.pub"
+UPGRADE_KEY_ID_FILE="$ASSETS/keys/upgrade_verify.id"
+for path in "$TLS_CERT" "$TLS_KEY" "$TLS_CERT_SHA256" "$LICENSE_PUBKEY" "$SM4_POLICY_KEY" "$SM2_POLICY_KEY" "$SM2_POLICY_PUB" "$UPGRADE_PUBKEY" "$UPGRADE_KEY_ID_FILE"; do
+  test -r "$path" || fail "missing release input: $path"
+done
 
-WORKSPACE_VERSION="$(
-  sed -n '/^\[workspace.package\]/,/^\[/p' "$SERVER_DIR/Cargo.toml" |
-    sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' |
-    head -n 1
-)"
-
-test "$WORKSPACE_VERSION" = "$VERSION" || fail "version mismatch: arg=$REQUESTED_VERSION normalized=$VERSION workspace=$WORKSPACE_VERSION"
-
-command -v cargo >/dev/null 2>&1 || fail "cargo not found"
-command -v dpkg-deb >/dev/null 2>&1 || fail "dpkg-deb not found"
-command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not found"
-command -v openssl >/dev/null 2>&1 || fail "openssl not found"
-
-export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER:-aarch64-linux-gnu-gcc}"
-export PKG_CONFIG="${PKG_CONFIG:-aarch64-linux-gnu-pkg-config}"
-export PKG_CONFIG_ALLOW_CROSS="${PKG_CONFIG_ALLOW_CROSS:-1}"
-command -v "$CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER" >/dev/null 2>&1 || fail "cross linker not found: $CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER"
-command -v "$PKG_CONFIG" >/dev/null 2>&1 || fail "pkg-config command not found: $PKG_CONFIG"
-
-if [ -n "${USB_CONTROL_AARCH64_SYSROOT:-}" ]; then
-  test -d "$USB_CONTROL_AARCH64_SYSROOT" || fail "sysroot not found: $USB_CONTROL_AARCH64_SYSROOT"
-  export PKG_CONFIG_SYSROOT_DIR="$USB_CONTROL_AARCH64_SYSROOT"
-  export PKG_CONFIG_PATH="$USB_CONTROL_AARCH64_SYSROOT/usr/lib/aarch64-linux-gnu/pkgconfig:$USB_CONTROL_AARCH64_SYSROOT/usr/share/pkgconfig:${PKG_CONFIG_PATH:-}"
-  export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=--sysroot=$USB_CONTROL_AARCH64_SYSROOT -C link-arg=-B$USB_CONTROL_AARCH64_SYSROOT/usr/lib/aarch64-linux-gnu/"
-fi
-
-TLS_CERT="$SHARED_ASSETS/tls/server.crt"
-TLS_KEY="$SHARED_ASSETS/tls/server.key"
-TLS_CERT_SHA256="$SHARED_ASSETS/tls/server.crt.sha256"
-LICENSE_PUBKEY="$SHARED_ASSETS/keys/license_verify.pub"
-SM4_POLICY_KEY="$SHARED_ASSETS/keys/sm4_policy.key"
-SM2_POLICY_KEY="$SHARED_ASSETS/keys/sm2_policy.key"
-SM2_POLICY_PUB="$SHARED_ASSETS/keys/sm2_policy.pub"
-test -r "$TLS_CERT" || fail "missing TLS cert: $TLS_CERT"
-test -r "$TLS_KEY" || fail "missing TLS key: $TLS_KEY"
-test -r "$TLS_CERT_SHA256" || fail "missing TLS cert sha256 file: $TLS_CERT_SHA256"
-test -r "$LICENSE_PUBKEY" || fail "missing license public key: $LICENSE_PUBKEY"
-test -r "$SM4_POLICY_KEY" || fail "missing SM4 policy key: $SM4_POLICY_KEY"
-test -r "$SM2_POLICY_KEY" || fail "missing SM2 policy private key: $SM2_POLICY_KEY"
-test -r "$SM2_POLICY_PUB" || fail "missing SM2 policy public key: $SM2_POLICY_PUB"
-openssl x509 -in "$TLS_CERT" -noout >/dev/null || fail "invalid TLS cert: $TLS_CERT"
-openssl pkey -in "$TLS_KEY" -noout >/dev/null || fail "invalid TLS key: $TLS_KEY"
-
+openssl x509 -in "$TLS_CERT" -noout >/dev/null || fail 'invalid TLS certificate'
+openssl pkey -in "$TLS_KEY" -noout >/dev/null || fail 'invalid TLS private key'
 CERT_PUBKEY_SHA256="$(openssl x509 -in "$TLS_CERT" -pubkey -noout | openssl pkey -pubin -outform der | sha256sum | awk '{print $1}')"
 KEY_PUBKEY_SHA256="$(openssl pkey -in "$TLS_KEY" -pubout -outform der | sha256sum | awk '{print $1}')"
-test "$CERT_PUBKEY_SHA256" = "$KEY_PUBKEY_SHA256" || fail "TLS cert and key do not match"
+test "$CERT_PUBKEY_SHA256" = "$KEY_PUBKEY_SHA256" || fail 'TLS certificate and private key mismatch'
+TLS_SHA256="$(openssl x509 -in "$TLS_CERT" -outform der | sha256sum | awk '{print tolower($1)}')"
+test "$(tr -d '[:space:]' <"$TLS_CERT_SHA256")" = "$TLS_SHA256" || fail 'TLS fingerprint file mismatch'
+test "$(wc -c <"$SM4_POLICY_KEY")" -eq 16 || fail 'SM4 policy key must be exactly 16 bytes'
+tr -d '[:space:]' <"$SM2_POLICY_KEY" | grep -Eq '^[0-9A-Fa-f]{64}$' || fail 'invalid SM2 policy private key'
+tr -d '[:space:]' <"$SM2_POLICY_PUB" | grep -Eq '^[0-9A-Fa-f]{128}$' || fail 'invalid SM2 policy public key'
+UPGRADE_KEY_ID="$(tr -d '\r\n' <"$UPGRADE_KEY_ID_FILE")"
+printf '%s' "$UPGRADE_KEY_ID" | grep -Eq '^[a-z0-9][a-z0-9-]{0,63}$' || fail 'invalid upgrade key id'
+test "$(tr -d '\r\n' <"$UPGRADE_PUBKEY" | wc -c)" -eq 128 || fail 'upgrade public key must be 128 hex characters'
+tr -d '\r\n' <"$UPGRADE_PUBKEY" | grep -Eq '^[0-9A-Fa-f]{128}$' || fail 'invalid upgrade public key'
 
-CLIENT_CERT_FP="$(openssl x509 -in "$TLS_CERT" -outform der | sha256sum | awk '{print tolower($1)}')"
-EXPECTED_CLIENT_CERT_FP="$(tr -d '[:space:]' < "$TLS_CERT_SHA256")"
-printf '%s' "$EXPECTED_CLIENT_CERT_FP" | grep -Eq '^[0-9a-f]{64}$' || fail "TLS client fingerprint must be 64 lowercase hex characters"
-test "$CLIENT_CERT_FP" = "$EXPECTED_CLIENT_CERT_FP" || fail "TLS fingerprint mismatch: generated=$CLIENT_CERT_FP file=$EXPECTED_CLIENT_CERT_FP"
-test "$(wc -c < "$SM4_POLICY_KEY")" -eq 16 || fail "SM4 policy key must be 16 bytes: $SM4_POLICY_KEY"
-tr -d '[:space:]' < "$SM2_POLICY_KEY" | grep -Eq '^[0-9A-Fa-f]{64}$' || fail "SM2 policy private key must be 64 hex characters"
-tr -d '[:space:]' < "$SM2_POLICY_PUB" | grep -Eq '^[0-9A-Fa-f]{128}$' || fail "SM2 policy public key must be 128 hex characters"
+echo '==> cross-build three ARM64 release binaries'
+(
+  cd "$SERVER_DIR"
+  USB_CONTROL_RELEASE_VERSION="$VERSION" \
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$LINKER" \
+  PKG_CONFIG_ALLOW_CROSS=1 \
+  PKG_CONFIG_SYSROOT_DIR="$SYSROOT" \
+  PKG_CONFIG_PATH="$SYSROOT/usr/lib/pkgconfig" \
+  RUSTFLAGS="-C link-args=--sysroot=$SYSROOT" \
+  cargo build --release --target aarch64-unknown-linux-gnu \
+    --bin usb-control --bin usb-control-updater --bin usb-control-db-migrate
+)
+
+TARGET_DIR="$SERVER_DIR/target/aarch64-unknown-linux-gnu/release"
+BINARIES=(usb-control usb-control-updater usb-control-db-migrate)
+declare -A RUNTIME_PACKAGES=()
+
+version_not_newer_than() {
+  test "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$2"
+}
+
+for binary in "${BINARIES[@]}"; do
+  path="$TARGET_DIR/$binary"
+  test -x "$path" || fail "missing built binary: $path"
+  "$READELF" -hW "$path" | grep -Fq 'Class:                             ELF64' || fail "$binary is not ELF64"
+  "$READELF" -hW "$path" | grep -Fq 'Machine:                           AArch64' || fail "$binary is not AArch64"
+  "$READELF" -lW "$path" | grep -Eq 'Requesting program interpreter: /lib/ld-linux-aarch64\.so\.1' || fail "$binary has unsupported interpreter"
+  while read -r soname; do
+    case "$soname" in
+      libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1) package='libc6' ;;
+      libgcc_s.so.1) package='libgcc-s1' ;;
+      libudev.so.1) package='libudev1' ;;
+      libstdc++.so.6) package='libstdc++6' ;;
+      *) fail "$binary has unmapped DT_NEEDED: $soname" ;;
+    esac
+    RUNTIME_PACKAGES["$package"]=1
+  done < <("$READELF" -dW "$path" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')
+  while read -r symbol_version; do
+    family="${symbol_version%%_*}"
+    value="${symbol_version#*_}"
+    case "$family" in
+      GLIBC) maximum='2.35' ;;
+      GLIBCXX) maximum='3.4.30' ;;
+      CXXABI) maximum='1.3.13' ;;
+      *) continue ;;
+    esac
+    version_not_newer_than "$value" "$maximum" || fail "$binary requires unsupported $symbol_version"
+  done < <("$READELF" --version-info "$path" | grep -Eo '(GLIBC|GLIBCXX|CXXABI)_[0-9]+(\.[0-9]+)+' | sort -u)
+done
+
+RUNTIME_DEPENDS=''
+while read -r package; do
+  if [ -z "$RUNTIME_DEPENDS" ]; then
+    RUNTIME_DEPENDS="$package"
+  else
+    RUNTIME_DEPENDS="$RUNTIME_DEPENDS, $package"
+  fi
+done < <(printf '%s\n' "${!RUNTIME_PACKAGES[@]}" | sort)
+test -n "$RUNTIME_DEPENDS" || fail 'no runtime dependencies discovered'
 
 BUILD_DIR="$SCRIPT_DIR/build"
 ROOT_DIR="$BUILD_DIR/deb-root"
 OUT_DIR="$BUILD_DIR/out"
-PACKAGE_NAME="usb-control_${DISPLAY_VERSION}_arm64"
-DEB_PATH="$OUT_DIR/${PACKAGE_NAME}.deb"
-
+DEB_PATH="$OUT_DIR/usb-control_V${VERSION}_arm64.deb"
 rm -rf "$ROOT_DIR"
-mkdir -p "$ROOT_DIR/DEBIAN" "$OUT_DIR"
-mkdir -p "$ROOT_DIR/opt/usb-control/bin"
-mkdir -p "$ROOT_DIR/opt/usb-control/db/migrations"
-mkdir -p "$ROOT_DIR/opt/usb-control/db/seeds"
-mkdir -p "$ROOT_DIR/opt/usb-control/install-meta"
-mkdir -p "$ROOT_DIR/etc/usb-control/tls"
-mkdir -p "$ROOT_DIR/etc/usb-control/keys"
-mkdir -p "$ROOT_DIR/etc/systemd/system"
+mkdir -p \
+  "$ROOT_DIR/DEBIAN" \
+  "$ROOT_DIR/opt/usb-control/bin" \
+  "$ROOT_DIR/opt/usb-control/db/migrations" \
+  "$ROOT_DIR/opt/usb-control/db/seeds" \
+  "$ROOT_DIR/opt/usb-control/install-meta" \
+  "$ROOT_DIR/opt/usb-control/defaults/etc/usb-control/tls" \
+  "$ROOT_DIR/opt/usb-control/defaults/etc/usb-control/keys" \
+  "$ROOT_DIR/lib/systemd/system" \
+  "$OUT_DIR"
 
-echo "==> build rust release for aarch64"
-(
-  cd "$SERVER_DIR"
-  cargo build --release --target aarch64-unknown-linux-gnu -p usb-control-app -p usb-control-db-migrate
-)
-
-BINARY="$SERVER_DIR/target/aarch64-unknown-linux-gnu/release/usb-control"
-DB_MIGRATE_BINARY="$SERVER_DIR/target/aarch64-unknown-linux-gnu/release/usb-control-db-migrate"
-test -x "$BINARY" || fail "binary not found: $BINARY"
-test -x "$DB_MIGRATE_BINARY" || fail "db migrate binary not found: $DB_MIGRATE_BINARY"
-
-install -m 0755 "$BINARY" "$ROOT_DIR/opt/usb-control/bin/usb-control"
-install -m 0755 "$DB_MIGRATE_BINARY" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate"
-install -m 0755 "$SCRIPT_DIR/scripts/usb-control-db-migrate.sh" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate.sh"
+for binary in "${BINARIES[@]}"; do
+  install -m 0755 "$TARGET_DIR/$binary" "$ROOT_DIR/opt/usb-control/bin/$binary"
+done
 install -m 0644 "$SCRIPT_DIR/db/migrations/0001_init.sql" "$ROOT_DIR/opt/usb-control/db/migrations/0001_init.sql"
 install -m 0644 "$SCRIPT_DIR/db/seeds/0001_default_data.sql" "$ROOT_DIR/opt/usb-control/db/seeds/0001_default_data.sql"
-install -m 0644 "$SCRIPT_DIR/config/usb-control.toml" "$ROOT_DIR/etc/usb-control/usb-control.toml"
-install -m 0644 "$TLS_CERT" "$ROOT_DIR/etc/usb-control/tls/server.crt"
-install -m 0600 "$TLS_KEY" "$ROOT_DIR/etc/usb-control/tls/server.key"
-install -m 0644 "$LICENSE_PUBKEY" "$ROOT_DIR/etc/usb-control/keys/license_verify.pub"
-install -m 0600 "$SM4_POLICY_KEY" "$ROOT_DIR/etc/usb-control/keys/sm4_policy.key"
-install -m 0600 "$SM2_POLICY_KEY" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.key"
-install -m 0644 "$SM2_POLICY_PUB" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.pub"
-install -m 0644 "$SCRIPT_DIR/usb-control.service" "$ROOT_DIR/etc/systemd/system/usb-control.service"
+DEFAULTS="$ROOT_DIR/opt/usb-control/defaults/etc/usb-control"
+install -m 0640 "$SCRIPT_DIR/config/usb-control.toml" "$DEFAULTS/usb-control.toml"
+install -m 0644 "$TLS_CERT" "$DEFAULTS/tls/server.crt"
+install -m 0600 "$TLS_KEY" "$DEFAULTS/tls/server.key"
+install -m 0644 "$TLS_CERT_SHA256" "$DEFAULTS/tls/server.crt.sha256"
+install -m 0644 "$LICENSE_PUBKEY" "$DEFAULTS/keys/license_verify.pub"
+install -m 0600 "$SM4_POLICY_KEY" "$DEFAULTS/keys/sm4_policy.key"
+install -m 0600 "$SM2_POLICY_KEY" "$DEFAULTS/keys/sm2_policy.key"
+install -m 0644 "$SM2_POLICY_PUB" "$DEFAULTS/keys/sm2_policy.pub"
+install -m 0644 "$UPGRADE_PUBKEY" "$DEFAULTS/keys/upgrade_verify.pub"
+install -m 0644 "$UPGRADE_KEY_ID_FILE" "$DEFAULTS/keys/upgrade_verify.id"
+install -m 0644 "$SCRIPT_DIR/usb-control.service" "$ROOT_DIR/lib/systemd/system/usb-control.service"
+install -m 0644 "$SCRIPT_DIR/usb-control-updater.service" "$ROOT_DIR/lib/systemd/system/usb-control-updater.service"
 
-printf '%s\n' "$DISPLAY_VERSION" > "$ROOT_DIR/opt/usb-control/install-meta/VERSION"
+printf '{"format_version":1,"product":"usb-control","version":"%s","architecture":"arm64","supported_schema_min":1,"supported_schema_max":1,"tls_cert_sha256":"%s","upgrade_signing_key_id":"%s"}\n' \
+  "$VERSION" "$TLS_SHA256" "$UPGRADE_KEY_ID" >"$ROOT_DIR/opt/usb-control/install-meta/release.json"
 
-CERT_FP="$(openssl x509 -in "$TLS_CERT" -outform der | sha256sum | awk '{print toupper($1)}' | sed 's/../&:/g; s/:$//')"
-{
-  echo "package=usb-control"
-  echo "version=$DISPLAY_VERSION"
-  echo "debian_version=$VERSION"
-  echo "architecture=arm64"
-  echo "rust_binary_sha256=$(sha256sum "$BINARY" | awk '{print $1}')"
-  echo "db_migrate_binary_sha256=$(sha256sum "$DB_MIGRATE_BINARY" | awk '{print $1}')"
-  echo "db_migration_0001_sha256=$(sha256sum "$SCRIPT_DIR/db/migrations/0001_init.sql" | awk '{print $1}')"
-  echo "db_seed_0001_sha256=$(sha256sum "$SCRIPT_DIR/db/seeds/0001_default_data.sql" | awk '{print $1}')"
-  echo "tls_cert_sha256_fingerprint=$CERT_FP"
-  echo "tls_client_fingerprint=$CLIENT_CERT_FP"
-  echo "license_pubkey_sha256=$(sha256sum "$LICENSE_PUBKEY" | awk '{print $1}')"
-  echo "sm4_policy_key_sha256=$(sha256sum "$SM4_POLICY_KEY" | awk '{print $1}')"
-  echo "sm2_policy_key_sha256=$(sha256sum "$SM2_POLICY_KEY" | awk '{print $1}')"
-  echo "sm2_policy_pub_sha256=$(sha256sum "$SM2_POLICY_PUB" | awk '{print $1}')"
-  echo "stage=2"
-  echo "clamav_bundle=not-included"
-} > "$ROOT_DIR/opt/usb-control/install-meta/component-lock.txt"
-
-sed "s/@VERSION@/$VERSION/g" "$SCRIPT_DIR/debian/control.template" > "$ROOT_DIR/DEBIAN/control"
-install -m 0755 "$SCRIPT_DIR/debian/preinst" "$ROOT_DIR/DEBIAN/preinst"
-install -m 0755 "$SCRIPT_DIR/debian/postinst" "$ROOT_DIR/DEBIAN/postinst"
-install -m 0755 "$SCRIPT_DIR/debian/prerm" "$ROOT_DIR/DEBIAN/prerm"
-install -m 0755 "$SCRIPT_DIR/debian/postrm" "$ROOT_DIR/DEBIAN/postrm"
-
-find "$ROOT_DIR" -type d -exec chmod 0755 {} \;
-chmod 0755 "$ROOT_DIR/DEBIAN/preinst" "$ROOT_DIR/DEBIAN/postinst" "$ROOT_DIR/DEBIAN/prerm" "$ROOT_DIR/DEBIAN/postrm"
-chmod 0755 "$ROOT_DIR/opt/usb-control/bin/usb-control" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate" "$ROOT_DIR/opt/usb-control/bin/usb-control-db-migrate.sh"
-chmod 0600 "$ROOT_DIR/etc/usb-control/tls/server.key"
-chmod 0600 "$ROOT_DIR/etc/usb-control/keys/sm4_policy.key" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.key"
-chmod 0644 "$ROOT_DIR/etc/usb-control/keys/license_verify.pub" "$ROOT_DIR/etc/usb-control/keys/sm2_policy.pub"
+sed -e "s/@VERSION@/$VERSION/g" -e "s/@RUNTIME_DEPENDS@/$RUNTIME_DEPENDS/g" \
+  "$SCRIPT_DIR/debian/control.template" >"$ROOT_DIR/DEBIAN/control"
+for script in preinst postinst prerm postrm; do
+  install -m 0755 "$SCRIPT_DIR/debian/$script" "$ROOT_DIR/DEBIAN/$script"
+done
+(
+  cd "$ROOT_DIR"
+  find . -path './DEBIAN' -prune -o -type f -print | LC_ALL=C sort | sed 's#^\./##' | xargs md5sum >DEBIAN/md5sums
+)
+chmod 0644 "$ROOT_DIR/DEBIAN/control" "$ROOT_DIR/DEBIAN/md5sums"
 
 dpkg-deb --build --root-owner-group "$ROOT_DIR" "$DEB_PATH"
-sha256sum "$DEB_PATH" > "$DEB_PATH.sha256"
-
-echo "Deb: $DEB_PATH"
-cat "$DEB_PATH.sha256"
-echo "TLS cert SHA256 fingerprint: $CERT_FP"
+bash "$SCRIPT_DIR/tests/deb-package-test.sh" "$DEB_PATH" "$VERSION"
+sha256sum "$DEB_PATH" >"$DEB_PATH.sha256"
+echo "DEB ready: $DEB_PATH"

@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
-use smcrypto::{sm2, sm3};
+use smcrypto::sm2;
 
-use crate::{DebInspector, DebMetadata, StagedPackage, SystemVersion, UpgradeError};
-
-const SIGNING_DOMAIN: &[u8] = b"USB-CONTROL-UPGRADE-V1\0";
+use crate::{
+    upgrade_signing_digest, DebInspector, DebMetadata, StagedPackage, SystemVersion, UpgradeError,
+};
 
 pub struct VerificationContext {
     pub current_version: SystemVersion,
@@ -83,18 +83,10 @@ impl PackageVerifier {
             return Err(UpgradeError::SignatureInvalid);
         }
 
-        let mut signing_input = Vec::with_capacity(
-            SIGNING_DOMAIN.len() + 8 + package.manifest_raw.len() + deb_sha256.len(),
-        );
-        signing_input.extend_from_slice(SIGNING_DOMAIN);
-        signing_input.extend_from_slice(&(package.manifest_raw.len() as u64).to_be_bytes());
-        signing_input.extend_from_slice(&package.manifest_raw);
-        signing_input.extend_from_slice(deb_sha256);
-        let sm3_hex = sm3::sm3_hash(&signing_input);
-        let sm3_digest = hex::decode(sm3_hex).map_err(|_| UpgradeError::SignatureInvalid)?;
+        let digest = upgrade_signing_digest(&package.manifest_raw, deb_sha256)?;
 
         let verified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            sm2::Verify::new(&public_key).verify(&sm3_digest, &package.signature)
+            sm2::Verify::new(&public_key).verify(&digest, &package.signature)
         }))
         .unwrap_or(false);
         if !verified {

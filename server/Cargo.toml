@@ -14,6 +14,8 @@ members = [
     "crates/whitelist",
     "crates/policy-import-export",
     "crates/license-upgrade",
+    "crates/release-info",
+    "crates/release-tool",
     "crates/system-upgrade",
     "crates/updater",
     "crates/app",
@@ -89,6 +91,7 @@ common = { path = "crates/common" }
 storage = { path = "crates/storage" }
 clamav-status = { path = "crates/clamav-status" }
 device-runtime = { path = "crates/device-runtime" }
+release-info = { path = "crates/release-info" }
 
 [profile.release]
 opt-level = 3

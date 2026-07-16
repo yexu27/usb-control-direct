@@ -1,10 +1,8 @@
 //! 升级命令边界、单向安装顺序和有效发布提交点。
 
 use std::ffi::OsString;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::Read;
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -13,14 +11,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use system_upgrade::{
     read_installed_release, ActiveCommitError, ActiveRelease, ActiveReleaseStore, DebInspector,
     DpkgDebInspector, InstalledRelease, PackageStager, PackageVerifier, UpgradeManifest,
-    UpgradeResult, UpgradeResultStore, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
-    VerificationContext,
+    UpgradeResult, UpgradeResultStore, UpgradeStateLock, UpgradeStatus, UpgradeTask,
+    UpgradeTaskStore, VerificationContext,
 };
 use wait_timeout::ChildExt;
 
 use crate::health::{check_health, read_restart_count, HealthExpectation};
 use crate::migration::run_migration;
-use crate::UpdaterError;
+use crate::{ManagedInstallGuard, UpdaterError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandSpec {
@@ -229,6 +227,7 @@ pub struct UpgradePaths {
     pub database: PathBuf,
     pub sql_root: PathBuf,
     pub migrator: PathBuf,
+    pub managed_marker: PathBuf,
     pub health_timeout: Duration,
 }
 
@@ -242,6 +241,7 @@ impl UpgradePaths {
             database: root.join("device.db"),
             sql_root: PathBuf::from("/opt/usb-control/db"),
             migrator: PathBuf::from("/opt/usb-control/bin/usb-control-db-migrate"),
+            managed_marker: root.join("run/managed"),
             health_timeout: Duration::ZERO,
             root,
         }
@@ -253,6 +253,7 @@ impl UpgradePaths {
         paths.installed_release = PathBuf::from("/opt/usb-control/install-meta/release.json");
         paths.tls_certificate = PathBuf::from("/etc/usb-control/tls/server.crt");
         paths.database = PathBuf::from("/var/lib/usb-control/device.db");
+        paths.managed_marker = PathBuf::from("/run/usb-control-updater/managed");
         paths.health_timeout = Duration::from_secs(30);
         paths
     }
@@ -427,6 +428,12 @@ pub struct UpgradeExecutor<R, V, C> {
     clock: C,
 }
 
+struct LockedUpgradeStores<'a> {
+    tasks: &'a UpgradeTaskStore,
+    results: &'a UpgradeResultStore,
+    lock: &'a UpgradeStateLock,
+}
+
 impl<R, V, C> UpgradeExecutor<R, V, C> {
     pub fn new(paths: UpgradePaths, runner: R, revalidator: V, clock: C) -> Self {
         Self {
@@ -440,10 +447,15 @@ impl<R, V, C> UpgradeExecutor<R, V, C> {
 
 impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C> {
     pub fn execute(&self, upgrade_id: &str) -> Result<UpgradeExecutionReport, UpdaterError> {
-        let _lock = FileLock::acquire(&self.paths.root.join("lock"))?;
+        let lock = UpgradeStateLock::acquire(&self.paths.root)?;
         let tasks = UpgradeTaskStore::new(self.paths.root.clone())?;
         let results = UpgradeResultStore::new(self.paths.root.clone())?;
         let active_releases = ActiveReleaseStore::new(self.paths.root.clone())?;
+        let stores = LockedUpgradeStores {
+            tasks: &tasks,
+            results: &results,
+            lock: &lock,
+        };
         let task = tasks
             .current()?
             .ok_or_else(|| UpdaterError::TaskInvalid("current.json 不存在".into()))?;
@@ -453,8 +465,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             Ok(value) => value,
             Err(error) => {
                 return Err(self.finish_failed(
-                    &tasks,
-                    &results,
+                    &stores,
                     &task,
                     "revalidating",
                     error,
@@ -465,10 +476,23 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
         let target_release = verified.target_release;
         let manifest = verified.manifest;
         let candidate = verified.candidate_deb;
+        let _managed_install = match ManagedInstallGuard::create(&self.paths.managed_marker) {
+            Ok(guard) => guard,
+            Err(error) => {
+                return Err(self.finish_failed(
+                    &stores,
+                    &task,
+                    "preparing_install",
+                    error,
+                    &mut last_timestamp,
+                ));
+            }
+        };
 
         let install_result = (|| -> Result<(), UpdaterError> {
             transition(
                 &tasks,
+                &lock,
                 upgrade_id,
                 UpgradeStatus::Stopping,
                 next_time(&self.clock, &mut last_timestamp)?,
@@ -482,6 +506,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             )?;
             transition(
                 &tasks,
+                &lock,
                 upgrade_id,
                 UpgradeStatus::Installing,
                 next_time(&self.clock, &mut last_timestamp)?,
@@ -489,6 +514,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             install_deb(&self.runner, &candidate)?;
             transition(
                 &tasks,
+                &lock,
                 upgrade_id,
                 UpgradeStatus::Migrating,
                 next_time(&self.clock, &mut last_timestamp)?,
@@ -501,6 +527,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             )?;
             transition(
                 &tasks,
+                &lock,
                 upgrade_id,
                 UpgradeStatus::Starting,
                 next_time(&self.clock, &mut last_timestamp)?,
@@ -517,6 +544,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             )?;
             transition(
                 &tasks,
+                &lock,
                 upgrade_id,
                 UpgradeStatus::HealthChecking,
                 next_time(&self.clock, &mut last_timestamp)?,
@@ -534,32 +562,23 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
         })();
         if let Err(error) = install_result {
             let stage = stage_of(&error);
-            return Err(self.finish_failed(
-                &tasks,
-                &results,
-                &task,
-                &stage,
-                error,
-                &mut last_timestamp,
-            ));
+            return Err(self.finish_failed(&stores, &task, &stage, error, &mut last_timestamp));
         }
 
         let committed_at = next_time(&self.clock, &mut last_timestamp)?;
         let active = ActiveRelease {
             format_version: 1,
-            upgrade_id: upgrade_id.into(),
             version: manifest.package_version,
-            deb_sha256: manifest.deb_sha256,
             schema_version: manifest.schema_to,
             committed_at,
+            online_upgrade_id: Some(upgrade_id.into()),
         };
         let mut warnings = Vec::new();
-        match active_releases.commit(&active) {
+        match active_releases.commit(&lock, &active) {
             Ok(()) => {}
             Err(ActiveCommitError::BeforeRename(error)) => {
                 return Err(self.finish_failed(
-                    &tasks,
-                    &results,
+                    &stores,
                     &task,
                     "committing",
                     UpdaterError::Domain(error),
@@ -583,14 +602,14 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             original_error: None,
             finished_at,
         };
-        if let Err(error) = results.write(&committed) {
+        if let Err(error) = results.write(&lock, &committed) {
             warnings.push(error.to_string());
         } else if let Err(error) =
-            tasks.ensure_terminal(upgrade_id, UpgradeStatus::Committed, finished_at)
+            tasks.ensure_terminal(&lock, upgrade_id, UpgradeStatus::Committed, finished_at)
         {
             warnings.push(error.to_string());
         }
-        if let Err(error) = remove_staging(&self.paths.staging_dir, upgrade_id) {
+        if let Err(error) = remove_staging(&lock, &self.paths.staging_dir, upgrade_id) {
             warnings.push(error.to_string());
         }
         Ok(UpgradeExecutionReport {
@@ -600,8 +619,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
 
     fn finish_failed(
         &self,
-        tasks: &UpgradeTaskStore,
-        results: &UpgradeResultStore,
+        stores: &LockedUpgradeStores<'_>,
         task: &UpgradeTask,
         failed_stage: &str,
         original: UpdaterError,
@@ -624,12 +642,15 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             finished_at,
         };
         let mut persistence_errors = Vec::new();
-        if let Err(error) = results.write(&result) {
+        if let Err(error) = stores.results.write(stores.lock, &result) {
             persistence_errors.push(error.to_string());
         }
-        if let Err(error) =
-            tasks.ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, finished_at)
-        {
+        if let Err(error) = stores.tasks.ensure_terminal(
+            stores.lock,
+            &task.upgrade_id,
+            UpgradeStatus::Failed,
+            finished_at,
+        ) {
             persistence_errors.push(error.to_string());
         }
         if persistence_errors.is_empty() {
@@ -657,11 +678,12 @@ fn next_time_or_fallback(clock: &dyn Clock, last: &mut i64) -> i64 {
 
 fn transition(
     store: &UpgradeTaskStore,
+    lock: &UpgradeStateLock,
     upgrade_id: &str,
     status: UpgradeStatus,
     now: i64,
 ) -> Result<(), UpdaterError> {
-    store.transition(upgrade_id, status, now)?;
+    store.transition(lock, upgrade_id, status, now)?;
     Ok(())
 }
 
@@ -725,48 +747,15 @@ fn configure_and_reload(runner: &dyn CommandRunner) -> Result<(), UpdaterError> 
     run_command(runner, "starting", "systemctl", ["daemon-reload"], 60)
 }
 
-fn remove_staging(parent: &Path, upgrade_id: &str) -> Result<(), UpdaterError> {
+fn remove_staging(
+    _lock: &UpgradeStateLock,
+    parent: &Path,
+    upgrade_id: &str,
+) -> Result<(), UpdaterError> {
     let path = parent.join(upgrade_id);
     if path.exists() {
         fs::remove_dir_all(&path)?;
         File::open(parent)?.sync_all()?;
     }
     Ok(())
-}
-
-fn create_private_dir_all(path: &Path) -> Result<(), UpdaterError> {
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(path)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    Ok(())
-}
-
-struct FileLock(File);
-
-impl FileLock {
-    fn acquire(path: &Path) -> Result<Self, UpdaterError> {
-        if let Some(parent) = path.parent() {
-            create_private_dir_all(parent)?;
-        }
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(path)?;
-        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if result != 0 {
-            return Err(UpdaterError::TaskInvalid("已有 updater 正在执行".into()));
-        }
-        Ok(Self(file))
-    }
-}
-
-impl Drop for FileLock {
-    fn drop(&mut self) {
-        let _ = unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_UN) };
-    }
 }

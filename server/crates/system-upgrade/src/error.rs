@@ -34,6 +34,10 @@ pub enum UpgradeError {
     DigestMismatch,
     #[error("升级包签名无效")]
     SignatureInvalid,
+    #[error("升级签名摘要计算失败: {0}")]
+    SigningDigest(String),
+    #[error("升级签名摘要长度非法")]
+    InvalidSigningDigestLength,
     #[error("升级包产品不匹配")]
     ProductMismatch,
     #[error("升级包架构不匹配")]

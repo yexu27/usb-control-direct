@@ -4,5 +4,6 @@ Section: admin
 Priority: optional
 Architecture: arm64
 Maintainer: Andisec <support@andisec.local>
+Depends: clamav, clamav-daemon, clamav-freshclam, @RUNTIME_DEPENDS@
 Description: USB security control device server
  Offline server package for RK3568 USB security control device.

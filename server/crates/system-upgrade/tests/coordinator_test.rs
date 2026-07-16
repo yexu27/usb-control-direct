@@ -10,7 +10,7 @@ use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, PrepareUpgradeRequest,
     SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradeError, UpgradePreflight,
     UpgradePreflightFailure, UpgradePreflightRequest, UpgradeResultStore, UpgradeScheduler,
-    UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
 };
 
 use support::{sha256_hex, MatchingDebInspector, PackageFixture};
@@ -79,19 +79,23 @@ fn accepts_only_legal_state_transitions() {
 fn failed_is_terminal_and_releases_current_slot() {
     let root = tempfile::tempdir().unwrap();
     let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(root.path()).unwrap();
     let task = accepted_task("upgrade-failed-terminal");
     store
-        .create(&UpgradeTask {
-            status: UpgradeStatus::Prepared,
-            ..task.clone()
-        })
+        .create(
+            &guard,
+            &UpgradeTask {
+                status: UpgradeStatus::Prepared,
+                ..task.clone()
+            },
+        )
         .unwrap();
     store
-        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .transition(&guard, &task.upgrade_id, UpgradeStatus::Accepted, 101)
         .unwrap();
 
     let failed = store
-        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::Failed, 102)
         .unwrap();
 
     assert_eq!(failed.status, UpgradeStatus::Failed);
@@ -106,22 +110,26 @@ fn failed_is_terminal_and_releases_current_slot() {
 fn ensure_terminal_is_idempotent_for_same_task_and_status() {
     let root = tempfile::tempdir().unwrap();
     let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(root.path()).unwrap();
     let task = accepted_task("upgrade-idempotent-terminal");
     store
-        .create(&UpgradeTask {
-            status: UpgradeStatus::Prepared,
-            ..task.clone()
-        })
+        .create(
+            &guard,
+            &UpgradeTask {
+                status: UpgradeStatus::Prepared,
+                ..task.clone()
+            },
+        )
         .unwrap();
     store
-        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .transition(&guard, &task.upgrade_id, UpgradeStatus::Accepted, 101)
         .unwrap();
 
     let first = store
-        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::Failed, 102)
         .unwrap();
     let second = store
-        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 103)
+        .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::Failed, 103)
         .unwrap();
 
     assert_eq!(first, second);
@@ -131,22 +139,26 @@ fn ensure_terminal_is_idempotent_for_same_task_and_status() {
 fn ensure_terminal_rejects_different_status() {
     let root = tempfile::tempdir().unwrap();
     let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(root.path()).unwrap();
     let task = accepted_task("upgrade-terminal-mismatch");
     store
-        .create(&UpgradeTask {
-            status: UpgradeStatus::Prepared,
-            ..task.clone()
-        })
+        .create(
+            &guard,
+            &UpgradeTask {
+                status: UpgradeStatus::Prepared,
+                ..task.clone()
+            },
+        )
         .unwrap();
     store
-        .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101)
+        .transition(&guard, &task.upgrade_id, UpgradeStatus::Accepted, 101)
         .unwrap();
     store
-        .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 102)
+        .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::Failed, 102)
         .unwrap();
 
     assert!(store
-        .ensure_terminal(&task.upgrade_id, UpgradeStatus::ScheduleFailed, 103)
+        .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::ScheduleFailed, 103,)
         .is_err());
 }
 
@@ -154,16 +166,20 @@ fn ensure_terminal_rejects_different_status() {
 fn ensure_terminal_rejects_different_current_task() {
     let root = tempfile::tempdir().unwrap();
     let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(root.path()).unwrap();
     let task = accepted_task("upgrade-current-task");
     store
-        .create(&UpgradeTask {
-            status: UpgradeStatus::Prepared,
-            ..task
-        })
+        .create(
+            &guard,
+            &UpgradeTask {
+                status: UpgradeStatus::Prepared,
+                ..task
+            },
+        )
         .unwrap();
 
     assert!(store
-        .ensure_terminal("upgrade-another-task", UpgradeStatus::Failed, 102)
+        .ensure_terminal(&guard, "upgrade-another-task", UpgradeStatus::Failed, 102)
         .is_err());
 }
 
@@ -171,19 +187,28 @@ fn ensure_terminal_rejects_different_current_task() {
 fn task_history_keeps_latest_twenty_by_updated_at() {
     let root = tempfile::tempdir().unwrap();
     let store = UpgradeTaskStore::new(root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(root.path()).unwrap();
     for index in 0..22 {
         let task = accepted_task(&format!("upgrade-{index:02}"));
         store
-            .create(&UpgradeTask {
-                status: UpgradeStatus::Prepared,
-                ..task.clone()
-            })
+            .create(
+                &guard,
+                &UpgradeTask {
+                    status: UpgradeStatus::Prepared,
+                    ..task.clone()
+                },
+            )
             .unwrap();
         store
-            .transition(&task.upgrade_id, UpgradeStatus::Accepted, 101 + index)
+            .transition(
+                &guard,
+                &task.upgrade_id,
+                UpgradeStatus::Accepted,
+                101 + index,
+            )
             .unwrap();
         store
-            .ensure_terminal(&task.upgrade_id, UpgradeStatus::Failed, 200 + index)
+            .ensure_terminal(&guard, &task.upgrade_id, UpgradeStatus::Failed, 200 + index)
             .unwrap();
     }
 

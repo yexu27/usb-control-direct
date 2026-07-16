@@ -25,6 +25,7 @@ policy-import-export = { path = "../policy-import-export" }
 license-upgrade = { path = "../license-upgrade" }
 libc = { workspace = true }
 protocol-gateway = { path = "../protocol-gateway" }
+release-info = { workspace = true }
 system-upgrade = { path = "../system-upgrade" }
 tokio = { workspace = true }
 serde = { workspace = true }

@@ -3,22 +3,19 @@ set -euo pipefail
 
 action="${1:-remove}"
 
-if [ "$action" = "remove" ] || [ "$action" = "purge" ]; then
-  rm -f /etc/systemd/system/usb-control.service
-  rm -rf /opt/usb-control
-
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload || true
-  fi
+if [ "$action" = 'purge' ]; then
+  for directory in /etc/usb-control /var/lib/usb-control /var/log/usb-control; do
+    if [ -d "$directory" ]; then
+      find "$directory" -mindepth 1 -delete
+      rmdir "$directory" 2>/dev/null || true
+    fi
+  done
 fi
 
-if [ "$action" = "purge" ]; then
-  rm -rf /etc/usb-control
-  rm -rf /var/lib/usb-control
-  rm -rf /var/log/usb-control
-  echo "usb-control postrm: purged all data"
-else
-  echo "usb-control postrm: preserved /var/lib/usb-control and /var/log/usb-control"
+if [ "$action" = 'remove' ] || [ "$action" = 'purge' ]; then
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+  fi
 fi
 
 exit 0

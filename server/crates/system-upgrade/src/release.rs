@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::state::{
     is_lower_hex_64, read_optional_json, sync_dir, validate_upgrade_id, PersistedFormat,
 };
-use crate::{SystemVersion, UpgradeError, UpgradeTaskStore};
+use crate::{SystemVersion, UpgradeError, UpgradeStateLock, UpgradeTaskStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -29,11 +29,10 @@ pub struct InstalledRelease {
 #[serde(deny_unknown_fields)]
 pub struct ActiveRelease {
     pub format_version: u32,
-    pub upgrade_id: String,
     pub version: SystemVersion,
-    pub deb_sha256: String,
     pub schema_version: u32,
     pub committed_at: i64,
+    pub online_upgrade_id: Option<String>,
 }
 
 pub fn read_installed_release(path: &Path) -> Result<InstalledRelease, UpgradeError> {
@@ -63,7 +62,13 @@ impl ActiveReleaseStore {
         read_optional_json(&self.root.join("active-release.json"))
     }
 
-    pub fn commit(&self, release: &ActiveRelease) -> Result<(), ActiveCommitError> {
+    pub fn commit(
+        &self,
+        lock: &UpgradeStateLock,
+        release: &ActiveRelease,
+    ) -> Result<(), ActiveCommitError> {
+        lock.require_root(&self.root)
+            .map_err(ActiveCommitError::BeforeRename)?;
         release
             .validate_persisted()
             .map_err(ActiveCommitError::BeforeRename)?;
@@ -113,14 +118,13 @@ impl PersistedFormat for InstalledRelease {
 
 impl PersistedFormat for ActiveRelease {
     fn validate_persisted(&self) -> Result<(), UpgradeError> {
-        if self.format_version != 1
-            || self.schema_version == 0
-            || self.committed_at <= 0
-            || !is_lower_hex_64(&self.deb_sha256)
-        {
+        if self.format_version != 1 || self.schema_version == 0 || self.committed_at <= 0 {
             return Err(UpgradeError::State("有效发布字段非法".into()));
         }
-        validate_upgrade_id(&self.upgrade_id)
+        if let Some(upgrade_id) = &self.online_upgrade_id {
+            validate_upgrade_id(upgrade_id)?;
+        }
+        Ok(())
     }
 }
 

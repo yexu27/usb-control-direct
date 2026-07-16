@@ -3,13 +3,19 @@ set -euo pipefail
 
 action="${1:-remove}"
 
-if [ "$action" = "remove" ] || [ "$action" = "deconfigure" ] || [ "$action" = "upgrade" ]; then
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl stop usb-control || true
-    if [ "$action" = "remove" ]; then
-      systemctl disable usb-control || true
-    fi
-  fi
+if [ "$action" = 'upgrade' ] && [ -e /run/usb-control-updater/managed ]; then
+  exit 0
 fi
+
+case "$action" in
+  remove|deconfigure|upgrade)
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl stop usb-control.service
+      if [ "$action" = 'remove' ]; then
+        systemctl disable usb-control.service
+      fi
+    fi
+    ;;
+esac
 
 exit 0

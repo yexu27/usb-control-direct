@@ -4,7 +4,7 @@ use common::proto::{CmdGetSystemInfo, RspSystemInfo};
 use prost::Message;
 use protocol_gateway::codec;
 use protocol_gateway::handlers::system::handle_get_system_info;
-use system_upgrade::{ActiveRelease, ActiveReleaseStore, SystemVersion};
+use system_upgrade::{ActiveRelease, ActiveReleaseStore, SystemVersion, UpgradeStateLock};
 
 use support::request_fixture;
 
@@ -17,16 +17,19 @@ fn system_info_reads_committed_release_not_candidate_version() {
         .unwrap()
         .config_set("system_version", "3.0.1")
         .unwrap();
-    ActiveReleaseStore::new(fixture.upgrade_root.path().to_path_buf())
-        .unwrap()
-        .commit(&ActiveRelease {
-            format_version: 1,
-            upgrade_id: "upgrade-system-info".into(),
-            version: SystemVersion::parse("3.0.2").unwrap(),
-            deb_sha256: "a".repeat(64),
-            schema_version: 1,
-            committed_at: 200,
-        })
+    let releases = ActiveReleaseStore::new(fixture.upgrade_root.path().to_path_buf()).unwrap();
+    let guard = UpgradeStateLock::acquire(fixture.upgrade_root.path()).unwrap();
+    releases
+        .commit(
+            &guard,
+            &ActiveRelease {
+                format_version: 1,
+                version: SystemVersion::parse("3.0.2").unwrap(),
+                schema_version: 1,
+                committed_at: 200,
+                online_upgrade_id: None,
+            },
+        )
         .unwrap();
     let frame = handle_get_system_info(
         &fixture.context,

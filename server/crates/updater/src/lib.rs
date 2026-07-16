@@ -3,6 +3,7 @@
 mod error;
 mod executor;
 mod health;
+mod install;
 mod migration;
 
 pub use error::UpdaterError;
@@ -14,3 +15,4 @@ pub use executor::{
 pub use health::{
     certificate_sha256, validate_health_snapshot, HealthExpectation, ServiceSnapshot,
 };
+pub use install::{parse_command, InstallFinalizer, ManagedInstallGuard, UpdaterCommand};

@@ -1,4 +1,8 @@
+// 每个 integration test 会把共享辅助模块编译为独立 target，部分辅助项只由另一 target 使用。
+#![allow(dead_code)]
+
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use system_upgrade::{InstalledRelease, SystemVersion, UpgradeManifest, UpgradeTask};
@@ -30,6 +34,8 @@ pub fn target_release(tls_cert_sha256: String) -> InstalledRelease {
 pub struct FakeCommandRunner {
     calls: Arc<Mutex<Vec<CommandSpec>>>,
     outputs: Arc<Mutex<VecDeque<Result<CommandOutput, UpdaterError>>>>,
+    observed_path: Arc<Mutex<Option<PathBuf>>>,
+    observations: Arc<Mutex<Vec<bool>>>,
 }
 
 impl FakeCommandRunner {
@@ -57,11 +63,22 @@ impl FakeCommandRunner {
     pub fn calls(&self) -> Vec<CommandSpec> {
         self.calls.lock().unwrap().clone()
     }
+
+    pub fn observe_path(&self, path: PathBuf) {
+        *self.observed_path.lock().unwrap() = Some(path);
+    }
+
+    pub fn observations(&self) -> Vec<bool> {
+        self.observations.lock().unwrap().clone()
+    }
 }
 
 impl CommandRunner for FakeCommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput, UpdaterError> {
         self.calls.lock().unwrap().push(command.clone());
+        if let Some(path) = self.observed_path.lock().unwrap().as_ref() {
+            self.observations.lock().unwrap().push(path.is_file());
+        }
         self.outputs
             .lock()
             .unwrap()
@@ -118,6 +135,24 @@ impl FakeClock {
         Self {
             values: Mutex::new(std::iter::repeat_n(value, 64).collect()),
         }
+    }
+
+    pub fn sequence(values: impl IntoIterator<Item = i64>) -> Self {
+        Self {
+            values: Mutex::new(values.into_iter().collect()),
+        }
+    }
+}
+
+impl Clock for &FakeClock {
+    fn now(&self) -> Result<i64, UpdaterError> {
+        (*self).now()
+    }
+}
+
+impl CommandRunner for &FakeCommandRunner {
+    fn run(&self, command: &CommandSpec) -> Result<CommandOutput, UpdaterError> {
+        (*self).run(command)
     }
 }
 

@@ -12,6 +12,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
+    if matches!(args.as_slice(), [_, flag] if matches!(flag.as_str(), "--version" | "-V")) {
+        println!("{}", release_info::display_version());
+        return Ok(());
+    }
     if args.len() != 3 {
         return Err(format!(
             "usage: {} <database-path> <sql-root>",

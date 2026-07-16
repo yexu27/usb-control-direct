@@ -92,9 +92,9 @@ fn load_from_args_uses_default_config_path_when_missing() {
 }
 
 #[test]
-fn package_version_matches_cargo_package_version() {
+fn package_version_uses_the_shared_release_version() {
     assert_eq!(
         AppConfig::package_version(),
-        concat!("V", env!("CARGO_PKG_VERSION"))
+        release_info::display_version()
     );
 }

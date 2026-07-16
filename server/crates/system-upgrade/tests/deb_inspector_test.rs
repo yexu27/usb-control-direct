@@ -49,11 +49,16 @@ fn rejects_control_fields_that_disagree_with_release_metadata() {
 #[test]
 fn rejects_missing_required_file_or_migration() {
     for omitted in [
+        "opt/usb-control/bin/usb-control",
         "opt/usb-control/bin/usb-control-updater",
+        "opt/usb-control/bin/usb-control-db-migrate",
+        "opt/usb-control/install-meta/release.json",
+        "lib/systemd/system/usb-control.service",
         "lib/systemd/system/usb-control-updater.service",
         "opt/usb-control/db/migrations/0001_init.sql",
-        "etc/usb-control/keys/upgrade_verify.id",
-        "etc/usb-control/keys/upgrade_verify.pub",
+        "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.id",
+        "opt/usb-control/defaults/etc/usb-control/keys/upgrade_verify.pub",
+        "opt/usb-control/defaults/etc/usb-control/tls/server.crt",
     ] {
         let fixture = write_deb_fixture(DebFixtureOptions {
             omit_path: Some(omitted),
@@ -86,9 +91,11 @@ fn rejects_certificate_fingerprint_mismatch_and_unknown_metadata_field() {
 }
 
 #[test]
-fn rejects_every_forbidden_release_content_class_but_allows_tls_private_key() {
+fn rejects_every_forbidden_release_content_class() {
     let forbidden = [
-        "etc/usb-control/keys/upgrade_sign.key",
+        "opt/usb-control/install-meta/VERSION",
+        "opt/usb-control/install-meta/component-lock.txt",
+        "opt/usb-control/defaults/etc/usb-control/keys/upgrade_sign.key",
         "opt/usb-control/tests/case.json",
         "opt/usb-control/bin/smoke.sh",
         "opt/usb-control/testdata/sample.bin",
@@ -100,7 +107,7 @@ fn rejects_every_forbidden_release_content_class_but_allows_tls_private_key() {
         "opt/usb-control/bundle/nested.deb",
         "opt/usb-control/bin/integration-test",
         "opt/usb-control/bin/usb-control-otg-init.sh",
-        "etc/usb-control/keys/sign.key",
+        "opt/usb-control/defaults/etc/usb-control/keys/sign.key",
     ];
     for path in forbidden {
         let fixture = write_deb_fixture(DebFixtureOptions {
@@ -112,14 +119,6 @@ fn rejects_every_forbidden_release_content_class_but_allows_tls_private_key() {
             "forbidden release content must be rejected: {path}"
         );
     }
-
-    let tls_key = write_deb_fixture(DebFixtureOptions {
-        extra_paths: vec!["etc/usb-control/tls/server.key"],
-        ..DebFixtureOptions::default()
-    });
-    DpkgDebInspector::default()
-        .inspect(&tls_key.path)
-        .expect("formal TLS server.key must not be treated as an upgrade private key");
 }
 
 #[test]
@@ -131,6 +130,15 @@ fn rejects_symlink_and_hardlink_even_when_the_path_is_allowlisted() {
         });
         assert!(DpkgDebInspector::default().inspect(&fixture.path).is_err());
     }
+}
+
+#[test]
+fn rejects_directory_outside_allowed_parent_set() {
+    let fixture = write_deb_fixture(DebFixtureOptions {
+        special_entry: Some(("opt/usb-control/rogue", b'5')),
+        ..DebFixtureOptions::default()
+    });
+    assert!(DpkgDebInspector::default().inspect(&fixture.path).is_err());
 }
 
 #[test]
@@ -191,6 +199,27 @@ fn rejects_migration_format_duplicates_and_gaps() {
     ] {
         let fixture = write_deb_fixture(DebFixtureOptions {
             migration_paths: paths,
+            ..DebFixtureOptions::default()
+        });
+        assert!(DpkgDebInspector::default().inspect(&fixture.path).is_err());
+    }
+}
+
+#[test]
+fn rejects_seed_format_duplicates_and_gaps() {
+    for paths in [
+        vec![
+            "opt/usb-control/db/seeds/0001_default.sql",
+            "opt/usb-control/db/seeds/0003_gap.sql",
+        ],
+        vec![
+            "opt/usb-control/db/seeds/0001_default.sql",
+            "opt/usb-control/db/seeds/0001_duplicate.sql",
+        ],
+        vec!["opt/usb-control/db/seeds/1_bad.sql"],
+    ] {
+        let fixture = write_deb_fixture(DebFixtureOptions {
+            seed_paths: paths,
             ..DebFixtureOptions::default()
         });
         assert!(DpkgDebInspector::default().inspect(&fixture.path).is_err());
