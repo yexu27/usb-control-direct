@@ -677,7 +677,7 @@ usb-control.service
 | `/etc/usb-control/tls/` | TLS 证书和私钥 |
 | `/etc/usb-control/keys/` | 许可校验和策略密钥 |
 | `/var/lib/usb-control/device.db` | SQLite 数据库 |
-| `/var/lib/usb-control/upgrade/` | 当前发布状态、在线升级任务历史和结果 |
+| `/var/lib/usb-control/upgrade/` | 在线升级任务、历史和结果 |
 | `/var/log/usb-control/` | 服务日志和扫描日志 |
 
 ### 6.3 服务配置
@@ -727,11 +727,13 @@ sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 sudo apt-get install -y ./usb-control_V3.0.2_arm64.deb
 ```
 
-直接安装和直接升级均由 DEB 完成数据库迁移、服务启动、健康检查和当前发布状态提交。升级保留 `/etc/usb-control` 中的现场配置与密钥、`/var/lib/usb-control` 中的数据库和授权状态，以及 `/var/log/usb-control` 中的日志。未过期授权不需要重新办理。
+直接安装和直接升级均由 DEB 完成数据库迁移、服务启动和健康检查。健康检查使用 `/opt/usb-control/install-meta/release.json` 中的实际安装版本；检查成功后，安装程序将该版本写入 SQLite `system_config.system_version`。升级保留 `/etc/usb-control` 中的现场配置与密钥、`/var/lib/usb-control` 中的数据库和授权状态，以及 `/var/log/usb-control` 中的日志。未过期授权不需要重新办理。
 
 在线升级时，在 Windows Client 的“系统升级”界面选择 `usb-control_V3.0.2_arm64.bin`。Client 根据文件内容计算 SHA-256 并将升级包、目标版本和摘要上传到 RK3568。服务端完整接收、校验并持久化升级任务后先返回受理结果，Client 应显示“升级包已接收，Server 开始升级”。随后主服务停止，Client 按正常连接机制显示断开；新服务启动后重新连接，在操作日志中查询最终成功或失败结果。
 
-在线升级由主服务受理任务并启动短周期 `usb-control-updater`。updater 复验签名包和内部 DEB，调用系统包管理器安装，再执行数据库迁移、服务启动、健康检查和发布状态提交。updater 完成后退出，不作为常驻服务运行。
+在线升级由主服务受理任务并启动短周期 `usb-control-updater`。updater 在停服前读取 SQLite 中的业务版本和 Schema，复验签名包、内部 DEB 及升级源约束，调用系统包管理器安装，再执行数据库迁移、服务启动和健康检查。健康检查成功后，updater 使用 compare-and-set 将 `system_config.system_version` 从任务源版本提交为目标版本；只有数据库提交成功才记录升级成功结果。updater 完成后退出，不作为常驻服务运行。
+
+Windows Client 查询和显示的是 SQLite `system_config.system_version` 中已经提交的业务版本。服务就绪和健康检查使用 `release.json` 中的实际运行版本，两者职责不同。系统不使用 `active-release.json` 或 `install-meta/VERSION` 保存当前版本。
 
 直接安装或在线升级失败时，不恢复旧版本。检查 `journalctl -u usb-control -u usb-control-updater` 和 `/var/lib/usb-control/upgrade/` 中的任务结果，处理故障后人工重新安装可信的正式 DEB。直接 DEB 安装失败时无需通过 Client 处理。
 

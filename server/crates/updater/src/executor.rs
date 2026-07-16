@@ -9,16 +9,16 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use system_upgrade::{
-    read_installed_release, ActiveCommitError, ActiveRelease, ActiveReleaseStore, DebInspector,
-    DpkgDebInspector, InstalledRelease, PackageStager, PackageVerifier, UpgradeManifest,
-    UpgradeResult, UpgradeResultStore, UpgradeStateLock, UpgradeStatus, UpgradeTask,
-    UpgradeTaskStore, VerificationContext,
+    read_installed_release, DebInspector, DpkgDebInspector, InstalledRelease, PackageStager,
+    PackageVerifier, SystemVersion, UpgradeManifest, UpgradeResult, UpgradeResultStore,
+    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
 };
+use usb_control_db_migrate::UpgradeDatabaseState;
 use wait_timeout::ChildExt;
 
 use crate::health::{check_health, read_restart_count, HealthExpectation};
 use crate::migration::run_migration;
-use crate::{ManagedInstallGuard, UpdaterError};
+use crate::{ManagedInstallGuard, UpdaterError, UpgradeDatabase};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandSpec {
@@ -293,6 +293,7 @@ pub trait PackageRevalidator {
         &self,
         paths: &UpgradePaths,
         task: &UpgradeTask,
+        database_state: &UpgradeDatabaseState,
     ) -> Result<RevalidatedPackage, UpdaterError>;
 }
 
@@ -349,21 +350,20 @@ impl PackageRevalidator for SharedPackageRevalidator {
         &self,
         paths: &UpgradePaths,
         task: &UpgradeTask,
+        database_state: &UpgradeDatabaseState,
     ) -> Result<RevalidatedPackage, UpdaterError> {
-        let active = ActiveReleaseStore::new(paths.root.clone())?
-            .current()?
-            .ok_or_else(|| UpdaterError::TaskInvalid("active-release.json 不存在".into()))?;
         let installed = read_installed_release(&self.installed_release)?;
         let active_key_text = fs::read_to_string(&self.active_key_id)?;
         let active_key_id = strict_line(&active_key_text)?;
-        if active.version != task.source_version
-            || installed.version != active.version
-            || installed.supported_schema_min > active.schema_version
-            || installed.supported_schema_max < active.schema_version
+        let database_version = SystemVersion::parse(&database_state.system_version)?;
+        if database_version != task.source_version
+            || installed.version != task.source_version
+            || installed.supported_schema_min > database_state.schema_version
+            || installed.supported_schema_max < database_state.schema_version
             || installed.upgrade_signing_key_id != active_key_id
         {
             return Err(UpdaterError::TaskInvalid(
-                "当前有效发布、信任根和安装元数据不一致".into(),
+                "数据库源状态、信任根和安装元数据不一致".into(),
             ));
         }
         let package = PackageStager::new(paths.root.clone(), self.max_package_size)
@@ -372,8 +372,8 @@ impl PackageRevalidator for SharedPackageRevalidator {
             PackageVerifier::new(self.verify_key_dir.clone(), self.deb_inspector.clone()).verify(
                 package,
                 &VerificationContext {
-                    current_version: active.version,
-                    current_schema: active.schema_version,
+                    current_version: database_version,
+                    current_schema: database_state.schema_version,
                     supported_schema_max: installed.supported_schema_max,
                     protocol_version: 1,
                     client_target_version: task.target_version.to_string(),
@@ -425,6 +425,7 @@ pub struct UpgradeExecutor<R, V, C> {
     paths: UpgradePaths,
     runner: R,
     revalidator: V,
+    database: Arc<dyn UpgradeDatabase>,
     clock: C,
 }
 
@@ -435,11 +436,18 @@ struct LockedUpgradeStores<'a> {
 }
 
 impl<R, V, C> UpgradeExecutor<R, V, C> {
-    pub fn new(paths: UpgradePaths, runner: R, revalidator: V, clock: C) -> Self {
+    pub fn new(
+        paths: UpgradePaths,
+        runner: R,
+        revalidator: V,
+        database: Arc<dyn UpgradeDatabase>,
+        clock: C,
+    ) -> Self {
         Self {
             paths,
             runner,
             revalidator,
+            database,
             clock,
         }
     }
@@ -450,7 +458,6 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
         let lock = UpgradeStateLock::acquire(&self.paths.root)?;
         let tasks = UpgradeTaskStore::new(self.paths.root.clone())?;
         let results = UpgradeResultStore::new(self.paths.root.clone())?;
-        let active_releases = ActiveReleaseStore::new(self.paths.root.clone())?;
         let stores = LockedUpgradeStores {
             tasks: &tasks,
             results: &results,
@@ -461,7 +468,43 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             .ok_or_else(|| UpdaterError::TaskInvalid("current.json 不存在".into()))?;
         validate_task(&task, upgrade_id)?;
         let mut last_timestamp = task.updated_at;
-        let verified = match self.revalidator.revalidate(&self.paths, &task) {
+        let database_state = match self.database.read_state() {
+            Ok(state) => state,
+            Err(error) => {
+                return Err(self.finish_failed(
+                    &stores,
+                    &task,
+                    "revalidating",
+                    error,
+                    &mut last_timestamp,
+                ));
+            }
+        };
+        let database_version = match SystemVersion::parse(&database_state.system_version) {
+            Ok(version) if version == task.source_version => version,
+            Ok(_) => {
+                return Err(self.finish_failed(
+                    &stores,
+                    &task,
+                    "revalidating",
+                    UpdaterError::TaskInvalid("数据库业务版本与任务源版本不一致".into()),
+                    &mut last_timestamp,
+                ));
+            }
+            Err(error) => {
+                return Err(self.finish_failed(
+                    &stores,
+                    &task,
+                    "revalidating",
+                    UpdaterError::Domain(error),
+                    &mut last_timestamp,
+                ));
+            }
+        };
+        let verified = match self
+            .revalidator
+            .revalidate(&self.paths, &task, &database_state)
+        {
             Ok(value) => value,
             Err(error) => {
                 return Err(self.finish_failed(
@@ -566,26 +609,19 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
         }
 
         let committed_at = next_time(&self.clock, &mut last_timestamp)?;
-        let active = ActiveRelease {
-            format_version: 1,
-            version: manifest.package_version,
-            schema_version: manifest.schema_to,
-            committed_at,
-            online_upgrade_id: Some(upgrade_id.into()),
-        };
         let mut warnings = Vec::new();
-        match active_releases.commit(&lock, &active) {
-            Ok(()) => {}
-            Err(ActiveCommitError::BeforeRename(error)) => {
-                return Err(self.finish_failed(
-                    &stores,
-                    &task,
-                    "committing",
-                    UpdaterError::Domain(error),
-                    &mut last_timestamp,
-                ));
-            }
-            Err(ActiveCommitError::AfterRename(error)) => warnings.push(error.to_string()),
+        if let Err(error) = self.database.compare_and_set_version(
+            &database_version.to_string(),
+            &manifest.package_version.to_string(),
+            committed_at,
+        ) {
+            return Err(self.finish_failed(
+                &stores,
+                &task,
+                "committing",
+                error,
+                &mut last_timestamp,
+            ));
         }
         let finished_at = next_time_or_fallback(&self.clock, &mut last_timestamp);
         let committed = UpgradeResult {

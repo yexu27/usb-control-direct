@@ -11,9 +11,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use storage::Storage;
 use system_upgrade::{
-    ActiveReleaseStore, UpgradeError, UpgradePreflight, UpgradePreflightFailure,
-    UpgradePreflightRequest,
+    SystemVersion, UpgradeError, UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
 };
 use wait_timeout::ChildExt;
 
@@ -29,6 +29,23 @@ pub trait UpgradeHostProbe: Send + Sync {
     fn main_service_active(&self) -> Result<bool, String>;
     fn clamav_available(&self) -> Result<bool, String>;
     fn platform_compatible(&self) -> Result<bool, String>;
+}
+
+/// 升级受理时读取数据库业务版本与 Schema 的只读端口。
+pub trait UpgradeDatabaseSnapshot: Send + Sync {
+    fn current_version(&self) -> Result<SystemVersion, String>;
+    fn current_schema(&self) -> Result<u32, String>;
+}
+
+impl UpgradeDatabaseSnapshot for Storage {
+    fn current_version(&self) -> Result<SystemVersion, String> {
+        let version = self.system_version().map_err(|error| error.to_string())?;
+        SystemVersion::parse(&version).map_err(|error| error.to_string())
+    }
+
+    fn current_schema(&self) -> Result<u32, String> {
+        self.schema_version().map_err(|error| error.to_string())
+    }
 }
 
 /// 有界命令输出。
@@ -265,19 +282,19 @@ impl UpgradeHostProbe for LinuxUpgradeHostProbe {
 pub struct SystemUpgradePreflight {
     probe: Arc<dyn UpgradeHostProbe>,
     upgrade_root: PathBuf,
-    active_release_path: PathBuf,
+    database: Arc<dyn UpgradeDatabaseSnapshot>,
 }
 
 impl SystemUpgradePreflight {
     pub fn new(
         probe: Arc<dyn UpgradeHostProbe>,
         upgrade_root: PathBuf,
-        active_release_path: PathBuf,
+        database: Arc<dyn UpgradeDatabaseSnapshot>,
     ) -> Self {
         Self {
             probe,
             upgrade_root,
-            active_release_path,
+            database,
         }
     }
 
@@ -288,25 +305,11 @@ impl SystemUpgradePreflight {
 
 impl UpgradePreflight for SystemUpgradePreflight {
     fn check(&self, request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {
-        let active = ActiveReleaseStore::new(
-            self.active_release_path
-                .parent()
-                .unwrap_or(&self.upgrade_root)
-                .to_path_buf(),
-        )
-        .and_then(|store| store.current())
-        .map_err(|error| {
-            UpgradeError::Preflight(UpgradePreflightFailure::ProbeFailed(error.to_string()))
-        })?
-        .ok_or_else(|| {
-            UpgradeError::Preflight(UpgradePreflightFailure::ProbeFailed(
-                "active-release.json 不存在".into(),
-            ))
-        })?;
-        if active.version != request.source_version || active.schema_version != request.schema_from
-        {
+        let current_version = Self::probe_failure(self.database.current_version())?;
+        let current_schema = Self::probe_failure(self.database.current_schema())?;
+        if current_version != request.source_version || current_schema != request.schema_from {
             return Err(UpgradeError::Preflight(
-                UpgradePreflightFailure::ProbeFailed("已提交发布与升级源版本不一致".into()),
+                UpgradePreflightFailure::ProbeFailed("数据库升级源状态不一致".into()),
             ));
         }
 

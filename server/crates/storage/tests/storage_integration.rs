@@ -555,6 +555,24 @@ fn t07_config_get_and_set() {
     assert_eq!(c.config_value.as_deref(), Some("NewDesc"));
 }
 
+#[test]
+fn t07_system_version_requires_existing_config() {
+    let (s, db) = setup();
+    assert_eq!(s.system_version().unwrap(), "1.0.0");
+
+    let conn = rusqlite::Connection::open(db.path()).unwrap();
+    conn.execute(
+        "DELETE FROM system_config WHERE config_key='system_version'",
+        [],
+    )
+    .unwrap();
+
+    assert!(matches!(
+        s.system_version(),
+        Err(storage::StorageError::DatabaseNotInitialized(_))
+    ));
+}
+
 // ========== T08 ==========
 
 #[test]

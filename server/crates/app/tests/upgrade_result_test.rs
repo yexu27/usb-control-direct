@@ -3,27 +3,13 @@ use std::sync::Arc;
 use storage::Storage;
 use storage_test_support::TestDb;
 use system_upgrade::{
-    ActiveRelease, ActiveReleaseStore, SystemVersion, UpgradeResult, UpgradeResultStore,
-    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    SystemVersion, UpgradeResult, UpgradeResultStore, UpgradeStateLock, UpgradeStatus, UpgradeTask,
+    UpgradeTaskStore,
 };
 use usb_control_app::upgrade_result::{ImportDisposition, UpgradeResultImporter};
 
 fn version(value: &str) -> SystemVersion {
     SystemVersion::parse(value).unwrap()
-}
-
-fn active(
-    online_upgrade_id: Option<&str>,
-    version_value: &str,
-    committed_at: i64,
-) -> ActiveRelease {
-    ActiveRelease {
-        format_version: 1,
-        version: version(version_value),
-        schema_version: 1,
-        committed_at,
-        online_upgrade_id: online_upgrade_id.map(str::to_owned),
-    }
 }
 
 fn task(upgrade_id: &str) -> UpgradeTask {
@@ -72,7 +58,7 @@ impl Fixture {
         let root = tempfile::tempdir().unwrap();
         let db = TestDb::new();
         let storage = Arc::new(Storage::open(db.path()).unwrap());
-        storage.config_set("system_version", "unchanged").unwrap();
+        storage.config_set("system_version", "3.0.1").unwrap();
         let importer = UpgradeResultImporter::new(root.path().to_path_buf(), Arc::clone(&storage));
         Self {
             root,
@@ -80,10 +66,6 @@ impl Fixture {
             storage,
             importer,
         }
-    }
-
-    fn releases(&self) -> ActiveReleaseStore {
-        ActiveReleaseStore::new(self.root.path().to_path_buf()).unwrap()
     }
 
     fn tasks(&self) -> UpgradeTaskStore {
@@ -102,10 +84,6 @@ impl Fixture {
 #[test]
 fn imports_failed_result_once_without_changing_system_version() {
     let fixture = Fixture::new();
-    fixture
-        .releases()
-        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
-        .unwrap();
     let value = result("upgrade-failed", UpgradeStatus::Failed);
 
     assert_eq!(
@@ -136,35 +114,35 @@ fn imports_failed_result_once_without_changing_system_version() {
             .unwrap()
             .config_value
             .as_deref(),
-        Some("unchanged")
+        Some("3.0.1")
     );
 }
 
 #[test]
-fn committed_result_requires_matching_active_release() {
+fn committed_result_import_requires_database_target_version() {
     let fixture = Fixture::new();
-    fixture
-        .releases()
-        .commit(
-            &fixture.lock(),
-            &active(Some("another-upgrade"), "3.0.2", 200),
-        )
-        .unwrap();
-
     assert!(fixture
         .importer
         .import_result(&result("upgrade-committed", UpgradeStatus::Committed))
         .is_err());
     assert_eq!(fixture.storage.operation_log_count().unwrap(), 0);
+
+    fixture
+        .storage
+        .config_set("system_version", "3.0.2")
+        .unwrap();
+    assert_eq!(
+        fixture
+            .importer
+            .import_result(&result("upgrade-committed", UpgradeStatus::Committed))
+            .unwrap(),
+        ImportDisposition::Imported
+    );
 }
 
 #[tokio::test]
 async fn observer_persists_failed_terminal_before_importing_log() {
     let fixture = Fixture::new();
-    fixture
-        .releases()
-        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
-        .unwrap();
     let tasks = fixture.tasks();
     let guard = fixture.lock();
     let prepared = task("upgrade-failed-observed");
@@ -195,10 +173,6 @@ async fn observer_persists_failed_terminal_before_importing_log() {
 #[tokio::test]
 async fn live_observer_imports_schedule_failed_while_service_is_running() {
     let fixture = Fixture::new();
-    fixture
-        .releases()
-        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
-        .unwrap();
     let tasks = fixture.tasks();
     let guard = fixture.lock();
     let prepared = task("upgrade-schedule-failed");
@@ -238,7 +212,7 @@ async fn live_observer_imports_schedule_failed_while_service_is_running() {
 }
 
 #[tokio::test]
-async fn observer_reconstructs_committed_result_after_active_publish() {
+async fn result_observer_never_reconstructs_success_without_result_file() {
     let fixture = Fixture::new();
     let tasks = fixture.tasks();
     let guard = fixture.lock();
@@ -267,38 +241,30 @@ async fn observer_reconstructs_committed_result_after_active_publish() {
             160,
         )
         .unwrap();
-    fixture
-        .releases()
-        .commit(&guard, &active(Some(&prepared.upgrade_id), "3.0.2", 200))
-        .unwrap();
     drop(guard);
 
-    fixture
-        .importer
-        .monitor_active_task(health_checking)
-        .await
-        .unwrap();
+    let observation = tokio::time::timeout(
+        std::time::Duration::from_millis(50),
+        fixture.importer.monitor_active_task(health_checking),
+    )
+    .await;
 
-    let stored = fixture
+    assert!(observation.is_err());
+    assert!(fixture
         .results()
         .get(&prepared.upgrade_id)
         .unwrap()
-        .unwrap();
-    assert_eq!(stored.status, UpgradeStatus::Committed);
+        .is_none());
     assert_eq!(
-        tasks.history(&prepared.upgrade_id).unwrap().unwrap().status,
-        UpgradeStatus::Committed
+        tasks.current().unwrap().unwrap().status,
+        UpgradeStatus::HealthChecking
     );
-    assert_eq!(fixture.storage.operation_log_count().unwrap(), 1);
+    assert_eq!(fixture.storage.operation_log_count().unwrap(), 0);
 }
 
 #[tokio::test]
 async fn observer_does_not_scan_or_import_unrelated_results() {
     let fixture = Fixture::new();
-    fixture
-        .releases()
-        .commit(&fixture.lock(), &active(None, "3.0.1", 50))
-        .unwrap();
     let guard = fixture.lock();
     fixture
         .results()

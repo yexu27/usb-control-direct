@@ -9,10 +9,7 @@ use crate::state::{
     atomic_write_json, create_private_dir_all, read_optional_json, sync_dir, validate_upgrade_id,
     PersistedFormat, PublishMode,
 };
-use crate::{
-    ActiveRelease, SystemVersion, UpgradeError, UpgradeStateLock, UpgradeStatus, UpgradeTask,
-    UpgradeTaskStore,
-};
+use crate::{SystemVersion, UpgradeError, UpgradeStateLock, UpgradeStatus, UpgradeTaskStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -37,41 +34,6 @@ impl UpgradeResult {
             self.status,
             UpgradeStatus::Committed | UpgradeStatus::ScheduleFailed | UpgradeStatus::Failed
         )
-    }
-
-    pub fn committed_from_active(
-        task: &UpgradeTask,
-        active: &ActiveRelease,
-        finished_at: i64,
-    ) -> Result<Self, UpgradeError> {
-        task.validate()?;
-        active.validate_persisted()?;
-        if active.online_upgrade_id.as_deref() != Some(task.upgrade_id.as_str())
-            || task.target_version != active.version
-            || !matches!(
-                task.status,
-                UpgradeStatus::HealthChecking | UpgradeStatus::Committed
-            )
-        {
-            return Err(UpgradeError::State(
-                "活动发布与升级任务不一致，不能重建 committed 结果".into(),
-            ));
-        }
-        let finished_at = finished_at.max(active.committed_at);
-        Ok(Self {
-            format_version: 1,
-            upgrade_id: task.upgrade_id.clone(),
-            status: UpgradeStatus::Committed,
-            username: task.username.clone(),
-            role: task.role,
-            source_ip: task.source_ip.clone(),
-            source_version: task.source_version,
-            target_version: task.target_version,
-            effective_version: active.version,
-            failed_stage: None,
-            original_error: None,
-            finished_at,
-        })
     }
 }
 

@@ -22,6 +22,16 @@ tar -xf "$BIN" -C "$TMP"
 cmp -s "$DEB" "$TMP/usb-control_V${TARGET_VERSION}_arm64.deb" || fail 'embedded DEB differs from standalone DEB'
 dpkg-deb --extract "$DEB" "$TMP/deb"
 
+for forbidden in \
+  var/lib/usb-control/device.db \
+  var/lib/usb-control/upgrade/current.json \
+  var/lib/usb-control/upgrade/active-release.json \
+  var/lib/usb-control/upgrade/history \
+  var/lib/usb-control/upgrade/results \
+  opt/usb-control/install-meta/VERSION; do
+  test ! -e "$TMP/deb/$forbidden" || fail "embedded DEB contains runtime state: $forbidden"
+done
+
 python3 - "$BIN" "$DEB" "$TMP/manifest.json" "$TMP/deb/opt/usb-control/install-meta/release.json" "$TARGET_VERSION" "$SCHEMA_FROM" "$KEY_DIR/upgrade_sign.key" <<'PY'
 import hashlib, json, pathlib, sys, tarfile
 bin_path, deb_path, manifest_path, release_path, target, schema_from, private_path = sys.argv[1:]

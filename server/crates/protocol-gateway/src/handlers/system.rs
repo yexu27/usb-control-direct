@@ -18,7 +18,7 @@ use crate::codec;
 use crate::context::RequestContext;
 use crate::post_send::{HandlerOutcome, PostSendAction};
 use crate::upgrade_error::map_upgrade_error;
-use system_upgrade::{ActiveReleaseStore, PrepareUpgradeRequest};
+use system_upgrade::{PrepareUpgradeRequest, SystemVersion};
 
 /// RspSystemInfo 消息类型。
 const RSP_SYSTEM_INFO: u32 = 0x0501;
@@ -44,11 +44,16 @@ pub fn handle_get_system_info(ctx: &RequestContext, payload: &[u8]) -> Vec<u8> {
         }
     };
 
-    let system_version = match ActiveReleaseStore::new(ctx.system_upgrade_root.clone())
-        .and_then(|store| store.current())
-    {
-        Ok(Some(active)) => active.version.to_string(),
-        Ok(None) | Err(_) => {
+    let system_version = match storage
+        .system_version()
+        .map_err(|error| error.to_string())
+        .and_then(|version| {
+            SystemVersion::parse(&version)
+                .map(|version| version.to_string())
+                .map_err(|error| error.to_string())
+        }) {
+        Ok(version) => version,
+        Err(_) => {
             return sysinfo_error(
                 ctx.seq_id,
                 ResultCode::InternalError,

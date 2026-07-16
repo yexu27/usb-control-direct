@@ -70,6 +70,16 @@ if find "$TMP/data" -type f | grep -E '/(test|tests|fixture|fixtures|testdata)/|
   fail 'DEB contains forbidden release content'
 fi
 
+for forbidden in \
+  var/lib/usb-control/device.db \
+  var/lib/usb-control/upgrade/current.json \
+  var/lib/usb-control/upgrade/active-release.json \
+  var/lib/usb-control/upgrade/history \
+  var/lib/usb-control/upgrade/results \
+  opt/usb-control/install-meta/VERSION; do
+  test ! -e "$TMP/data/$forbidden" || fail "DEB contains runtime state: $forbidden"
+done
+
 python3 - "$TMP/data/opt/usb-control/install-meta/release.json" "$EXPECTED_VERSION" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:

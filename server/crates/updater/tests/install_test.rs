@@ -2,9 +2,10 @@ mod support;
 
 use std::fs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 
-use support::{version, FakeClock, FakeCommandRunner, TEST_CERTIFICATE_PEM};
-use system_upgrade::{certificate_sha256, ActiveReleaseStore, InstalledRelease, ServiceReady};
+use support::{version, FakeClock, FakeCommandRunner, FakeUpgradeDatabase, TEST_CERTIFICATE_PEM};
+use system_upgrade::{certificate_sha256, InstalledRelease, ServiceReady};
 use usb_control_updater::{InstallFinalizer, ManagedInstallGuard, UpgradePaths};
 
 #[test]
@@ -92,38 +93,62 @@ fn direct_finalize_runs_migrate_reload_start_health_commit() {
 }
 
 #[test]
-fn direct_finalize_commits_without_online_upgrade_id() {
+fn direct_install_sets_installed_version_after_health() {
     let fixture = FinalizerFixture::new(FakeClock::fixed(200));
 
     fixture.finalizer().finalize().unwrap();
 
-    let active = ActiveReleaseStore::new(fixture.paths.root.clone())
-        .unwrap()
-        .current()
-        .unwrap()
-        .unwrap();
-    assert_eq!(active.version, version("3.0.2"));
-    assert_eq!(active.schema_version, 2);
-    assert_eq!(active.online_upgrade_id, None);
+    assert_eq!(fixture.database.state().system_version, "3.0.2");
 }
 
 #[test]
-fn direct_finalize_stops_before_commit_when_clock_fails() {
+fn direct_finalize_stops_before_database_set_when_clock_fails() {
     let fixture = FinalizerFixture::new(FakeClock::sequence([200]));
 
     assert!(fixture.finalizer().finalize().is_err());
 
-    assert!(ActiveReleaseStore::new(fixture.paths.root.clone())
-        .unwrap()
-        .current()
-        .unwrap()
-        .is_none());
+    assert_eq!(fixture.database.state().system_version, "3.0.1");
+}
+
+#[test]
+fn migration_failure_does_not_set_version() {
+    let fixture = FinalizerFixture::new(FakeClock::fixed(200));
+    fixture.runner.clear_outputs();
+    fixture.runner.push_failure("migrating");
+
+    assert!(fixture.finalizer().finalize().is_err());
+
+    assert_eq!(fixture.database.state().system_version, "3.0.1");
+}
+
+#[test]
+fn health_failure_does_not_set_version() {
+    let fixture = FinalizerFixture::new(FakeClock::fixed(200));
+    fixture.runner.clear_outputs();
+    for output in ["", "", "0\n", "", "active\n", "99\n", "0\n", ""] {
+        fixture.runner.push_success(output);
+    }
+
+    assert!(fixture.finalizer().finalize().is_err());
+
+    assert_eq!(fixture.database.state().system_version, "3.0.1");
+}
+
+#[test]
+fn database_set_failure_fails_finalize_install() {
+    let fixture = FinalizerFixture::new(FakeClock::fixed(200));
+    fixture.database.fail_set();
+
+    assert!(fixture.finalizer().finalize().is_err());
+
+    assert_eq!(fixture.database.state().system_version, "3.0.1");
 }
 
 struct FinalizerFixture {
     _temp: tempfile::TempDir,
     paths: UpgradePaths,
     runner: FakeCommandRunner,
+    database: FakeUpgradeDatabase,
     clock: FakeClock,
 }
 
@@ -175,11 +200,17 @@ impl FinalizerFixture {
             _temp: temp,
             paths,
             runner,
+            database: FakeUpgradeDatabase::new("3.0.1", 1),
             clock,
         }
     }
 
     fn finalizer(&self) -> InstallFinalizer<&FakeCommandRunner, &FakeClock> {
-        InstallFinalizer::new(self.paths.clone(), &self.runner, &self.clock)
+        InstallFinalizer::new(
+            self.paths.clone(),
+            &self.runner,
+            Arc::new(self.database.clone()),
+            &self.clock,
+        )
     }
 }

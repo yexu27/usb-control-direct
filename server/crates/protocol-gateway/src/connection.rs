@@ -231,7 +231,6 @@ pub async fn handle_connection(
                         system_upgrade_coordinator: Arc::clone(
                             &state.system_upgrade_coordinator,
                         ),
-                        system_upgrade_root: state.system_upgrade_root.clone(),
                         virusdb_upgrade_mgr: Some(Arc::clone(&state.virusdb_upgrade_mgr)),
                     };
 

@@ -2,7 +2,6 @@
 //!
 //! 每个请求帧经过 token 中间件后，生成 RequestContext 传递给 handler。
 
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use common::code::ResultCode;
@@ -34,7 +33,6 @@ pub struct AppState {
     pub policy_service: Arc<PolicyService>,
     pub license_validator: Arc<dyn LicenseValidator>,
     pub system_upgrade_coordinator: Arc<UpgradeCoordinator>,
-    pub system_upgrade_root: PathBuf,
     pub virusdb_upgrade_mgr: Arc<VirusdbUpgradeManager>,
     pub post_send_action_executor: Arc<dyn PostSendActionExecutor>,
 }
@@ -65,8 +63,6 @@ pub struct RequestContext {
     pub license_validator: Option<Arc<dyn LicenseValidator>>,
     /// 系统升级受理协调器。
     pub system_upgrade_coordinator: Arc<UpgradeCoordinator>,
-    /// 系统升级已提交状态根目录。
-    pub system_upgrade_root: PathBuf,
     /// 病毒库升级管理器。
     pub virusdb_upgrade_mgr: Option<Arc<VirusdbUpgradeManager>>,
 }

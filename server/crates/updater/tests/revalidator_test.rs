@@ -8,10 +8,10 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use smcrypto::{sm2, sm3};
 use system_upgrade::{
-    certificate_sha256, ActiveRelease, ActiveReleaseStore, InstalledRelease, PackageStager,
-    SystemVersion, UpgradeStateLock, UpgradeStatus, UpgradeTask,
+    certificate_sha256, InstalledRelease, PackageStager, SystemVersion, UpgradeStatus, UpgradeTask,
 };
 use tar::{Builder, Header};
+use usb_control_db_migrate::UpgradeDatabaseState;
 use usb_control_updater::{PackageRevalidator, SharedPackageRevalidator, UpgradePaths};
 
 use support::TEST_CERTIFICATE_PEM;
@@ -43,11 +43,10 @@ fn production_revalidator_rejects_installed_release_mismatch() {
 }
 
 #[test]
-fn production_revalidator_rejects_active_release_mismatch() {
+fn production_revalidator_uses_real_database_schema() {
     let fixture = Fixture::new(false);
-    fixture.write_active(version("3.0.0"));
 
-    assert!(fixture.revalidate().is_err());
+    assert!(fixture.revalidate_with_schema(2).is_err());
 }
 
 #[test]
@@ -138,19 +137,32 @@ impl Fixture {
             tls_sha256,
         };
         fixture.write_installed(version("3.0.1"), CURRENT_KEY_ID);
-        fixture.write_active(version("3.0.1"));
         fixture
     }
 
     fn revalidate(
         &self,
     ) -> Result<usb_control_updater::RevalidatedPackage, usb_control_updater::UpdaterError> {
+        self.revalidate_with_schema(1)
+    }
+
+    fn revalidate_with_schema(
+        &self,
+        schema_version: u32,
+    ) -> Result<usb_control_updater::RevalidatedPackage, usb_control_updater::UpdaterError> {
         SharedPackageRevalidator::new(
             self.verify_key_dir.clone(),
             self.installed_release.clone(),
             self.active_key_id.clone(),
         )
-        .revalidate(&self.paths, &self.task)
+        .revalidate(
+            &self.paths,
+            &self.task,
+            &UpgradeDatabaseState {
+                system_version: self.task.source_version.to_string(),
+                schema_version,
+            },
+        )
     }
 
     fn write_installed(&self, release_version: SystemVersion, key_id: &str) {
@@ -169,23 +181,6 @@ impl Fixture {
             serde_json::to_vec(&release).unwrap(),
         )
         .unwrap();
-    }
-
-    fn write_active(&self, release_version: SystemVersion) {
-        let store = ActiveReleaseStore::new(self.paths.root.clone()).unwrap();
-        let guard = UpgradeStateLock::acquire(&self.paths.root).unwrap();
-        store
-            .commit(
-                &guard,
-                &ActiveRelease {
-                    format_version: 1,
-                    version: release_version,
-                    schema_version: 1,
-                    committed_at: 100,
-                    online_upgrade_id: None,
-                },
-            )
-            .unwrap();
     }
 }
 

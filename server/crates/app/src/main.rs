@@ -34,7 +34,7 @@ use system_upgrade::{
     ServiceReady, UpgradeCoordinator, UpgradeEnvironment, UpgradePreflight, UpgradeScheduler,
     UpgradeTaskStore,
 };
-use usb_control_app::config::AppConfig;
+use usb_control_app::config::{AppConfig, AppInvocation};
 use usb_control_app::readiness::ReadinessGuard;
 use usb_control_app::upgrade_dispatch::{AuditUpgradeStart, UpgradeDispatch};
 use usb_control_app::upgrade_preflight::{LinuxUpgradeHostProbe, SystemUpgradePreflight};
@@ -82,9 +82,15 @@ fn verify_upgrade_key_files(directory: &std::path::Path) -> Result<(), String> {
 
 #[tokio::main]
 async fn main() {
+    let config = match AppConfig::parse_args(std::env::args()).expect("启动参数解析失败") {
+        AppInvocation::Run(config) => *config,
+        AppInvocation::Version => {
+            println!("{}", AppConfig::package_version());
+            return;
+        }
+    };
     let started_at = common::time::now_unix();
     ReadinessGuard::clear_stale(READY_PATH).expect("清理旧 ready 文件失败");
-    let config = AppConfig::load_from_args(std::env::args()).expect("启动配置加载失败");
     let _log_guards = logging::init_logging(&config.log_dir, &config.log_level_conf);
 
     info!(
@@ -117,11 +123,14 @@ async fn main() {
             error!(reason = %error, "读取活动系统升级任务失败");
         }
     }
-    let current_version = read_installed_release(std::path::Path::new(
+    let runtime_version = read_installed_release(std::path::Path::new(
         "/opt/usb-control/install-meta/release.json",
     ))
     .expect("已安装发布元数据读取失败")
     .version;
+    let business_version = storage.system_version().expect("数据库系统版本读取失败");
+    let business_version =
+        system_upgrade::SystemVersion::parse(&business_version).expect("数据库系统版本格式非法");
     let device_description = load_device_description(storage.as_ref());
 
     let auth_service = Arc::new(AuthService::new(
@@ -193,7 +202,8 @@ async fn main() {
             &config.clamdscan_path,
         ))),
         config.upgrade.root_dir.clone(),
-        config.upgrade.root_dir.join("active-release.json"),
+        Arc::clone(&storage)
+            as Arc<dyn usb_control_app::upgrade_preflight::UpgradeDatabaseSnapshot>,
     ));
     let upgrade_coordinator = Arc::new(
         UpgradeCoordinator::new(
@@ -204,7 +214,7 @@ async fn main() {
             ),
             PackageVerifier::new(config.upgrade.verify_key_dir.clone(), deb_inspector),
             UpgradeEnvironment {
-                current_version,
+                current_version: business_version,
                 current_schema: schema_version,
                 supported_schema_max: SUPPORTED_SCHEMA_MAX,
                 protocol_version: PROTOCOL_VERSION,
@@ -232,7 +242,6 @@ async fn main() {
         policy_service,
         license_validator,
         system_upgrade_coordinator: upgrade_coordinator,
-        system_upgrade_root: config.upgrade.root_dir.clone(),
         virusdb_upgrade_mgr,
         post_send_action_executor,
     });
@@ -296,7 +305,7 @@ async fn main() {
         READY_PATH,
         &ServiceReady {
             format_version: 1,
-            version: current_version,
+            version: runtime_version,
             schema_version,
             pid: std::process::id(),
             started_at,

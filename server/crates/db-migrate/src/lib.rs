@@ -28,6 +28,85 @@ pub struct MigrationReport {
     pub applied_versions: Vec<u32>,
 }
 
+/// 在线升级执行前读取的数据库真实状态。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpgradeDatabaseState {
+    pub system_version: String,
+    pub schema_version: u32,
+}
+
+/// 从同一数据库连接读取业务版本和 Schema 版本。
+pub fn read_upgrade_database_state(database_path: &Path) -> Result<UpgradeDatabaseState, String> {
+    let conn = open_connection(database_path)?;
+    let system_version = conn
+        .query_row(
+            "SELECT config_value FROM system_config WHERE config_key='system_version'",
+            [],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|error| format!("read system_version failed: {error}"))?
+        .flatten()
+        .ok_or_else(|| "system_version is missing".to_string())?;
+    validate_system_version(&system_version)?;
+    Ok(UpgradeDatabaseState {
+        system_version,
+        schema_version: read_user_version(&conn)?,
+    })
+}
+
+/// 仅当数据库仍处于预期源版本时提交目标业务版本。
+pub fn compare_and_set_system_version(
+    database_path: &Path,
+    expected_source: &str,
+    target: &str,
+    updated_at: i64,
+) -> Result<(), String> {
+    validate_system_version(expected_source)?;
+    validate_system_version(target)?;
+    let mut conn = open_connection(database_path)?;
+    let transaction = begin_immediate(&mut conn)?;
+    let changed = transaction
+        .execute(
+            "UPDATE system_config
+             SET config_value = ?1, updated_at = ?2
+             WHERE config_key = 'system_version' AND config_value = ?3",
+            params![target, updated_at, expected_source],
+        )
+        .map_err(|error| format!("compare-and-set system_version failed: {error}"))?;
+    if changed != 1 {
+        return Err("system_version source does not match".into());
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("commit system_version failed: {error}"))
+}
+
+/// 直接安装健康成功后设置已安装业务版本。
+pub fn set_system_version(
+    database_path: &Path,
+    target: &str,
+    updated_at: i64,
+) -> Result<(), String> {
+    validate_system_version(target)?;
+    let mut conn = open_connection(database_path)?;
+    let transaction = begin_immediate(&mut conn)?;
+    let changed = transaction
+        .execute(
+            "UPDATE system_config
+             SET config_value = ?1, updated_at = ?2
+             WHERE config_key = 'system_version'",
+            params![target, updated_at],
+        )
+        .map_err(|error| format!("set system_version failed: {error}"))?;
+    if changed != 1 {
+        return Err("system_version is missing".into());
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("commit system_version failed: {error}"))
+}
+
 pub fn run_migrations(database_path: &Path, sql_root: &Path) -> Result<MigrationReport, String> {
     if let Some(parent) = database_path.parent() {
         fs::create_dir_all(parent)
@@ -413,6 +492,22 @@ fn read_sql(path: &Path) -> Result<String, String> {
 fn read_user_version(conn: &Connection) -> Result<u32, String> {
     conn.query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|error| format!("read user_version failed: {error}"))
+}
+
+fn validate_system_version(version: &str) -> Result<(), String> {
+    let mut parts = version.split('.');
+    let valid = (0..3).all(|_| {
+        parts.next().is_some_and(|part| {
+            !(part.is_empty() || (part.len() > 1 && part.starts_with('0')))
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && part.parse::<u64>().is_ok()
+        })
+    }) && parts.next().is_none();
+    if valid {
+        Ok(())
+    } else {
+        Err(format!("invalid system version: {version}"))
+    }
 }
 
 fn set_user_version(transaction: &Transaction<'_>, version: u32) -> Result<(), String> {

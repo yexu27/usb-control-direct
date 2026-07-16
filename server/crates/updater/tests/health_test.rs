@@ -48,7 +48,7 @@ fn matching() -> ServiceSnapshot {
 }
 
 #[test]
-fn accepts_matching_target_release_before_active_release_commit() {
+fn accepts_matching_target_release_before_business_version_commit() {
     validate_health_snapshot(&expectation(), &matching()).unwrap();
 }
 

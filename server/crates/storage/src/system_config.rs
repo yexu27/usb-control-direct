@@ -8,6 +8,17 @@ use crate::model::SystemConfig;
 use crate::Storage;
 
 impl Storage {
+    /// 读取已提交的系统业务版本。
+    pub fn system_version(&self) -> Result<String, StorageError> {
+        self.config_get("system_version")?
+            .and_then(|config| config.config_value)
+            .ok_or_else(|| {
+                StorageError::DatabaseNotInitialized(
+                    "required system_config missing: system_version".into(),
+                )
+            })
+    }
+
     /// 获取配置值。
     pub fn config_get(&self, config_key: &str) -> Result<Option<SystemConfig>, StorageError> {
         debug!(key = %config_key, "读取系统配置");

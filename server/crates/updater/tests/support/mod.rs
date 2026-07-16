@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use system_upgrade::{InstalledRelease, SystemVersion, UpgradeManifest, UpgradeTask};
+use usb_control_db_migrate::UpgradeDatabaseState;
 use usb_control_updater::{
     Clock, CommandOutput, CommandRunner, CommandSpec, PackageRevalidator, RevalidatedPackage,
-    UpdaterError, UpgradePaths,
+    UpdaterError, UpgradeDatabase, UpgradePaths,
 };
 
 pub const TEST_CERTIFICATE_PEM: &str = include_str!("../../../../../deploy/assets/tls/server.crt");
@@ -60,6 +61,10 @@ impl FakeCommandRunner {
             }));
     }
 
+    pub fn clear_outputs(&self) {
+        self.outputs.lock().unwrap().clear();
+    }
+
     pub fn calls(&self) -> Vec<CommandSpec> {
         self.calls.lock().unwrap().clone()
     }
@@ -98,6 +103,7 @@ impl PackageRevalidator for FakePackageRevalidator {
         &self,
         paths: &UpgradePaths,
         task: &UpgradeTask,
+        database_state: &UpgradeDatabaseState,
     ) -> Result<RevalidatedPackage, UpdaterError> {
         if self.fail {
             return Err(UpdaterError::TaskInvalid(
@@ -116,13 +122,107 @@ impl PackageRevalidator for FakePackageRevalidator {
                 deb_file: "usb-control_V3.0.2_arm64.deb".into(),
                 deb_size: 9,
                 deb_sha256: "b".repeat(64),
-                schema_from: 1,
+                schema_from: database_state.schema_version,
                 schema_to: 1,
                 signing_key_id: "release-1".into(),
             },
             candidate_deb: paths.staging_dir.join(&task.upgrade_id).join("payload.deb"),
             target_release: self.target_release.clone(),
         })
+    }
+}
+
+#[derive(Clone)]
+pub struct FakeUpgradeDatabase {
+    state: Arc<Mutex<UpgradeDatabaseState>>,
+    fail_read: Arc<Mutex<bool>>,
+    fail_compare: Arc<Mutex<bool>>,
+    fail_set: Arc<Mutex<bool>>,
+    read_count: Arc<Mutex<usize>>,
+    compare_count: Arc<Mutex<usize>>,
+}
+
+impl FakeUpgradeDatabase {
+    pub fn new(system_version: &str, schema_version: u32) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(UpgradeDatabaseState {
+                system_version: system_version.into(),
+                schema_version,
+            })),
+            fail_read: Arc::new(Mutex::new(false)),
+            fail_compare: Arc::new(Mutex::new(false)),
+            fail_set: Arc::new(Mutex::new(false)),
+            read_count: Arc::new(Mutex::new(0)),
+            compare_count: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    pub fn set_system_version(&self, version: &str) {
+        self.state.lock().unwrap().system_version = version.into();
+    }
+
+    pub fn fail_compare(&self) {
+        *self.fail_compare.lock().unwrap() = true;
+    }
+
+    pub fn fail_set(&self) {
+        *self.fail_set.lock().unwrap() = true;
+    }
+
+    pub fn state(&self) -> UpgradeDatabaseState {
+        self.state.lock().unwrap().clone()
+    }
+
+    pub fn read_count(&self) -> usize {
+        *self.read_count.lock().unwrap()
+    }
+
+    pub fn compare_count(&self) -> usize {
+        *self.compare_count.lock().unwrap()
+    }
+}
+
+impl UpgradeDatabase for FakeUpgradeDatabase {
+    fn read_state(&self) -> Result<UpgradeDatabaseState, UpdaterError> {
+        *self.read_count.lock().unwrap() += 1;
+        if *self.fail_read.lock().unwrap() {
+            return Err(UpdaterError::TaskInvalid(
+                "injected database read failure".into(),
+            ));
+        }
+        Ok(self.state())
+    }
+
+    fn compare_and_set_version(
+        &self,
+        expected_source: &str,
+        target: &str,
+        _updated_at: i64,
+    ) -> Result<(), UpdaterError> {
+        *self.compare_count.lock().unwrap() += 1;
+        if *self.fail_compare.lock().unwrap() {
+            return Err(UpdaterError::TaskInvalid(
+                "injected compare-and-set failure".into(),
+            ));
+        }
+        let mut state = self.state.lock().unwrap();
+        if state.system_version != expected_source {
+            return Err(UpdaterError::TaskInvalid(
+                "database source version changed".into(),
+            ));
+        }
+        state.system_version = target.into();
+        Ok(())
+    }
+
+    fn set_version(&self, target: &str, _updated_at: i64) -> Result<(), UpdaterError> {
+        if *self.fail_set.lock().unwrap() {
+            return Err(UpdaterError::TaskInvalid(
+                "injected set version failure".into(),
+            ));
+        }
+        self.state.lock().unwrap().system_version = target.into();
+        Ok(())
     }
 }
 

@@ -1,8 +1,9 @@
 use std::fs;
 use system_upgrade::UpgradeTask;
 use usb_control_updater::{
-    parse_command, InstallFinalizer, ProcessCommandRunner, SharedPackageRevalidator, SystemClock,
-    UpdaterCommand, UpdaterError, UpgradeExecutor, UpgradePaths,
+    parse_command, InstallFinalizer, ProcessCommandRunner, SharedPackageRevalidator,
+    SqliteUpgradeDatabase, SystemClock, UpdaterCommand, UpdaterError, UpgradeExecutor,
+    UpgradePaths,
 };
 
 fn main() {
@@ -18,12 +19,11 @@ fn run() -> Result<(), UpdaterError> {
             println!("{}", release_info::display_version());
             Ok(())
         }
-        UpdaterCommand::FinalizeInstall => InstallFinalizer::new(
-            UpgradePaths::production("/var/lib/usb-control/upgrade".into()),
-            ProcessCommandRunner,
-            SystemClock,
-        )
-        .finalize(),
+        UpdaterCommand::FinalizeInstall => {
+            let paths = UpgradePaths::production("/var/lib/usb-control/upgrade".into());
+            let database = std::sync::Arc::new(SqliteUpgradeDatabase::new(paths.database.clone()));
+            InstallFinalizer::new(paths, ProcessCommandRunner, database, SystemClock).finalize()
+        }
         UpdaterCommand::Run { root } => run_online(root),
     }
 }
@@ -31,10 +31,13 @@ fn run() -> Result<(), UpdaterError> {
 fn run_online(root: std::path::PathBuf) -> Result<(), UpdaterError> {
     // 这里只取得调度标识；executor 获取全局锁后会重新严格读取并验证完整任务。
     let task: UpgradeTask = serde_json::from_slice(&fs::read(root.join("current.json"))?)?;
+    let paths = UpgradePaths::production(root);
+    let database = std::sync::Arc::new(SqliteUpgradeDatabase::new(paths.database.clone()));
     let report = UpgradeExecutor::new(
-        UpgradePaths::production(root),
+        paths,
         ProcessCommandRunner,
         SharedPackageRevalidator::production(),
+        database,
         SystemClock,
     )
     .execute(&task.upgrade_id)?;

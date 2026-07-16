@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use tempfile::tempdir;
-use usb_control_app::config::AppConfig;
+use usb_control_app::config::{AppConfig, AppInvocation};
 
 const COMPLETE_CONFIG: &str = r#"
 listen_addr = "127.0.0.1:19600"
@@ -23,17 +23,19 @@ max_package_size = 134217728
 "#;
 
 #[test]
-fn load_from_args_uses_explicit_config_path_and_structured_upgrade_config() {
+fn parse_args_uses_explicit_config_path_and_structured_upgrade_config() {
     let dir = tempdir().unwrap();
     let config_path = dir.path().join("usb-control.toml");
     fs::write(&config_path, COMPLETE_CONFIG).unwrap();
 
-    let config = AppConfig::load_from_args([
+    let AppInvocation::Run(config) = AppConfig::parse_args([
         "usb-control".to_string(),
         "--config".to_string(),
         config_path.display().to_string(),
     ])
-    .unwrap();
+    .unwrap() else {
+        panic!("expected run invocation");
+    };
 
     assert_eq!(config.listen_addr, "127.0.0.1:19600");
     assert_eq!(
@@ -83,8 +85,11 @@ fn legacy_install_dir_and_service_name_are_not_accepted() {
 }
 
 #[test]
-fn load_from_args_uses_default_config_path_when_missing() {
-    let config = AppConfig::load_from_args(["usb-control".to_string()]).unwrap();
+fn parse_args_uses_default_config_path_when_missing() {
+    let AppInvocation::Run(config) = AppConfig::parse_args(["usb-control".to_string()]).unwrap()
+    else {
+        panic!("expected run invocation");
+    };
     assert_eq!(
         config.config_path,
         PathBuf::from("/etc/usb-control/usb-control.toml")
@@ -97,4 +102,12 @@ fn package_version_uses_the_shared_release_version() {
         AppConfig::package_version(),
         release_info::display_version()
     );
+}
+
+#[test]
+fn version_argument_returns_a_pure_version_invocation() {
+    let invocation =
+        AppConfig::parse_args(["usb-control".to_string(), "--version".to_string()]).unwrap();
+
+    assert!(matches!(invocation, AppInvocation::Version));
 }

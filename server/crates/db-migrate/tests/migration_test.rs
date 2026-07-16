@@ -2,7 +2,10 @@ mod support;
 
 use rusqlite::Connection;
 use support::{scalar_i64, scalar_string, table_exists, Fixture};
-use usb_control_db_migrate::{run_migrations, sync_virus_db_package_version, sync_virus_db_status};
+use usb_control_db_migrate::{
+    compare_and_set_system_version, read_upgrade_database_state, run_migrations,
+    set_system_version, sync_virus_db_package_version, sync_virus_db_status,
+};
 
 #[test]
 fn records_migration_checksum_atomically() {
@@ -95,6 +98,111 @@ fn migration_does_not_write_system_version() {
             "SELECT config_value FROM system_config WHERE config_key='system_version'"
         ),
         "9.8.7"
+    );
+}
+
+#[test]
+fn reads_system_version_and_user_version_together() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    let state = read_upgrade_database_state(&fixture.database).unwrap();
+
+    assert_eq!(state.system_version, "1.0.0");
+    assert_eq!(state.schema_version, 1);
+}
+
+#[test]
+fn read_rejects_missing_system_version() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    fixture
+        .connection()
+        .execute(
+            "DELETE FROM system_config WHERE config_key='system_version'",
+            [],
+        )
+        .unwrap();
+
+    let error = read_upgrade_database_state(&fixture.database).unwrap_err();
+
+    assert!(
+        error.contains("system_version"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn compare_and_set_updates_matching_source_once() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    compare_and_set_system_version(&fixture.database, "1.0.0", "3.0.2", 1234).unwrap();
+
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+        ),
+        "3.0.2"
+    );
+    assert_eq!(
+        scalar_i64(
+            &conn,
+            "SELECT updated_at FROM system_config WHERE config_key='system_version'"
+        ),
+        1234
+    );
+}
+
+#[test]
+fn compare_and_set_rejects_changed_source_without_writing() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    let error =
+        compare_and_set_system_version(&fixture.database, "3.0.1", "3.0.2", 1234).unwrap_err();
+
+    assert!(error.contains("source"), "unexpected error: {error}");
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+        ),
+        "1.0.0"
+    );
+}
+
+#[test]
+fn set_version_rejects_prefixed_or_non_three_part_version() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    for invalid in [
+        "V3.0.2",
+        "3.0",
+        "3.0.2.1",
+        "3..2",
+        "3.0.x",
+        "03.0.2",
+        "3.00.2",
+        "18446744073709551616.0.0",
+    ] {
+        assert!(
+            set_system_version(&fixture.database, invalid, 1234).is_err(),
+            "invalid version accepted: {invalid}"
+        );
+    }
+
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+        ),
+        "1.0.0"
     );
 }
 

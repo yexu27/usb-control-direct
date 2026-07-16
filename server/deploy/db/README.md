@@ -8,6 +8,7 @@ Execution order for a new database:
 
 1. `migrations/0001_init.sql`
 2. `seeds/0001_default_data.sql`
-3. sync `system_config.system_version` from `/opt/usb-control/install-meta/VERSION`
 
 `0001_default_data.sql` may contain the baseline `system_version = 1.0.0`; packaging scripts must not edit this SQL per release.
+
+Database migrations never change `system_config.system_version`. The installed release metadata is stored in `/opt/usb-control/install-meta/release.json`. After the service starts and passes the health check, the direct-install finalizer writes the installed version to `system_config.system_version`; online upgrades commit the target version with compare-and-set after the same health check succeeds.

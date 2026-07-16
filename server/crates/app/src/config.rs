@@ -40,6 +40,12 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
+#[derive(Debug, Clone)]
+pub enum AppInvocation {
+    Run(Box<AppConfig>),
+    Version,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppConfig {
@@ -147,7 +153,7 @@ impl AppConfig {
         release_info::display_version()
     }
 
-    pub fn load_from_args<I, S>(args: I) -> Result<Self, ConfigError>
+    pub fn parse_args<I, S>(args: I) -> Result<AppInvocation, ConfigError>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
@@ -168,21 +174,20 @@ impl AppConfig {
                     config_path = PathBuf::from(value);
                 }
                 "--version" | "-V" => {
-                    println!("{}", Self::package_version());
-                    std::process::exit(0);
+                    return Ok(AppInvocation::Version);
                 }
                 other => return Err(ConfigError::UnknownArgument(other.to_string())),
             }
         }
 
         if config_path == Path::new(DEFAULT_CONFIG_PATH) && !config_path.exists() {
-            return Ok(Self {
+            return Ok(AppInvocation::Run(Box::new(Self {
                 config_path,
                 ..Self::default()
-            });
+            })));
         }
 
-        Self::load_from_path(&config_path)
+        Self::load_from_path(&config_path).map(|config| AppInvocation::Run(Box::new(config)))
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self, ConfigError> {

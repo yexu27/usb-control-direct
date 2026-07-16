@@ -25,7 +25,7 @@ use tokio::io::AsyncWrite;
 pub struct RequestFixture {
     pub context: RequestContext,
     pub storage: Arc<Storage>,
-    pub upgrade_root: TempDir,
+    pub _upgrade_root: TempDir,
     pub database: TempPath,
 }
 
@@ -70,13 +70,12 @@ pub fn request_fixture(seq_id: u32) -> RequestFixture {
         policy_service: None,
         license_validator: None,
         system_upgrade_coordinator: coordinator,
-        system_upgrade_root: upgrade_root.path().to_path_buf(),
         virusdb_upgrade_mgr: None,
     };
     RequestFixture {
         context,
         storage,
-        upgrade_root,
+        _upgrade_root: upgrade_root,
         database: path,
     }
 }

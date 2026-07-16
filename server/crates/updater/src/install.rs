@@ -4,13 +4,14 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use system_upgrade::{read_installed_release, ActiveRelease, ActiveReleaseStore, UpgradeStateLock};
+use system_upgrade::read_installed_release;
 
 use crate::executor::run_command;
 use crate::health::{check_health, read_restart_count, HealthExpectation};
 use crate::migration::run_migration;
-use crate::{Clock, CommandRunner, UpdaterError, UpgradePaths};
+use crate::{Clock, CommandRunner, UpdaterError, UpgradeDatabase, UpgradePaths};
 
 /// 在线升级期间供 DEB 维护脚本识别 updater 管理安装的短期标记。
 pub struct ManagedInstallGuard {
@@ -55,14 +56,21 @@ impl Drop for ManagedInstallGuard {
 pub struct InstallFinalizer<R, C> {
     paths: UpgradePaths,
     runner: R,
+    database: Arc<dyn UpgradeDatabase>,
     clock: C,
 }
 
 impl<R, C> InstallFinalizer<R, C> {
-    pub fn new(paths: UpgradePaths, runner: R, clock: C) -> Self {
+    pub fn new(
+        paths: UpgradePaths,
+        runner: R,
+        database: Arc<dyn UpgradeDatabase>,
+        clock: C,
+    ) -> Self {
         Self {
             paths,
             runner,
+            database,
             clock,
         }
     }
@@ -70,7 +78,6 @@ impl<R, C> InstallFinalizer<R, C> {
 
 impl<R: CommandRunner, C: Clock> InstallFinalizer<R, C> {
     pub fn finalize(&self) -> Result<(), UpdaterError> {
-        let lock = UpgradeStateLock::acquire(&self.paths.root)?;
         let installed = read_installed_release(&self.paths.installed_release)?;
         run_migration(
             &self.runner,
@@ -105,20 +112,8 @@ impl<R: CommandRunner, C: Clock> InstallFinalizer<R, C> {
             },
         )?;
         let committed_at = self.clock.now()?;
-        ActiveReleaseStore::new(self.paths.root.clone())?
-            .commit(
-                &lock,
-                &ActiveRelease {
-                    format_version: 1,
-                    version: installed.version,
-                    schema_version: installed.supported_schema_max,
-                    committed_at,
-                    online_upgrade_id: None,
-                },
-            )
-            .map_err(|error| {
-                UpdaterError::TaskInvalid(format!("直接安装活动发布提交失败: {error}"))
-            })
+        self.database
+            .set_version(&installed.version.to_string(), committed_at)
     }
 }
 

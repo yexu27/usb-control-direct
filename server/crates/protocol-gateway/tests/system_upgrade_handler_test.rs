@@ -73,7 +73,7 @@ fn accepted_upgrade_does_not_update_system_version_or_log_final_success() {
     let fixture = PackageFixture::valid();
     let (ctx, _database) = accepted_context(&fixture, 43);
     let storage = ctx.storage().expect("test storage");
-    storage.config_set("system_version", "V3.0.1").unwrap();
+    storage.config_set("system_version", "3.0.1").unwrap();
     let before_log_count = storage.operation_log_count().unwrap();
 
     let outcome = handle_upload_system_upgrade(
@@ -88,7 +88,7 @@ fn accepted_upgrade_does_not_update_system_version_or_log_final_success() {
             .unwrap()
             .and_then(|value| value.config_value)
             .as_deref(),
-        Some("V3.0.1")
+        Some("3.0.1")
     );
     assert_eq!(storage.operation_log_count().unwrap(), before_log_count + 2);
     let logs = storage.operation_log_query_by_time(0, i64::MAX).unwrap();
@@ -260,7 +260,6 @@ fn context_with_session_and_coordinator(
     });
     context.source_ip = "192.0.2.10".into();
     context.system_upgrade_coordinator = Arc::new(coordinator(fixture));
-    context.system_upgrade_root = fixture.root();
     (context, database)
 }
 

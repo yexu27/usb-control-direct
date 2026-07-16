@@ -18,6 +18,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 system-upgrade = { path = "../system-upgrade" }
 thiserror = { workspace = true }
+usb-control-db-migrate = { path = "../db-migrate" }
 wait-timeout = { workspace = true }
 
 [dev-dependencies]

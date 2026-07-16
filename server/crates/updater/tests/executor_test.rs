@@ -1,18 +1,24 @@
 mod support;
 
 use std::fs;
+use std::sync::Arc;
 
 use support::{
     target_release, version, FakeClock, FakeCommandRunner, FakePackageRevalidator,
-    TEST_CERTIFICATE_PEM,
+    FakeUpgradeDatabase, TEST_CERTIFICATE_PEM,
 };
 use system_upgrade::{
-    certificate_sha256, ActiveRelease, ActiveReleaseStore, UpgradeResultStore, UpgradeStateLock,
-    UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    certificate_sha256, UpgradeResultStore, UpgradeStateLock, UpgradeStatus, UpgradeTask,
+    UpgradeTaskStore,
 };
 use usb_control_updater::{UpgradeExecutor, UpgradePaths};
 
-fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
+fn arrange() -> (
+    tempfile::TempDir,
+    UpgradePaths,
+    FakePackageRevalidator,
+    FakeUpgradeDatabase,
+) {
     let dir = tempfile::tempdir().unwrap();
     let paths = UpgradePaths::for_root(dir.path().to_path_buf());
     let tasks = UpgradeTaskStore::new(paths.root.clone()).unwrap();
@@ -40,19 +46,6 @@ fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
         b"candidate",
     )
     .unwrap();
-    ActiveReleaseStore::new(paths.root.clone())
-        .unwrap()
-        .commit(
-            &guard,
-            &ActiveRelease {
-                format_version: 1,
-                version: version("3.0.1"),
-                schema_version: 1,
-                committed_at: 100,
-                online_upgrade_id: None,
-            },
-        )
-        .unwrap();
     for path in [
         &paths.ready_file,
         &paths.installed_release,
@@ -87,6 +80,7 @@ fn arrange() -> (tempfile::TempDir, UpgradePaths, FakePackageRevalidator) {
             fail: false,
             target_release: release,
         },
+        FakeUpgradeDatabase::new("3.0.1", 1),
     )
 }
 
@@ -100,13 +94,14 @@ fn success_runner() -> FakeCommandRunner {
 
 #[test]
 fn successful_upgrade_runs_one_install_chain_and_commits() {
-    let (_dir, paths, revalidator) = arrange();
+    let (_dir, paths, revalidator, database) = arrange();
     let runner = success_runner();
     runner.observe_path(paths.managed_marker.clone());
     let report = UpgradeExecutor::new(
         paths.clone(),
         runner.clone(),
         revalidator,
+        Arc::new(database.clone()),
         FakeClock::fixed(200),
     )
     .execute("upgrade-test")
@@ -140,26 +135,23 @@ fn successful_upgrade_runs_one_install_chain_and_commits() {
             .status,
         UpgradeStatus::Committed
     );
-    let active = ActiveReleaseStore::new(paths.root)
-        .unwrap()
-        .current()
-        .unwrap()
-        .unwrap();
-    assert_eq!(active.version, version("3.0.2"));
-    assert_eq!(active.online_upgrade_id.as_deref(), Some("upgrade-test"));
+    assert_eq!(database.state().system_version, "3.0.2");
+    assert_eq!(database.read_count(), 1);
+    assert_eq!(database.compare_count(), 1);
     assert!(runner.observations().into_iter().all(|exists| exists));
     assert!(!paths.managed_marker.exists());
 }
 
 #[test]
 fn revalidation_failure_records_failed_without_commands() {
-    let (_dir, paths, mut revalidator) = arrange();
+    let (_dir, paths, mut revalidator, database) = arrange();
     revalidator.fail = true;
     let runner = FakeCommandRunner::default();
     assert!(UpgradeExecutor::new(
         paths.clone(),
         runner.clone(),
         revalidator,
+        Arc::new(database),
         FakeClock::fixed(200)
     )
     .execute("upgrade-test")
@@ -170,14 +162,36 @@ fn revalidation_failure_records_failed_without_commands() {
 }
 
 #[test]
+fn source_version_mismatch_fails_before_stopping_service() {
+    let (_dir, paths, revalidator, database) = arrange();
+    database.set_system_version("3.0.0");
+    let runner = FakeCommandRunner::default();
+
+    assert!(UpgradeExecutor::new(
+        paths.clone(),
+        runner.clone(),
+        revalidator,
+        Arc::new(database.clone()),
+        FakeClock::fixed(200)
+    )
+    .execute("upgrade-test")
+    .is_err());
+
+    assert!(runner.calls().is_empty());
+    assert_eq!(database.compare_count(), 0);
+    assert_failed(&paths, "revalidating");
+}
+
+#[test]
 fn stop_failure_records_failed_and_never_runs_dpkg() {
-    let (_dir, paths, revalidator) = arrange();
+    let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
     runner.push_failure("stopping");
     assert!(UpgradeExecutor::new(
         paths.clone(),
         runner.clone(),
         revalidator,
+        Arc::new(database),
         FakeClock::fixed(200)
     )
     .execute("upgrade-test")
@@ -189,7 +203,7 @@ fn stop_failure_records_failed_and_never_runs_dpkg() {
 
 #[test]
 fn unpack_failure_records_failed_and_never_installs_old_deb() {
-    let (_dir, paths, revalidator) = arrange();
+    let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
     runner.push_success("");
     runner.push_failure("installing");
@@ -197,6 +211,7 @@ fn unpack_failure_records_failed_and_never_installs_old_deb() {
         paths.clone(),
         runner.clone(),
         revalidator,
+        Arc::new(database.clone()),
         FakeClock::fixed(200)
     )
     .execute("upgrade-test")
@@ -211,20 +226,12 @@ fn unpack_failure_records_failed_and_never_installs_old_deb() {
     );
     assert!(!paths.managed_marker.exists());
     assert_failed(&paths, "installing");
-    assert_eq!(
-        ActiveReleaseStore::new(paths.root.clone())
-            .unwrap()
-            .current()
-            .unwrap()
-            .unwrap()
-            .version,
-        version("3.0.1")
-    );
+    assert_eq!(database.state().system_version, "3.0.1");
 }
 
 #[test]
 fn migration_failure_records_failed_without_configure_or_start() {
-    let (_dir, paths, revalidator) = arrange();
+    let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
     runner.push_success("");
     runner.push_success("");
@@ -233,6 +240,7 @@ fn migration_failure_records_failed_without_configure_or_start() {
         paths.clone(),
         runner.clone(),
         revalidator,
+        Arc::new(database),
         FakeClock::fixed(200)
     )
     .execute("upgrade-test")
@@ -243,28 +251,55 @@ fn migration_failure_records_failed_without_configure_or_start() {
 }
 
 #[test]
-fn health_failure_records_failed_without_changing_active_release() {
-    let (_dir, paths, revalidator) = arrange();
+fn health_failure_records_failed_without_changing_database_version() {
+    let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
     for output in ["", "", "", "", "", "0\n", "", "active\n", "99\n", "0\n", ""] {
         runner.push_success(output);
     }
-    assert!(
-        UpgradeExecutor::new(paths.clone(), runner, revalidator, FakeClock::fixed(200))
-            .execute("upgrade-test")
-            .is_err()
-    );
+    assert!(UpgradeExecutor::new(
+        paths.clone(),
+        runner,
+        revalidator,
+        Arc::new(database.clone()),
+        FakeClock::fixed(200)
+    )
+    .execute("upgrade-test")
+    .is_err());
     assert_failed(&paths, "health_checking");
-    assert_eq!(
-        ActiveReleaseStore::new(paths.root)
-            .unwrap()
-            .current()
-            .unwrap()
-            .unwrap()
-            .version,
-        version("3.0.1")
-    );
+    assert_eq!(database.state().system_version, "3.0.1");
+    assert_eq!(database.compare_count(), 0);
     assert!(!paths.managed_marker.exists());
+}
+
+#[test]
+fn compare_and_set_failure_writes_failed_committing_result() {
+    let (_dir, paths, revalidator, database) = arrange();
+    database.fail_compare();
+    let runner = success_runner();
+
+    assert!(UpgradeExecutor::new(
+        paths.clone(),
+        runner,
+        revalidator,
+        Arc::new(database.clone()),
+        FakeClock::fixed(200)
+    )
+    .execute("upgrade-test")
+    .is_err());
+
+    assert_eq!(database.state().system_version, "3.0.1");
+    assert_eq!(database.compare_count(), 1);
+    assert_failed(&paths, "committing");
+    assert_ne!(
+        UpgradeResultStore::new(paths.root)
+            .unwrap()
+            .get("upgrade-test")
+            .unwrap()
+            .unwrap()
+            .status,
+        UpgradeStatus::Committed
+    );
 }
 
 fn assert_failed(paths: &UpgradePaths, stage: &str) {
