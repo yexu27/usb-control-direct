@@ -6,14 +6,11 @@ fail() {
   exit 1
 }
 
-test "$#" -eq 3 || fail 'usage: server/deploy/build-bin.sh <target-version> <minimum-current-version> <schema-from>'
+test "$#" -eq 1 || fail 'usage: server/deploy/build-bin.sh <target-version>'
 TARGET_VERSION="$1"
-MINIMUM_VERSION="$2"
-SCHEMA_FROM="$3"
-for version in "$TARGET_VERSION" "$MINIMUM_VERSION"; do
+for version in "$TARGET_VERSION"; do
   printf '%s' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail "invalid version: $version"
 done
-printf '%s' "$SCHEMA_FROM" | grep -Eq '^[0-9]+$' || fail 'schema-from must be an unsigned integer'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -34,13 +31,11 @@ rm -f "$BIN" "$BIN.sha256"
   cargo run -p usb-control-release-tool --release -- build-bin \
     --deb "$DEB" \
     --key-dir "$KEY_DIR" \
-    --output "$BIN" \
-    --minimum-current-version "$MINIMUM_VERSION" \
-    --schema-from "$SCHEMA_FROM"
+    --output "$BIN"
   cargo run -p usb-control-release-tool --release -- verify-bin \
     --bin "$BIN" \
     --key-dir "$KEY_DIR"
 )
-bash "$SCRIPT_DIR/tests/bin-package-test.sh" "$BIN" "$DEB" "$TARGET_VERSION" "$SCHEMA_FROM"
+bash "$SCRIPT_DIR/tests/bin-package-test.sh" "$BIN" "$DEB" "$TARGET_VERSION"
 sha256sum "$BIN" >"$BIN.sha256"
 echo "BIN ready: $BIN"

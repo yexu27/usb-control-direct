@@ -2,11 +2,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use system_upgrade::{
-    SystemVersion, UpgradeError, UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
+    UpgradeError, UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
 };
-use usb_control_app::upgrade_preflight::{
-    SystemUpgradePreflight, UpgradeDatabaseSnapshot, UpgradeHostProbe,
-};
+use usb_control_app::upgrade_preflight::{SystemUpgradePreflight, UpgradeHostProbe};
 
 #[derive(Clone)]
 struct FakeProbe {
@@ -65,29 +63,7 @@ impl Fixture {
     }
 
     fn preflight(&self, probe: FakeProbe) -> SystemUpgradePreflight {
-        SystemUpgradePreflight::new(
-            Arc::new(probe),
-            self.root.clone(),
-            Arc::new(FakeDatabase {
-                version: version("3.0.1"),
-                schema: 1,
-            }),
-        )
-    }
-}
-
-struct FakeDatabase {
-    version: SystemVersion,
-    schema: u32,
-}
-
-impl UpgradeDatabaseSnapshot for FakeDatabase {
-    fn current_version(&self) -> Result<SystemVersion, String> {
-        Ok(self.version)
-    }
-
-    fn current_schema(&self) -> Result<u32, String> {
-        Ok(self.schema)
+        SystemUpgradePreflight::new(Arc::new(probe), self.root.clone())
     }
 }
 
@@ -96,15 +72,7 @@ fn request() -> UpgradePreflightRequest {
         package_size: 100,
         deb_size: 50,
         expanded_size: 4096,
-        source_version: version("3.0.1"),
-        target_version: version("3.1.0"),
-        schema_from: 1,
-        schema_to: 2,
     }
-}
-
-fn version(value: &str) -> SystemVersion {
-    SystemVersion::parse(value).unwrap()
 }
 
 fn assert_failure(result: Result<(), UpgradeError>, expected: UpgradePreflightFailure) {
@@ -112,48 +80,16 @@ fn assert_failure(result: Result<(), UpgradeError>, expected: UpgradePreflightFa
 }
 
 #[test]
-fn preflight_reads_live_database_version_and_schema() {
+fn preflight_checks_host_without_database_snapshot() {
     let fixture = Fixture::new();
     fixture
         .preflight(FakeProbe::healthy())
         .check(&request())
         .unwrap();
-    assert!(!fixture.root.join("rollback").exists());
 }
 
 #[test]
-fn preflight_space_budget_excludes_old_release_deb() {
-    let fixture = Fixture::new();
-    let required = 100 + 50 + 4096 + 256 * 1024 * 1024;
-    let mut probe = FakeProbe::healthy();
-    probe.available = required - 1;
-    assert_failure(
-        fixture.preflight(probe).check(&request()),
-        UpgradePreflightFailure::InsufficientSpace {
-            required,
-            available: required - 1,
-        },
-    );
-}
-
-#[test]
-fn preflight_rejects_database_version_or_schema_mismatch() {
-    for (source_version, schema_from) in [(version("3.0.0"), 1), (version("3.0.1"), 2)] {
-        let fixture = Fixture::new();
-        let mut value = request();
-        value.source_version = source_version;
-        value.schema_from = schema_from;
-        assert!(matches!(
-            fixture.preflight(FakeProbe::healthy()).check(&value),
-            Err(UpgradeError::Preflight(
-                UpgradePreflightFailure::ProbeFailed(_)
-            ))
-        ));
-    }
-}
-
-#[test]
-fn preflight_uses_database_without_release_state_file() {
+fn preflight_does_not_require_upgrade_state_directory() {
     let fixture = Fixture::new();
     assert!(!fixture.root.exists());
     fixture

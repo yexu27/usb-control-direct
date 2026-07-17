@@ -59,9 +59,7 @@ impl PackageFixture {
 
     pub fn context(&self) -> VerificationContext {
         VerificationContext {
-            current_version: SystemVersion::parse("3.0.1").expect("valid current version"),
             current_schema: 1,
-            supported_schema_max: 2,
             protocol_version: 1,
             client_target_version: "v3.1.0".to_string(),
             client_sha256: sha256_hex(&self.package_bytes),
@@ -143,13 +141,11 @@ pub fn manifest_json(deb_bytes: &[u8], overrides: Value) -> Vec<u8> {
         "product": "usb-control",
         "package_version": "3.1.0",
         "architecture": "arm64",
-        "minimum_current_version": "3.0.0",
         "protocol_version": 1,
         "tls_cert_sha256": TLS_SHA256,
         "deb_file": DEB_NAME,
         "deb_size": deb_bytes.len(),
         "deb_sha256": sha256_hex(deb_bytes),
-        "schema_from": 1,
         "schema_to": 2,
         "signing_key_id": KEY_ID
     });

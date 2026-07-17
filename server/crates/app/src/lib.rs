@@ -6,3 +6,4 @@ pub mod upgrade_dispatch;
 pub mod upgrade_preflight;
 pub mod upgrade_result;
 pub mod upgrade_scheduler;
+pub mod upgrade_source;

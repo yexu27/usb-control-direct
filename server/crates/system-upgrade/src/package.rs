@@ -14,13 +14,11 @@ pub struct UpgradeManifest {
     pub product: String,
     pub package_version: SystemVersion,
     pub architecture: String,
-    pub minimum_current_version: SystemVersion,
     pub protocol_version: u32,
     pub tls_cert_sha256: String,
     pub deb_file: String,
     pub deb_size: u64,
     pub deb_sha256: String,
-    pub schema_from: u32,
     pub schema_to: u32,
     pub signing_key_id: String,
 }

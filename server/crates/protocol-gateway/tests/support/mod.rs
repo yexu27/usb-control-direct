@@ -17,7 +17,8 @@ use storage::Storage;
 use storage_test_support::initialize_database;
 use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, SystemVersion, UpgradeCoordinator,
-    UpgradeEnvironment, UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler,
+    UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler, UpgradeSourceReader,
+    UpgradeSourceState,
 };
 use tempfile::{NamedTempFile, TempDir, TempPath};
 use tokio::io::AsyncWrite;
@@ -46,12 +47,8 @@ pub fn request_fixture(seq_id: u32) -> RequestFixture {
             upgrade_root.path().to_path_buf(),
             PackageStager::new(upgrade_root.path().to_path_buf(), 128 * 1024 * 1024),
             PackageVerifier::new(upgrade_root.path().join("keys"), Arc::new(TestDebInspector)),
-            UpgradeEnvironment {
-                current_version: SystemVersion::parse("3.0.1").unwrap(),
-                current_schema: 1,
-                supported_schema_max: 2,
-                protocol_version: 1,
-            },
+            Arc::new(TestUpgradeSource),
+            1,
             Arc::new(TestUpgradePreflight),
             Arc::new(TestUpgradeScheduler),
         )
@@ -100,6 +97,17 @@ impl DebInspector for TestDebInspector {
 }
 
 struct TestUpgradePreflight;
+
+struct TestUpgradeSource;
+
+impl UpgradeSourceReader for TestUpgradeSource {
+    fn read(&self) -> Result<UpgradeSourceState, UpgradeError> {
+        Ok(UpgradeSourceState {
+            current_version: SystemVersion::parse("3.0.1")?,
+            current_schema: 1,
+        })
+    }
+}
 
 impl UpgradePreflight for TestUpgradePreflight {
     fn check(&self, _request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {

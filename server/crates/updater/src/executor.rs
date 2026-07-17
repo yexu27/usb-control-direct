@@ -372,9 +372,7 @@ impl PackageRevalidator for SharedPackageRevalidator {
             PackageVerifier::new(self.verify_key_dir.clone(), self.deb_inspector.clone()).verify(
                 package,
                 &VerificationContext {
-                    current_version: database_version,
                     current_schema: database_state.schema_version,
-                    supported_schema_max: installed.supported_schema_max,
                     protocol_version: 1,
                     client_target_version: task.target_version.to_string(),
                     client_sha256: task.package_sha256.clone(),
@@ -501,6 +499,15 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
                 ));
             }
         };
+        if task.target_version <= database_version {
+            return Err(self.finish_failed(
+                &stores,
+                &task,
+                "revalidating",
+                UpdaterError::TaskInvalid("目标版本必须高于数据库当前版本".into()),
+                &mut last_timestamp,
+            ));
+        }
         let verified = match self
             .revalidator
             .revalidate(&self.paths, &task, &database_state)

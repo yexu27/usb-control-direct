@@ -15,23 +15,18 @@ mount --make-rprivate /
 WORK="$(mktemp -d)"
 FAKE_BIN="$WORK/fake-bin"
 LOG="$WORK/calls.log"
-mkdir -p "$FAKE_BIN" "$WORK/opt" "$WORK/etc" "$WORK/lib" "$WORK/log" "$WORK/run-updater" "$WORK/clamav-db" "$WORK/run-clamav"
+mkdir -p "$FAKE_BIN" "$WORK/opt" "$WORK/etc" "$WORK/lib" "$WORK/log" "$WORK/run-updater"
 : >"$LOG"
 
 cleanup() {
-  background_jobs="$(jobs -p)"
-  if [ -n "$background_jobs" ]; then
-    kill $background_jobs 2>/dev/null || true
-    wait $background_jobs 2>/dev/null || true
-  fi
-  for target in /run/clamav /var/lib/clamav /run/usb-control-updater /var/log/usb-control /var/lib/usb-control /etc/usb-control /opt/usb-control; do
+  for target in /run/usb-control-updater /var/log/usb-control /var/lib/usb-control /etc/usb-control /opt/usb-control; do
     mountpoint -q "$target" && umount "$target" || true
   done
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 
-for target in /opt/usb-control /etc/usb-control /var/lib/usb-control /var/log/usb-control /run/usb-control-updater /var/lib/clamav /run/clamav; do
+for target in /opt/usb-control /etc/usb-control /var/lib/usb-control /var/log/usb-control /run/usb-control-updater; do
   mkdir -p "$target"
 done
 mount --bind "$WORK/opt" /opt/usb-control
@@ -39,40 +34,13 @@ mount --bind "$WORK/etc" /etc/usb-control
 mount --bind "$WORK/lib" /var/lib/usb-control
 mount --bind "$WORK/log" /var/log/usb-control
 mount --bind "$WORK/run-updater" /run/usb-control-updater
-mount --bind "$WORK/clamav-db" /var/lib/clamav
-mount --bind "$WORK/run-clamav" /run/clamav
-
-for database in main.cvd daily.cvd bytecode.cvd; do
-  printf 'database\n' >"$WORK/clamav-db/$database"
-done
-python3 - "$WORK/run-clamav/clamd.ctl" <<'PY' &
-import socket, sys, time
-s = socket.socket(socket.AF_UNIX)
-s.bind(sys.argv[1])
-s.listen(1)
-time.sleep(300)
-PY
-for _ in $(seq 1 50); do
-  test -S /run/clamav/clamd.ctl && break
-  sleep 0.02
-done
-test -S /run/clamav/clamd.ctl
 
 cat >"$FAKE_BIN/systemctl" <<EOF
 #!/usr/bin/env bash
 printf 'systemctl %s\n' "\$*" >>'$LOG'
 test ! -e '$WORK/fail-systemctl'
 EOF
-cat >"$FAKE_BIN/clamdscan" <<EOF
-#!/usr/bin/env bash
-printf 'clamdscan %s\n' "\$*" >>'$LOG'
-exit 0
-EOF
-cat >"$FAKE_BIN/clamd" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-chmod 0755 "$FAKE_BIN/systemctl" "$FAKE_BIN/clamdscan" "$FAKE_BIN/clamd"
+chmod 0755 "$FAKE_BIN/systemctl"
 export PATH="$FAKE_BIN:/usr/sbin:/usr/bin:/sbin:/bin"
 
 DEFAULTS="$WORK/opt/defaults/etc/usb-control"
@@ -103,10 +71,17 @@ POSTRM="$REPO_ROOT/server/deploy/debian/postrm"
 
 reset_log() { : >"$LOG"; }
 count_log() { grep -Fc "$1" "$LOG" || true; }
+assert_no_clamav_calls() {
+  if grep -Eqi 'clam|fresh|/var/lib/clamav' "$LOG"; then
+    echo 'maintainer script unexpectedly managed ClamAV' >&2
+    exit 1
+  fi
+}
 
 reset_log
 bash "$POSTINST" configure
 test "$(count_log 'updater finalize-install')" = '1'
+assert_no_clamav_calls
 test "$(cat "$WORK/etc/usb-control.toml")" = 'config-default'
 test "$(cat "$WORK/etc/tls/server.key")" = 'tls-key-default'
 test "$(cat "$WORK/etc/keys/license_verify.pub")" = 'license_verify.pub-default'
@@ -121,6 +96,7 @@ touch "$WORK/run-updater/managed"
 reset_log
 bash "$POSTINST" configure
 test "$(count_log 'updater finalize-install')" = '0'
+assert_no_clamav_calls
 test "$(cat "$WORK/etc/usb-control.toml")" = 'site-config'
 test "$(cat "$WORK/etc/tls/server.key")" = 'site-tls-key'
 test "$(cat "$WORK/etc/keys/license_verify.pub")" = 'site-license'
@@ -158,10 +134,5 @@ if bash "$POSTINST" configure; then
   exit 1
 fi
 rm -f "$WORK/fail-finalizer"
-touch "$WORK/fail-systemctl"
-if bash "$POSTINST" configure; then
-  echo 'postinst unexpectedly ignored systemctl failure' >&2
-  exit 1
-fi
 
 echo 'debian-scripts-runtime-test: PASS'

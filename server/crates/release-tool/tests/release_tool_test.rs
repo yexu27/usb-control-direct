@@ -13,9 +13,8 @@ use usb_control_release_tool::{
 fn build_bin_is_deterministic_bounded_and_accepted_by_server_verifier() {
     let fixture = Fixture::new();
 
-    let manifest = fixture.build(1).unwrap();
+    let manifest = fixture.build().unwrap();
 
-    assert_eq!(manifest.schema_from, 1);
     assert_eq!(manifest.schema_to, 2);
     let file = fs::File::open(&fixture.bin).unwrap();
     let mut archive = tar::Archive::new(file);
@@ -47,14 +46,14 @@ fn build_bin_is_deterministic_bounded_and_accepted_by_server_verifier() {
     let verified =
         verify_bin_with_inspector(&fixture.bin, &fixture.keys, Arc::new(FakeInspector)).unwrap();
     assert_eq!(verified.package_version, manifest.package_version);
-    assert_eq!(verified.schema_from, manifest.schema_from);
+    assert_eq!(verified.schema_to, manifest.schema_to);
     assert_eq!(verified.signing_key_id, manifest.signing_key_id);
 }
 
 #[test]
 fn private_key_is_never_present_in_bin_bytes_or_tar_entries() {
     let fixture = Fixture::new();
-    fixture.build(1).unwrap();
+    fixture.build().unwrap();
     let private = fs::read(fixture.keys.join("upgrade_sign.key")).unwrap();
     let private = trim_ascii(&private);
     let package = fs::read(&fixture.bin).unwrap();
@@ -73,21 +72,6 @@ fn private_key_is_never_present_in_bin_bytes_or_tar_entries() {
 }
 
 #[test]
-fn manifest_schema_from_comes_from_explicit_release_input() {
-    let fixture = Fixture::new();
-    assert_eq!(fixture.build(2).unwrap().schema_from, 2);
-}
-
-#[test]
-fn schema_from_outside_target_supported_range_is_rejected() {
-    for schema_from in [0, 3] {
-        let fixture = Fixture::new();
-        assert!(fixture.build(schema_from).is_err());
-        assert!(!fixture.bin.exists());
-    }
-}
-
-#[test]
 fn tampered_manifest_deb_or_signature_is_rejected() {
     for target in [
         "manifest.json",
@@ -95,7 +79,7 @@ fn tampered_manifest_deb_or_signature_is_rejected() {
         "signature.sm2",
     ] {
         let fixture = Fixture::new();
-        fixture.build(1).unwrap();
+        fixture.build().unwrap();
         let file = fs::File::open(&fixture.bin).unwrap();
         let mut entries = Vec::new();
         for entry in tar::Archive::new(file).entries().unwrap() {
@@ -158,17 +142,12 @@ impl Fixture {
         }
     }
 
-    fn build(
-        &self,
-        schema_from: u32,
-    ) -> Result<UpgradeManifest, usb_control_release_tool::ReleaseToolError> {
+    fn build(&self) -> Result<UpgradeManifest, usb_control_release_tool::ReleaseToolError> {
         build_bin_with_inspector(
             BuildBinRequest {
                 deb_path: &self.deb,
                 key_dir: &self.keys,
                 output_path: &self.bin,
-                minimum_current_version: SystemVersion::parse("3.0.1").unwrap(),
-                schema_from,
             },
             Arc::new(FakeInspector),
         )

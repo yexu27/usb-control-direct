@@ -15,8 +15,8 @@ mod version;
 mod coordinator;
 
 pub use coordinator::{
-    PrepareUpgradeRequest, PreparedUpgrade, UpgradeCoordinator, UpgradeEnvironment,
-    UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler,
+    PrepareUpgradeRequest, PreparedUpgrade, UpgradeCoordinator, UpgradePreflight,
+    UpgradePreflightRequest, UpgradeScheduler, UpgradeSourceReader, UpgradeSourceState,
 };
 pub use deb::{certificate_sha256, DebInspector, DebMetadata, DpkgDebInspector};
 pub use error::{UpgradeError, UpgradePreflightFailure};

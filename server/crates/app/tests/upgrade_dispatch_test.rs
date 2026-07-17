@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use protocol_gateway::post_send::{PostSendAction, PostSendActionExecutor};
 use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, SystemVersion, UpgradeCoordinator,
-    UpgradeEnvironment, UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler,
-    UpgradeStatus, UpgradeTask,
+    UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler, UpgradeSourceReader,
+    UpgradeSourceState, UpgradeStatus, UpgradeTask,
 };
 use tempfile::TempDir;
 use usb_control_app::upgrade_dispatch::{
@@ -136,12 +136,8 @@ impl Fixture {
                 root.clone(),
                 PackageStager::new(root.clone(), 128 * 1024 * 1024),
                 PackageVerifier::new(temp.path().join("keys"), Arc::new(UnusedInspector)),
-                UpgradeEnvironment {
-                    current_version: SystemVersion::parse("3.0.1").unwrap(),
-                    current_schema: 1,
-                    supported_schema_max: 2,
-                    protocol_version: 1,
-                },
+                Arc::new(TestUpgradeSource),
+                1,
                 Arc::new(TestPreflight),
                 scheduler,
             )
@@ -198,6 +194,17 @@ impl UpgradeResultObserver for RecordingObserver {
 }
 
 struct TestPreflight;
+
+struct TestUpgradeSource;
+
+impl UpgradeSourceReader for TestUpgradeSource {
+    fn read(&self) -> Result<UpgradeSourceState, UpgradeError> {
+        Ok(UpgradeSourceState {
+            current_version: SystemVersion::parse("3.0.1")?,
+            current_schema: 1,
+        })
+    }
+}
 
 impl UpgradePreflight for TestPreflight {
     fn check(&self, _request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {

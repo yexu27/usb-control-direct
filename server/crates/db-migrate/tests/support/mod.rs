@@ -42,21 +42,16 @@ impl Fixture {
         fs::write(self.sql_root.join("migrations").join(name), sql).unwrap();
     }
 
-    pub fn replace_init(&self, sql: &str) {
-        self.write_migration("0001_init.sql", sql);
-    }
-
     pub fn replace_seed(&self, sql: &str) {
         fs::write(self.sql_root.join("seeds/0001_default_data.sql"), sql).unwrap();
     }
 
-    pub fn initialize_legacy_v1(&self) {
-        let conn = self.connection();
-        let schema = fs::read_to_string(self.sql_root.join("migrations/0001_init.sql")).unwrap();
-        let seeds = fs::read_to_string(self.sql_root.join("seeds/0001_default_data.sql")).unwrap();
-        conn.execute_batch(&schema).unwrap();
-        conn.execute_batch(&seeds).unwrap();
-        conn.pragma_update(None, "user_version", 1).unwrap();
+    pub fn restore_seed(&self) {
+        fs::copy(
+            deploy_db_root().join("seeds/0001_default_data.sql"),
+            self.sql_root.join("seeds/0001_default_data.sql"),
+        )
+        .unwrap();
     }
 }
 
@@ -79,4 +74,20 @@ pub fn table_exists(conn: &Connection, table: &str) -> bool {
         |row| row.get(0),
     )
     .unwrap()
+}
+
+pub fn business_table_names(conn: &Connection) -> Vec<String> {
+    let mut statement = conn
+        .prepare(
+            "SELECT name
+             FROM sqlite_master
+             WHERE type='table' AND name NOT LIKE 'sqlite_%'
+             ORDER BY name",
+        )
+        .unwrap();
+    statement
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
 }

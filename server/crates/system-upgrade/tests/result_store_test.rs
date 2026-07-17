@@ -84,17 +84,6 @@ fn schedule_failed_and_failed_are_business_log_importable_when_observed() {
 }
 
 #[test]
-fn result_json_rejects_removed_rollback_error_field() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = UpgradeResultStore::new(dir.path().to_path_buf()).unwrap();
-    let path = dir.path().join("results/legacy.result.json");
-    let mut legacy = serde_json::to_value(result("legacy", UpgradeStatus::Failed, 200)).unwrap();
-    legacy["rollback_error"] = serde_json::json!("removed");
-    fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-    assert!(store.get("legacy").is_err());
-}
-
-#[test]
 fn result_store_keeps_latest_twenty() {
     let dir = tempfile::tempdir().unwrap();
     let store = UpgradeResultStore::new(dir.path().to_path_buf()).unwrap();

@@ -13,9 +13,7 @@ use crate::{
 };
 
 pub struct VerificationContext {
-    pub current_version: SystemVersion,
     pub current_schema: u32,
-    pub supported_schema_max: u32,
     pub protocol_version: u32,
     pub client_target_version: String,
     pub client_sha256: String,
@@ -114,19 +112,10 @@ fn validate_manifest(
     if !is_lower_hex_64(&manifest.tls_cert_sha256) {
         return Err(UpgradeError::Format("TLS 证书指纹格式非法".into()));
     }
-    if manifest.package_version <= context.current_version {
-        return Err(UpgradeError::VersionNotGreater);
-    }
-    if context.current_version < manifest.minimum_current_version {
-        return Err(UpgradeError::Format("当前版本低于最低升级版本".into()));
-    }
     if manifest.protocol_version != context.protocol_version {
         return Err(UpgradeError::Format("升级包协议版本不兼容".into()));
     }
-    if manifest.schema_from != context.current_schema
-        || manifest.schema_to < manifest.schema_from
-        || manifest.schema_to > context.supported_schema_max
-    {
+    if context.current_schema > manifest.schema_to {
         return Err(UpgradeError::SchemaIncompatible);
     }
     let client_version_text = context

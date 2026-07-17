@@ -14,13 +14,16 @@ use crate::{
     UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore, VerificationContext,
 };
 
-/// 装置端固定的升级兼容性上下文。
-#[derive(Debug, Clone, Copy)]
-pub struct UpgradeEnvironment {
+/// 每次受理时从持久化存储读取的升级源状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpgradeSourceState {
     pub current_version: SystemVersion,
     pub current_schema: u32,
-    pub supported_schema_max: u32,
-    pub protocol_version: u32,
+}
+
+/// 升级源状态读取端口；由应用装配层实现数据库适配。
+pub trait UpgradeSourceReader: Send + Sync {
+    fn read(&self) -> Result<UpgradeSourceState, UpgradeError>;
 }
 
 /// 已通过网关授权检查的升级受理参数。
@@ -51,10 +54,6 @@ pub struct UpgradePreflightRequest {
     pub package_size: u64,
     pub deb_size: u64,
     pub expanded_size: u64,
-    pub source_version: SystemVersion,
-    pub target_version: SystemVersion,
-    pub schema_from: u32,
-    pub schema_to: u32,
 }
 
 /// 主服务受理前的只读装置环境预检端口。
@@ -66,7 +65,8 @@ pub trait UpgradePreflight: Send + Sync {
 pub struct UpgradeCoordinator {
     stager: PackageStager,
     verifier: PackageVerifier,
-    environment: UpgradeEnvironment,
+    source_reader: Arc<dyn UpgradeSourceReader>,
+    protocol_version: u32,
     preflight: Arc<dyn UpgradePreflight>,
     scheduler: Arc<dyn UpgradeScheduler>,
     store: UpgradeTaskStore,
@@ -79,7 +79,8 @@ impl UpgradeCoordinator {
         root: PathBuf,
         stager: PackageStager,
         verifier: PackageVerifier,
-        environment: UpgradeEnvironment,
+        source_reader: Arc<dyn UpgradeSourceReader>,
+        protocol_version: u32,
         preflight: Arc<dyn UpgradePreflight>,
         scheduler: Arc<dyn UpgradeScheduler>,
     ) -> Result<Self, UpgradeError> {
@@ -88,7 +89,8 @@ impl UpgradeCoordinator {
         Ok(Self {
             stager,
             verifier,
-            environment,
+            source_reader,
+            protocol_version,
             preflight,
             scheduler,
             store,
@@ -102,6 +104,7 @@ impl UpgradeCoordinator {
         if self.store.current()?.is_some() {
             return Err(UpgradeError::Busy);
         }
+        let source = self.source_reader.read()?;
 
         let upgrade_id = generate_upgrade_id();
         let now = unix_timestamp()?;
@@ -112,8 +115,14 @@ impl UpgradeCoordinator {
             Ok(staged) => staged,
             Err(error) => {
                 if let Ok(target_version) = requested_target_version {
-                    let mut task =
-                        self.new_task(&upgrade_id, &request, target_version, package_sha256, now);
+                    let mut task = self.new_task(
+                        &upgrade_id,
+                        &request,
+                        source,
+                        target_version,
+                        package_sha256,
+                        now,
+                    );
                     let _ = self.reject_and_clean(&guard, &mut task);
                 }
                 return Err(error);
@@ -122,6 +131,7 @@ impl UpgradeCoordinator {
         let mut task = self.new_task(
             &upgrade_id,
             &request,
+            source,
             staged.manifest.package_version,
             package_sha256,
             now,
@@ -130,11 +140,13 @@ impl UpgradeCoordinator {
             let _ = self.reject_and_clean(&guard, &mut task);
             return Err(error);
         }
+        if staged.manifest.package_version <= source.current_version {
+            let _ = self.reject_and_clean(&guard, &mut task);
+            return Err(UpgradeError::VersionNotGreater);
+        }
         let context = VerificationContext {
-            current_version: self.environment.current_version,
-            current_schema: self.environment.current_schema,
-            supported_schema_max: self.environment.supported_schema_max,
-            protocol_version: self.environment.protocol_version,
+            current_schema: source.current_schema,
+            protocol_version: self.protocol_version,
             client_target_version: request.client_target_version,
             client_sha256: request.client_sha256,
         };
@@ -149,10 +161,6 @@ impl UpgradeCoordinator {
             package_size: request.package_bytes.len() as u64,
             deb_size: verified.staged.manifest.deb_size,
             expanded_size: verified.deb_metadata.expanded_size,
-            source_version: self.environment.current_version,
-            target_version: verified.staged.manifest.package_version,
-            schema_from: verified.staged.manifest.schema_from,
-            schema_to: verified.staged.manifest.schema_to,
         };
         if let Err(error) = self.preflight.check(&preflight_request) {
             let _ = self.reject_and_clean(&guard, &mut task);
@@ -175,6 +183,7 @@ impl UpgradeCoordinator {
         &self,
         upgrade_id: &str,
         request: &PrepareUpgradeRequest,
+        source: UpgradeSourceState,
         target_version: SystemVersion,
         package_sha256: String,
         created_at: i64,
@@ -186,7 +195,7 @@ impl UpgradeCoordinator {
             username: request.username.clone(),
             role: request.role,
             source_ip: request.source_ip.clone(),
-            source_version: self.environment.current_version,
+            source_version: source.current_version,
             target_version,
             package_sha256,
             created_at,

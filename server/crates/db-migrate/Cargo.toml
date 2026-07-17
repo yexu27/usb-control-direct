@@ -11,9 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 rusqlite = { workspace = true }
-clamav-status = { workspace = true }
 release-info = { workspace = true }
-sha2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

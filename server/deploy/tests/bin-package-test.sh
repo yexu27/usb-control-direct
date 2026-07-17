@@ -6,11 +6,10 @@ fail() {
   exit 1
 }
 
-test "$#" -eq 4 || fail 'usage: bin-package-test.sh <bin> <deb> <target-version> <schema-from>'
+test "$#" -eq 3 || fail 'usage: bin-package-test.sh <bin> <deb> <target-version>'
 BIN="$(realpath "$1")"
 DEB="$(realpath "$2")"
 TARGET_VERSION="$3"
-SCHEMA_FROM="$4"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 KEY_DIR="$ROOT/deploy/assets/keys"
 test -f "$BIN" || fail "BIN not found: $BIN"
@@ -25,16 +24,15 @@ dpkg-deb --extract "$DEB" "$TMP/deb"
 for forbidden in \
   var/lib/usb-control/device.db \
   var/lib/usb-control/upgrade/current.json \
-  var/lib/usb-control/upgrade/active-release.json \
   var/lib/usb-control/upgrade/history \
   var/lib/usb-control/upgrade/results \
   opt/usb-control/install-meta/VERSION; do
   test ! -e "$TMP/deb/$forbidden" || fail "embedded DEB contains runtime state: $forbidden"
 done
 
-python3 - "$BIN" "$DEB" "$TMP/manifest.json" "$TMP/deb/opt/usb-control/install-meta/release.json" "$TARGET_VERSION" "$SCHEMA_FROM" "$KEY_DIR/upgrade_sign.key" <<'PY'
+python3 - "$BIN" "$DEB" "$TMP/manifest.json" "$TMP/deb/opt/usb-control/install-meta/release.json" "$TARGET_VERSION" "$KEY_DIR/upgrade_sign.key" <<'PY'
 import hashlib, json, pathlib, sys, tarfile
-bin_path, deb_path, manifest_path, release_path, target, schema_from, private_path = sys.argv[1:]
+bin_path, deb_path, manifest_path, release_path, target, private_path = sys.argv[1:]
 with tarfile.open(bin_path, "r:") as archive:
     members = archive.getmembers()
     expected = ["manifest.json", f"usb-control_V{target}_arm64.deb", "signature.sm2"]
@@ -56,7 +54,8 @@ assert manifest["architecture"] == "arm64"
 assert manifest["deb_file"] == f"usb-control_V{target}_arm64.deb"
 assert manifest["deb_size"] == len(deb)
 assert manifest["deb_sha256"] == hashlib.sha256(deb).hexdigest()
-assert manifest["schema_from"] == int(schema_from)
+assert "minimum_current_version" not in manifest
+assert "schema_from" not in manifest
 assert manifest["schema_to"] == release["supported_schema_max"]
 assert manifest["tls_cert_sha256"] == release["tls_cert_sha256"]
 private = pathlib.Path(private_path).read_bytes().strip()

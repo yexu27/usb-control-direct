@@ -22,6 +22,16 @@ trap 'rm -rf "$TMP"' EXIT
 dpkg-deb --extract "$DEB" "$TMP/data"
 dpkg-deb --control "$DEB" "$TMP/control"
 
+if find "$TMP/data" \
+  \( -path '*/var/lib/clamav' -o -path '*/var/lib/clamav/*' -o \
+     -path '*/etc/clamav' -o -path '*/etc/clamav/*' -o \
+     -name 'main.cvd' -o -name 'main.cld' -o \
+     -name 'daily.cvd' -o -name 'daily.cld' -o \
+     -name 'bytecode.cvd' -o -name 'bytecode.cld' \) \
+  -print -quit | grep -q .; then
+  fail 'DEB contains ClamAV configuration or virus databases'
+fi
+
 for binary in usb-control usb-control-updater usb-control-db-migrate; do
   path="$TMP/data/opt/usb-control/bin/$binary"
   test -f "$path" || fail "missing binary: $binary"
@@ -73,7 +83,6 @@ fi
 for forbidden in \
   var/lib/usb-control/device.db \
   var/lib/usb-control/upgrade/current.json \
-  var/lib/usb-control/upgrade/active-release.json \
   var/lib/usb-control/upgrade/history \
   var/lib/usb-control/upgrade/results \
   opt/usb-control/install-meta/VERSION; do
@@ -110,6 +119,9 @@ for script in preinst postinst prerm postrm; do
   test -f "$TMP/control/$script" || fail "missing maintainer script: $script"
   test "$(stat -c %a "$TMP/control/$script")" = '755' || fail "$script mode is not 0755"
   test "$(sha256sum "$TMP/control/$script" | awk '{print $1}')" = "$(sha256sum "$ROOT/server/deploy/debian/$script" | awk '{print $1}')" || fail "$script differs from repository source"
+  if grep -Eq 'freshclam|clamdscan|/var/lib/clamav|/run/clamav|clamav-daemon|systemctl .*clam' "$TMP/control/$script"; then
+    fail "$script must not manage ClamAV or virus databases"
+  fi
 done
 
 echo 'deb-package-test: PASS'

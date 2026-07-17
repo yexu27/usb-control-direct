@@ -8,9 +8,9 @@ use std::thread;
 
 use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, PrepareUpgradeRequest,
-    SystemVersion, UpgradeCoordinator, UpgradeEnvironment, UpgradeError, UpgradePreflight,
-    UpgradePreflightFailure, UpgradePreflightRequest, UpgradeResultStore, UpgradeScheduler,
-    UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
+    SystemVersion, UpgradeCoordinator, UpgradeError, UpgradePreflight, UpgradePreflightFailure,
+    UpgradePreflightRequest, UpgradeResultStore, UpgradeScheduler, UpgradeSourceReader,
+    UpgradeSourceState, UpgradeStateLock, UpgradeStatus, UpgradeTask, UpgradeTaskStore,
 };
 
 use support::{sha256_hex, MatchingDebInspector, PackageFixture};
@@ -294,10 +294,25 @@ fn prepare_runs_preflight_once_before_prepared() {
     assert_eq!(calls[0].package_size, fixture.package_bytes.len() as u64);
     assert_eq!(calls[0].deb_size, fixture.deb_bytes.len() as u64);
     assert_eq!(calls[0].expanded_size, 4096);
-    assert_eq!(calls[0].source_version, version("3.0.1"));
-    assert_eq!(calls[0].target_version, version("3.1.0"));
-    assert_eq!(calls[0].schema_from, 1);
-    assert_eq!(calls[0].schema_to, 2);
+}
+
+#[test]
+fn prepare_reads_source_state_for_each_new_task() {
+    let fixture = PackageFixture::valid();
+    let source = Arc::new(MutableSourceReader::new("3.0.1", 1));
+    let coordinator = coordinator_with_source(&fixture, source.clone());
+
+    let first = coordinator
+        .prepare(request(&fixture, "admin", "192.0.2.30"))
+        .unwrap();
+    coordinator.response_failed(&first.upgrade_id).unwrap();
+    source.set("3.1.0", 2);
+
+    let second = coordinator
+        .prepare(request(&fixture, "admin", "192.0.2.30"))
+        .unwrap_err();
+    assert!(matches!(second, UpgradeError::VersionNotGreater));
+    assert_eq!(source.read_count(), 2);
 }
 
 #[test]
@@ -597,16 +612,66 @@ fn coordinator_with_components(
         fixture.root(),
         PackageStager::new(fixture.root(), MAX_PACKAGE_SIZE),
         PackageVerifier::new(fixture.key_dir(), inspector),
-        UpgradeEnvironment {
-            current_version: SystemVersion::parse("3.0.1").expect("valid current version"),
-            current_schema: 1,
-            supported_schema_max: 2,
-            protocol_version: 1,
-        },
+        Arc::new(MutableSourceReader::new("3.0.1", 1)),
+        1,
         preflight,
         scheduler,
     )
     .expect("create upgrade coordinator")
+}
+
+fn coordinator_with_source(
+    fixture: &PackageFixture,
+    source: Arc<dyn UpgradeSourceReader>,
+) -> UpgradeCoordinator {
+    UpgradeCoordinator::new(
+        fixture.root(),
+        PackageStager::new(fixture.root(), MAX_PACKAGE_SIZE),
+        PackageVerifier::new(fixture.key_dir(), Arc::new(MatchingDebInspector)),
+        source,
+        1,
+        Arc::new(RecordingPreflight::succeeds(
+            fixture.root(),
+            Arc::new(Mutex::new(Vec::new())),
+        )),
+        Arc::new(RecordingScheduler::succeeds()),
+    )
+    .unwrap()
+}
+
+struct MutableSourceReader {
+    state: Mutex<UpgradeSourceState>,
+    reads: Mutex<usize>,
+}
+
+impl MutableSourceReader {
+    fn new(version: &str, schema: u32) -> Self {
+        Self {
+            state: Mutex::new(UpgradeSourceState {
+                current_version: SystemVersion::parse(version).unwrap(),
+                current_schema: schema,
+            }),
+            reads: Mutex::new(0),
+        }
+    }
+
+    fn set(&self, version: &str, schema: u32) {
+        *self.state.lock().unwrap() = UpgradeSourceState {
+            current_version: SystemVersion::parse(version).unwrap(),
+            current_schema: schema,
+        };
+    }
+
+    fn read_count(&self) -> usize {
+        *self.reads.lock().unwrap()
+    }
+}
+
+impl UpgradeSourceReader for MutableSourceReader {
+    fn read(&self) -> Result<UpgradeSourceState, UpgradeError> {
+        *self.reads.lock().unwrap() += 1;
+        Ok(*self.state.lock().unwrap())
+    }
 }
 
 fn version(value: &str) -> SystemVersion {

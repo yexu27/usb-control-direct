@@ -173,7 +173,7 @@
         <mxCell id="init" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="数据库初始化与迁移" vertex="1">
           <mxGeometry height="210" width="330" x="1470" y="400" as="geometry" />
         </mxCell>
-        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 初始化 T01-T11 业务表&#xa;3. 建立 schema_migrations 迁移账本&#xa;4. T02: 38 种默认文件类型黑名单&#xa;5. T03: 3 个开关初始关闭&#xa;6. T04: 4 种内置可执行程序类型&#xa;7. T07: 8 项系统配置&#xa;8. T08: 3 个内置账号 (is_builtin=1)&#xa;9. T09: 6 行角色权限预置数据&#xa;10. PRAGMA user_version 与迁移账本一致" vertex="1">
+        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 初始化 T01-T11 业务表&#xa;3. T02: 38 种默认文件类型黑名单&#xa;4. T03: 3 个开关初始关闭&#xa;5. T04: 4 种内置可执行程序类型&#xa;6. T07: 8 项系统配置&#xa;7. T08: 3 个内置账号 (is_builtin=1)&#xa;8. T09: 6 行角色权限预置数据&#xa;9. 设置 PRAGMA user_version = 1&#xa;10. Schema + seed + 版本同事务提交" vertex="1">
           <mxGeometry height="186" width="330" y="24" as="geometry" />
         </mxCell>
         <mxCell id="legend" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="图例" vertex="1">
@@ -182,10 +182,10 @@
         <mxCell id="legend-f" parent="legend" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="橙色: 业务配置表 (T01-T04)&#xa;紫色: 系统与权限表 (T07-T09)&#xa;绿色: 日志表 (T05-T06, T10-T11)&#xa;黄色: 规则与初始化&#xa;────────────&#xa;N:1 灰色虚线: 业务关联 (非外键约束)&#xa;橙色虚线: 开关控制关系&#xa;绿色虚线: 日志覆盖关系&#xa;PK = 主键 / UK = 唯一约束" vertex="1">
           <mxGeometry height="156" width="330" y="24" as="geometry" />
         </mxCell>
-        <mxCell id="notes" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#F5F5F5;strokeColor=#8C8C8C;rounded=0;whiteSpace=wrap;html=1;" value="关键说明与迁移账本" vertex="1">
+        <mxCell id="notes" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#F5F5F5;strokeColor=#8C8C8C;rounded=0;whiteSpace=wrap;html=1;" value="关键说明与版本管理" vertex="1">
           <mxGeometry height="245" width="330" x="1470" y="850" as="geometry" />
         </mxCell>
-        <mxCell id="notes-f" parent="notes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="业务表: T01-T11（11 张）&#xa;基础设施表: schema_migrations&#xa;  PK version INTEGER&#xa;     name TEXT NOT NULL&#xa;     checksum TEXT NOT NULL&#xa;     applied_at INTEGER NOT NULL&#xa;────────────&#xa;· migration 校验已应用脚本 checksum&#xa;· PRAGMA user_version 与账本最高版本一致&#xa;· migration 不修改 T07 system_version&#xa;· 管理端不创建业务数据库&#xa;· 业务关系不使用数据库外键" vertex="1">
+        <mxCell id="notes-f" parent="notes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="业务表: T01-T11（11 张）&#xa;无迁移历史基础设施表&#xa;────────────&#xa;· PRAGMA user_version 是唯一 Schema 版本标记&#xa;· 首次安装执行 Schema + seed&#xa;· 已有库只执行真实新增的连续迁移 SQL&#xa;· migration 不修改 T07 system_version&#xa;· 升级保留配置、授权和业务数据&#xa;· 管理端不创建业务数据库&#xa;· 业务关系不使用数据库外键" vertex="1">
           <mxGeometry height="221" width="330" y="24" as="geometry" />
         </mxCell>
       </root>

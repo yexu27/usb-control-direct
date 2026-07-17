@@ -183,6 +183,29 @@ fn source_version_mismatch_fails_before_stopping_service() {
 }
 
 #[test]
+fn same_version_target_fails_before_stopping_service() {
+    let (_dir, paths, revalidator, database) = arrange();
+    let current_path = paths.root.join("current.json");
+    let mut task: UpgradeTask = serde_json::from_slice(&fs::read(&current_path).unwrap()).unwrap();
+    task.target_version = version("3.0.1");
+    fs::write(&current_path, serde_json::to_vec(&task).unwrap()).unwrap();
+    let runner = FakeCommandRunner::default();
+
+    assert!(UpgradeExecutor::new(
+        paths.clone(),
+        runner.clone(),
+        revalidator,
+        Arc::new(database),
+        FakeClock::fixed(200)
+    )
+    .execute("upgrade-test")
+    .is_err());
+
+    assert!(runner.calls().is_empty());
+    assert_failed(&paths, "revalidating");
+}
+
+#[test]
 fn stop_failure_records_failed_and_never_runs_dpkg() {
     let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
@@ -202,7 +225,7 @@ fn stop_failure_records_failed_and_never_runs_dpkg() {
 }
 
 #[test]
-fn unpack_failure_records_failed_and_never_installs_old_deb() {
+fn install_failure_records_failed_without_version_commit() {
     let (_dir, paths, revalidator, database) = arrange();
     let runner = FakeCommandRunner::default();
     runner.push_success("");

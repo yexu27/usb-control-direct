@@ -31,7 +31,7 @@ use protocol_gateway::tls::create_tls_acceptor;
 use storage::Storage;
 use system_upgrade::{
     read_installed_release, DebInspector, DpkgDebInspector, PackageStager, PackageVerifier,
-    ServiceReady, UpgradeCoordinator, UpgradeEnvironment, UpgradePreflight, UpgradeScheduler,
+    ServiceReady, UpgradeCoordinator, UpgradePreflight, UpgradeScheduler, UpgradeSourceReader,
     UpgradeTaskStore,
 };
 use usb_control_app::config::{AppConfig, AppInvocation};
@@ -40,6 +40,7 @@ use usb_control_app::upgrade_dispatch::{AuditUpgradeStart, UpgradeDispatch};
 use usb_control_app::upgrade_preflight::{LinuxUpgradeHostProbe, SystemUpgradePreflight};
 use usb_control_app::upgrade_result::{TokioUpgradeResultObserver, UpgradeResultImporter};
 use usb_control_app::upgrade_scheduler::SystemdUpgradeScheduler;
+use usb_control_app::upgrade_source::StorageUpgradeSourceReader;
 use usb_identify::monitor::DeviceManager;
 use usb_identify::orchestrator::{DeviceEvent, DeviceOrchestrator};
 use whitelist::WhitelistManager;
@@ -47,7 +48,6 @@ use whitelist::WhitelistManager;
 const DEFAULT_DEVICE_DESCRIPTION: &str = "(AD USB protection dev)USB Device";
 const READY_PATH: &str = "/run/usb-control/ready.json";
 const PROTOCOL_VERSION: u32 = 1;
-const SUPPORTED_SCHEMA_MAX: u32 = 1;
 
 fn load_device_description(storage: &Storage) -> String {
     match storage.config_get("device_description") {
@@ -128,9 +128,6 @@ async fn main() {
     ))
     .expect("已安装发布元数据读取失败")
     .version;
-    let business_version = storage.system_version().expect("数据库系统版本读取失败");
-    let business_version =
-        system_upgrade::SystemVersion::parse(&business_version).expect("数据库系统版本格式非法");
     let device_description = load_device_description(storage.as_ref());
 
     let auth_service = Arc::new(AuthService::new(
@@ -202,9 +199,9 @@ async fn main() {
             &config.clamdscan_path,
         ))),
         config.upgrade.root_dir.clone(),
-        Arc::clone(&storage)
-            as Arc<dyn usb_control_app::upgrade_preflight::UpgradeDatabaseSnapshot>,
     ));
+    let upgrade_source: Arc<dyn UpgradeSourceReader> =
+        Arc::new(StorageUpgradeSourceReader::new(Arc::clone(&storage)));
     let upgrade_coordinator = Arc::new(
         UpgradeCoordinator::new(
             config.upgrade.root_dir.clone(),
@@ -213,12 +210,8 @@ async fn main() {
                 config.upgrade.max_package_size,
             ),
             PackageVerifier::new(config.upgrade.verify_key_dir.clone(), deb_inspector),
-            UpgradeEnvironment {
-                current_version: business_version,
-                current_schema: schema_version,
-                supported_schema_max: SUPPORTED_SCHEMA_MAX,
-                protocol_version: PROTOCOL_VERSION,
-            },
+            upgrade_source,
+            PROTOCOL_VERSION,
             upgrade_preflight,
             scheduler,
         )

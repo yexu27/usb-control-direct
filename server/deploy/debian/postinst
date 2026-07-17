@@ -41,29 +41,6 @@ replace_managed() {
   mv -f "$temporary" "$target_path"
 }
 
-require_any_readable() {
-  label="$1"
-  shift
-  for path in "$@"; do
-    if [ -r "$path" ]; then
-      return 0
-    fi
-  done
-  fail "missing readable ClamAV database group: $label ($*)"
-}
-
-assert_clamav_runtime() {
-  command -v clamdscan >/dev/null 2>&1 || fail 'missing clamdscan'
-  command -v clamd >/dev/null 2>&1 || fail 'missing clamd'
-  systemctl enable --now clamav-daemon.service
-  systemctl is-active --quiet clamav-daemon.service
-  test -S /run/clamav/clamd.ctl || fail 'missing ClamAV daemon socket'
-  require_any_readable main /var/lib/clamav/main.cvd /var/lib/clamav/main.cld
-  require_any_readable daily /var/lib/clamav/daily.cvd /var/lib/clamav/daily.cld
-  require_any_readable bytecode /var/lib/clamav/bytecode.cvd /var/lib/clamav/bytecode.cld
-  clamdscan --version >/dev/null
-}
-
 action="${1:-configure}"
 if [ "$action" != 'configure' ]; then
   exit 0
@@ -92,7 +69,6 @@ install_missing "$DEFAULTS/keys/sm2_policy.pub" /etc/usb-control/keys/sm2_policy
 replace_managed "$DEFAULTS/keys/upgrade_verify.pub" /etc/usb-control/keys/upgrade_verify.pub 0644
 replace_managed "$DEFAULTS/keys/upgrade_verify.id" /etc/usb-control/keys/upgrade_verify.id 0644
 
-assert_clamav_runtime
 if [ -e /run/usb-control-updater/managed ]; then
   exit 0
 fi

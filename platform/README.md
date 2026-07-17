@@ -598,13 +598,13 @@ server/deploy/build/out/usb-control_V3.0.2_arm64.deb.sha256
 
 `build-deb.sh` 的参数就是发布版本。相同源码可以分别生成 3.0.1 和 3.0.2，不需要修改 `server/Cargo.toml` 或业务代码。
 
-生成由 V3.0.1 在线升级到 V3.0.2 的签名 `.bin`：
+生成目标版本为 V3.0.2 的签名 `.bin`：
 
 ```bash
-bash server/deploy/build-bin.sh 3.0.2 3.0.1 1
+bash server/deploy/build-bin.sh 3.0.2
 ```
 
-三个参数依次是目标版本、允许升级的最低当前版本和升级前数据库 Schema 版本。`schema-from` 必须根据数据库兼容性显式填写，构建脚本不会根据产品版本号推断 Schema。输出：
+参数为目标发布版本。目标 DEB 携带数据库初始化文件和连续迁移，在线升级要求目标版本高于数据库当前版本。输出：
 
 ```text
 server/deploy/build/out/usb-control_V3.0.2_arm64.bin
@@ -655,14 +655,11 @@ sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 - CPU 架构必须为 arm64；
 - 操作系统必须为 Ubuntu 22.04；
 - Linux 内核必须为 4.19.x；
-- `clamd` 和 `clamdscan` 必须存在；
-- `clamav-daemon.service` 必须能正常启动；
-- clamd socket 和三组病毒库必须存在。
+- ClamAV 按照第 4.5 节安装并完成病毒库和服务检查。
 
 安装成功后自动执行数据库迁移并启动：
 
 ```text
-clamav-daemon.service
 usb-control.service
 ```
 
@@ -727,7 +724,7 @@ sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 sudo apt-get install -y ./usb-control_V3.0.2_arm64.deb
 ```
 
-直接安装和直接升级均由 DEB 完成数据库迁移、服务启动和健康检查。健康检查使用 `/opt/usb-control/install-meta/release.json` 中的实际安装版本；检查成功后，安装程序将该版本写入 SQLite `system_config.system_version`。升级保留 `/etc/usb-control` 中的现场配置与密钥、`/var/lib/usb-control` 中的数据库和授权状态，以及 `/var/log/usb-control` 中的日志。未过期授权不需要重新办理。
+直接安装和升级由 DEB 完成数据库初始化或迁移、服务启动和健康检查。数据库不存在或为空时初始化 Schema 和默认数据；已有数据库执行尚未应用的迁移。健康检查成功后，将安装版本写入 SQLite `system_config.system_version`。升级保留配置、密钥、数据库、授权状态和日志。
 
 在线升级时，在 Windows Client 的“系统升级”界面选择 `usb-control_V3.0.2_arm64.bin`。Client 根据文件内容计算 SHA-256 并将升级包、目标版本和摘要上传到 RK3568。服务端完整接收、校验并持久化升级任务后先返回受理结果，Client 应显示“升级包已接收，Server 开始升级”。随后主服务停止，Client 按正常连接机制显示断开；新服务启动后重新连接，在操作日志中查询最终成功或失败结果。
 
@@ -997,7 +994,7 @@ dmesg | grep -E 'nbd[0-9]+' | tail -n 100
 - [ ] V3.0.1、V3.0.2 `.deb` 及 V3.0.2 `.bin` 已生成并校验；
 - [ ] DEB 中不包含升级签名私钥、测试脚本或测试数据；
 - [ ] `.bin` 内部 DEB 与同版本独立 DEB 字节一致；
-- [ ] 发布版本、最低当前版本和 `schema-from` 参数已经发布负责人复核。
+- [ ] 发布版本、数据库迁移和 Schema 上限已经校验。
 
 ### Windows 客户端开发测试机
 

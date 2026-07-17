@@ -1,66 +1,188 @@
 mod support;
 
-use rusqlite::Connection;
-use support::{scalar_i64, scalar_string, table_exists, Fixture};
+use support::{business_table_names, scalar_i64, scalar_string, table_exists, Fixture};
 use usb_control_db_migrate::{
-    compare_and_set_system_version, read_upgrade_database_state, run_migrations,
-    set_system_version, sync_virus_db_package_version, sync_virus_db_status,
+    compare_and_set_system_version, read_upgrade_database_state, run_migrations, set_system_version,
 };
 
+const BUSINESS_TABLES: &[&str] = &[
+    "exec_type",
+    "file_access_policy",
+    "file_type_blacklist",
+    "log_retention_event",
+    "malware_log",
+    "operation_log",
+    "role_permission",
+    "system_config",
+    "usb_audit_log",
+    "usb_whitelist",
+    "users",
+];
+
 #[test]
-fn records_migration_checksum_atomically() {
+fn fresh_database_initializes_only_the_eleven_business_tables_and_defaults() {
     let fixture = Fixture::new();
+
     let report = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
     let conn = fixture.connection();
 
     assert_eq!(report.current_version, 1);
     assert_eq!(report.applied_versions, vec![1]);
     assert_eq!(
-        scalar_i64(&conn, "SELECT COUNT(*) FROM schema_migrations"),
-        1
+        business_table_names(&conn),
+        BUSINESS_TABLES
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>()
     );
+    assert!(!table_exists(&conn, "schema_migrations"));
+    assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 1);
+    assert_eq!(scalar_i64(&conn, "SELECT COUNT(*) FROM users"), 3);
     assert_eq!(
-        scalar_string(&conn, "SELECT name FROM schema_migrations WHERE version=1"),
-        "0001_init"
+        scalar_i64(
+            &conn,
+            "SELECT COUNT(*) FROM users
+             WHERE is_builtin=1 AND username IN ('admin','operator','audit')"
+        ),
+        3
+    );
+    assert_eq!(scalar_i64(&conn, "SELECT COUNT(*) FROM role_permission"), 6);
+}
+
+#[test]
+fn failed_fresh_initialization_leaves_a_retryable_empty_database() {
+    let fixture = Fixture::new();
+    fixture.replace_seed("INSERT INTO users(no_such_column) VALUES (1);");
+
+    assert!(run_migrations(&fixture.database, &fixture.sql_root).is_err());
+    let conn = fixture.connection();
+    assert!(business_table_names(&conn).is_empty());
+    assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 0);
+    drop(conn);
+
+    fixture.restore_seed();
+    let report = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    assert_eq!(report.current_version, 1);
+    assert_eq!(business_table_names(&fixture.connection()).len(), 11);
+}
+
+#[test]
+fn existing_version_one_database_is_preserved_and_rerun_is_noop() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    let conn = fixture.connection();
+    conn.execute(
+        "UPDATE system_config SET config_value='production-device', updated_at=10
+         WHERE config_key='device_description'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE system_config SET config_value='authorized', updated_at=11
+         WHERE config_key='auth_status'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO usb_whitelist
+         (serial_number, device_name, device_type, permission, add_method, created_at)
+         VALUES ('SN-PRESERVE', '现场设备', 'storage', 1, 0, 12)",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let report = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    let conn = fixture.connection();
+
+    assert_eq!(report.current_version, 1);
+    assert!(report.applied_versions.is_empty());
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='device_description'"
+        ),
+        "production-device"
     );
     assert_eq!(
         scalar_string(
             &conn,
-            "SELECT checksum FROM schema_migrations WHERE version=1"
-        )
-        .len(),
-        64
+            "SELECT config_value FROM system_config WHERE config_key='auth_status'"
+        ),
+        "authorized"
     );
-}
-
-#[test]
-fn rerun_is_idempotent() {
-    let fixture = Fixture::new();
-    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let second = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let conn = fixture.connection();
-
-    assert!(second.applied_versions.is_empty());
-    assert_eq!(scalar_i64(&conn, "SELECT COUNT(*) FROM users"), 3);
     assert_eq!(
-        scalar_i64(&conn, "SELECT COUNT(*) FROM schema_migrations"),
+        scalar_i64(
+            &conn,
+            "SELECT COUNT(*) FROM usb_whitelist WHERE serial_number='SN-PRESERVE'"
+        ),
         1
     );
 }
 
 #[test]
-fn changed_applied_checksum_is_rejected() {
+fn existing_nonempty_zero_version_database_is_rejected_without_changes() {
     let fixture = Fixture::new();
-    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let init = std::fs::read_to_string(fixture.sql_root.join("migrations/0001_init.sql")).unwrap();
-    fixture.replace_init(&format!("{init}\n-- changed after release\n"));
+    let conn = fixture.connection();
+    conn.execute_batch(
+        "CREATE TABLE site_marker(value TEXT NOT NULL);
+         INSERT INTO site_marker(value) VALUES ('keep-me');",
+    )
+    .unwrap();
+    drop(conn);
 
     let error = run_migrations(&fixture.database, &fixture.sql_root).unwrap_err();
-    assert!(error.contains("checksum"), "unexpected error: {error}");
+    assert!(
+        error.contains("not initialized"),
+        "unexpected error: {error}"
+    );
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(&conn, "SELECT value FROM site_marker"),
+        "keep-me"
+    );
+    assert!(!table_exists(&conn, "system_config"));
+    assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 0);
 }
 
 #[test]
-fn failed_single_migration_rolls_back_its_schema_and_metadata() {
+fn applies_future_migrations_in_order_and_updates_user_version() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    fixture.write_migration(
+        "0002_add_source.sql",
+        "ALTER TABLE system_config ADD COLUMN source TEXT;",
+    );
+    fixture.write_migration(
+        "0003_index_source.sql",
+        "CREATE INDEX idx_system_config_source ON system_config(source);",
+    );
+
+    let report = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    let conn = fixture.connection();
+
+    assert_eq!(report.current_version, 3);
+    assert_eq!(report.applied_versions, vec![2, 3]);
+    assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 3);
+    assert_eq!(
+        scalar_i64(
+            &conn,
+            "SELECT COUNT(*) FROM pragma_table_info('system_config') WHERE name='source'"
+        ),
+        1
+    );
+    assert_eq!(
+        scalar_i64(
+            &conn,
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type='index' AND name='idx_system_config_source'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn failed_future_migration_rolls_back_schema_and_user_version() {
     let fixture = Fixture::new();
     run_migrations(&fixture.database, &fixture.sql_root).unwrap();
     fixture.write_migration(
@@ -71,11 +193,18 @@ fn failed_single_migration_rolls_back_its_schema_and_metadata() {
     assert!(run_migrations(&fixture.database, &fixture.sql_root).is_err());
     let conn = fixture.connection();
     assert!(!table_exists(&conn, "must_rollback"));
-    assert_eq!(
-        scalar_i64(&conn, "SELECT COUNT(*) FROM schema_migrations"),
-        1
-    );
     assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 1);
+}
+
+#[test]
+fn rejects_database_newer_than_supported_max() {
+    let fixture = Fixture::new();
+    let conn = fixture.connection();
+    conn.pragma_update(None, "user_version", 2).unwrap();
+    drop(conn);
+
+    let error = run_migrations(&fixture.database, &fixture.sql_root).unwrap_err();
+    assert!(error.contains("supported maximum is 1"), "{error}");
 }
 
 #[test]
@@ -203,120 +332,5 @@ fn set_version_rejects_prefixed_or_non_three_part_version() {
             "SELECT config_value FROM system_config WHERE config_key='system_version'"
         ),
         "1.0.0"
-    );
-}
-
-#[test]
-fn rejects_database_newer_than_supported_max() {
-    let fixture = Fixture::new();
-    let conn = fixture.connection();
-    conn.pragma_update(None, "user_version", 2).unwrap();
-    drop(conn);
-
-    let error = run_migrations(&fixture.database, &fixture.sql_root).unwrap_err();
-    assert!(error.contains("supported maximum is 1"), "{error}");
-}
-
-#[test]
-fn rejects_zero_version_database_with_existing_migration_ledger() {
-    let fixture = Fixture::new();
-    let conn = fixture.connection();
-    conn.execute_batch(
-        "CREATE TABLE schema_migrations (
-            version INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            checksum TEXT NOT NULL,
-            applied_at INTEGER NOT NULL
-        );",
-    )
-    .unwrap();
-    drop(conn);
-
-    let error = run_migrations(&fixture.database, &fixture.sql_root).unwrap_err();
-    assert!(
-        error.contains("user_version 0"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn fresh_database_initializes_schema_seeds_and_builtin_users_atomically() {
-    let valid = Fixture::new();
-    run_migrations(&valid.database, &valid.sql_root).unwrap();
-    let conn = valid.connection();
-    assert_eq!(scalar_i64(&conn, "SELECT COUNT(*) FROM users"), 3);
-    assert_eq!(
-        scalar_i64(
-            &conn,
-            "SELECT COUNT(*) FROM users WHERE is_builtin=1 AND username IN ('admin','operator','audit')"
-        ),
-        3
-    );
-    assert_eq!(scalar_i64(&conn, "SELECT COUNT(*) FROM role_permission"), 6);
-
-    let fixture = Fixture::new();
-    fixture.replace_seed("INSERT INTO users(no_such_column) VALUES (1);");
-
-    assert!(run_migrations(&fixture.database, &fixture.sql_root).is_err());
-    let conn = fixture.connection();
-    assert!(!table_exists(&conn, "users"));
-    assert!(!table_exists(&conn, "schema_migrations"));
-    assert_eq!(scalar_i64(&conn, "PRAGMA user_version"), 0);
-}
-
-#[test]
-fn valid_legacy_user_version_one_is_baselined_once() {
-    let fixture = Fixture::new();
-    fixture.initialize_legacy_v1();
-
-    let first = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let second = run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let conn = fixture.connection();
-    assert!(first.applied_versions.is_empty());
-    assert!(second.applied_versions.is_empty());
-    assert_eq!(
-        scalar_i64(&conn, "SELECT COUNT(*) FROM schema_migrations"),
-        1
-    );
-}
-
-#[test]
-fn malformed_legacy_user_version_one_is_rejected_without_baseline() {
-    let fixture = Fixture::new();
-    let conn = fixture.connection();
-    conn.execute_batch("CREATE TABLE users(id INTEGER PRIMARY KEY);")
-        .unwrap();
-    conn.pragma_update(None, "user_version", 1).unwrap();
-    drop(conn);
-
-    let error = run_migrations(&fixture.database, &fixture.sql_root).unwrap_err();
-    assert!(error.contains("legacy"), "unexpected error: {error}");
-    let conn = fixture.connection();
-    assert!(!table_exists(&conn, "schema_migrations"));
-}
-
-#[test]
-fn runtime_clamav_status_sync_remains_after_schema_success() {
-    let fixture = Fixture::new();
-    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
-    let conn = Connection::open(&fixture.database).unwrap();
-    sync_virus_db_package_version(&conn, "v0.0.0").unwrap();
-    sync_virus_db_status(
-        &conn,
-        &clamav_status::ClamavStatus {
-            engine_version: "1.4.4".into(),
-            virus_db_version: "28045".into(),
-            virus_db_updated_at: 1_782_656_776,
-            raw_output: String::new(),
-        },
-    )
-    .unwrap();
-
-    assert_eq!(
-        scalar_string(
-            &conn,
-            "SELECT config_value FROM system_config WHERE config_key='virus_db_version'"
-        ),
-        "28045"
     );
 }

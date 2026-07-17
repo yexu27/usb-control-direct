@@ -1,4 +1,4 @@
-//! 目标/回滚版本数据库迁移命令契约。
+//! 安装版本数据库初始化与顺序迁移命令契约。
 
 use std::ffi::OsString;
 use std::path::Path;

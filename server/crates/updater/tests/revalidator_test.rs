@@ -43,10 +43,12 @@ fn production_revalidator_rejects_installed_release_mismatch() {
 }
 
 #[test]
-fn production_revalidator_uses_real_database_schema() {
+fn production_revalidator_accepts_supported_source_schemas() {
     let fixture = Fixture::new(false);
 
-    assert!(fixture.revalidate_with_schema(2).is_err());
+    assert!(fixture.revalidate_with_schema(1).is_ok());
+    assert!(fixture.revalidate_with_schema(2).is_ok());
+    assert!(fixture.revalidate_with_schema(3).is_err());
 }
 
 #[test]
@@ -306,13 +308,11 @@ fn signed_package(private_key: &str, deb: &[u8], tls_sha256: &str) -> Vec<u8> {
         "product": "usb-control",
         "package_version": "3.0.2",
         "architecture": "arm64",
-        "minimum_current_version": "3.0.1",
         "protocol_version": 1,
         "tls_cert_sha256": tls_sha256,
         "deb_file": "usb-control_V3.0.2_arm64.deb",
         "deb_size": deb.len(),
         "deb_sha256": hex::encode(Sha256::digest(deb)),
-        "schema_from": 1,
         "schema_to": 2,
         "signing_key_id": CURRENT_KEY_ID
     }))

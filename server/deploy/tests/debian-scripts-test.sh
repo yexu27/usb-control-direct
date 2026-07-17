@@ -18,6 +18,9 @@ grep -Fq '/opt/usb-control/bin/usb-control-updater finalize-install' "$DEBIAN/po
 if grep -Eq '^[[:space:]]*/opt/usb-control/bin/usb-control-db-migrate([[:space:]]|$)' "$DEBIAN/postinst"; then
   fail 'postinst must not invoke db migrator directly'
 fi
+if grep -Eq 'freshclam|clamdscan|/var/lib/clamav|/run/clamav|clamav-daemon|systemctl .*clam' "$DEBIAN/postinst"; then
+  fail 'postinst must not manage ClamAV or virus databases'
+fi
 grep -Fq '/run/usb-control-updater/managed' "$DEBIAN/prerm" || fail 'prerm missing managed marker check'
 grep -Eq 'systemctl stop usb-control(\.service)?' "$DEBIAN/prerm" || fail 'prerm missing main service stop'
 

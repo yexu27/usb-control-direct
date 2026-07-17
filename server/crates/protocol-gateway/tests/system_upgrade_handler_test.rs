@@ -19,7 +19,8 @@ use sha2::{Digest, Sha256};
 use smcrypto::{sm2, sm3};
 use system_upgrade::{
     DebInspector, DebMetadata, PackageStager, PackageVerifier, SystemVersion, UpgradeCoordinator,
-    UpgradeEnvironment, UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler,
+    UpgradeError, UpgradePreflight, UpgradePreflightRequest, UpgradeScheduler, UpgradeSourceReader,
+    UpgradeSourceState,
 };
 use tar::{Builder, Header};
 use tempfile::TempDir;
@@ -298,12 +299,8 @@ fn coordinator(fixture: &PackageFixture) -> UpgradeCoordinator {
         fixture.root(),
         PackageStager::new(fixture.root(), MAX_PACKAGE_SIZE),
         PackageVerifier::new(fixture.key_dir(), Arc::new(MatchingDebInspector)),
-        UpgradeEnvironment {
-            current_version: SystemVersion::parse("3.0.1").unwrap(),
-            current_schema: 1,
-            supported_schema_max: 2,
-            protocol_version: 1,
-        },
+        Arc::new(TestUpgradeSource),
+        1,
         Arc::new(TestPreflight),
         Arc::new(NoopScheduler),
     )
@@ -311,6 +308,17 @@ fn coordinator(fixture: &PackageFixture) -> UpgradeCoordinator {
 }
 
 struct TestPreflight;
+
+struct TestUpgradeSource;
+
+impl UpgradeSourceReader for TestUpgradeSource {
+    fn read(&self) -> Result<UpgradeSourceState, UpgradeError> {
+        Ok(UpgradeSourceState {
+            current_version: SystemVersion::parse("3.0.1")?,
+            current_schema: 1,
+        })
+    }
+}
 
 impl UpgradePreflight for TestPreflight {
     fn check(&self, _request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {
@@ -386,13 +394,11 @@ impl PackageFixture {
             "product": "usb-control",
             "package_version": "3.1.0",
             "architecture": "arm64",
-            "minimum_current_version": "3.0.0",
             "protocol_version": 1,
             "tls_cert_sha256": TLS_SHA256,
             "deb_file": DEB_NAME,
             "deb_size": deb.len(),
             "deb_sha256": sha256_hex(deb),
-            "schema_from": 1,
             "schema_to": 2,
             "signing_key_id": KEY_ID
         }))

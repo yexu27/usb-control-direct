@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use smcrypto::sm2;
 use system_upgrade::{
     upgrade_signing_digest, DebInspector, DpkgDebInspector, PackageStager, PackageVerifier,
-    SystemVersion, UpgradeError, UpgradeManifest, VerificationContext,
+    UpgradeError, UpgradeManifest, VerificationContext,
 };
 use tar::{Builder, Header};
 use tempfile::NamedTempFile;
@@ -38,8 +38,6 @@ pub struct BuildBinRequest<'a> {
     pub deb_path: &'a Path,
     pub key_dir: &'a Path,
     pub output_path: &'a Path,
-    pub minimum_current_version: SystemVersion,
-    pub schema_from: u32,
 }
 
 pub fn build_bin(request: BuildBinRequest<'_>) -> Result<UpgradeManifest, ReleaseToolError> {
@@ -51,17 +49,9 @@ pub fn build_bin_with_inspector(
     inspector: Arc<dyn DebInspector>,
 ) -> Result<UpgradeManifest, ReleaseToolError> {
     let metadata = inspector.inspect(request.deb_path)?;
-    if request.minimum_current_version >= metadata.version {
+    if metadata.migration_schema_to != metadata.supported_schema_max {
         return Err(ReleaseToolError::InvalidInput(
-            "最低当前版本必须低于目标版本".into(),
-        ));
-    }
-    if request.schema_from < metadata.supported_schema_min
-        || request.schema_from > metadata.supported_schema_max
-        || metadata.migration_schema_to != metadata.supported_schema_max
-    {
-        return Err(ReleaseToolError::InvalidInput(
-            "来源 Schema 不在目标发布支持范围内".into(),
+            "目标 DEB 的迁移终点与支持 Schema 上限不一致".into(),
         ));
     }
     let deb_name = request
@@ -84,13 +74,11 @@ pub fn build_bin_with_inspector(
         product: metadata.package,
         package_version: metadata.version,
         architecture: metadata.architecture,
-        minimum_current_version: request.minimum_current_version,
         protocol_version: 1,
         tls_cert_sha256: metadata.tls_cert_sha256,
         deb_file: deb_name.into(),
         deb_size: deb.len() as u64,
         deb_sha256: hex::encode(deb_sha256),
-        schema_from: request.schema_from,
         schema_to: metadata.supported_schema_max,
         signing_key_id,
     };
@@ -155,10 +143,9 @@ pub fn verify_bin_with_inspector(
     let temporary = tempfile::tempdir()?;
     let staged = PackageStager::new(temporary.path().join("upgrade"), 128 * 1024 * 1024)
         .stage("release-tool-verify", &package)?;
+    let metadata = inspector.inspect(&staged.deb_path)?;
     let context = VerificationContext {
-        current_version: staged.manifest.minimum_current_version,
-        current_schema: staged.manifest.schema_from,
-        supported_schema_max: staged.manifest.schema_to,
+        current_schema: metadata.supported_schema_min,
         protocol_version: staged.manifest.protocol_version,
         client_target_version: staged.manifest.package_version.to_string(),
         client_sha256: package_sha256,

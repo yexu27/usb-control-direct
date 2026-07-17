@@ -103,7 +103,7 @@ impl PackageRevalidator for FakePackageRevalidator {
         &self,
         paths: &UpgradePaths,
         task: &UpgradeTask,
-        database_state: &UpgradeDatabaseState,
+        _database_state: &UpgradeDatabaseState,
     ) -> Result<RevalidatedPackage, UpdaterError> {
         if self.fail {
             return Err(UpdaterError::TaskInvalid(
@@ -116,13 +116,11 @@ impl PackageRevalidator for FakePackageRevalidator {
                 product: "usb-control".into(),
                 package_version: version("3.0.2"),
                 architecture: "arm64".into(),
-                minimum_current_version: version("3.0.1"),
                 protocol_version: 1,
                 tls_cert_sha256: self.target_release.tls_cert_sha256.clone(),
                 deb_file: "usb-control_V3.0.2_arm64.deb".into(),
                 deb_size: 9,
                 deb_sha256: "b".repeat(64),
-                schema_from: database_state.schema_version,
                 schema_to: 1,
                 signing_key_id: "release-1".into(),
             },

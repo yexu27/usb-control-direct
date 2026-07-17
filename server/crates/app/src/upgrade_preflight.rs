@@ -11,9 +11,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use storage::Storage;
 use system_upgrade::{
-    SystemVersion, UpgradeError, UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
+    UpgradeError, UpgradePreflight, UpgradePreflightFailure, UpgradePreflightRequest,
 };
 use wait_timeout::ChildExt;
 
@@ -29,23 +28,6 @@ pub trait UpgradeHostProbe: Send + Sync {
     fn main_service_active(&self) -> Result<bool, String>;
     fn clamav_available(&self) -> Result<bool, String>;
     fn platform_compatible(&self) -> Result<bool, String>;
-}
-
-/// 升级受理时读取数据库业务版本与 Schema 的只读端口。
-pub trait UpgradeDatabaseSnapshot: Send + Sync {
-    fn current_version(&self) -> Result<SystemVersion, String>;
-    fn current_schema(&self) -> Result<u32, String>;
-}
-
-impl UpgradeDatabaseSnapshot for Storage {
-    fn current_version(&self) -> Result<SystemVersion, String> {
-        let version = self.system_version().map_err(|error| error.to_string())?;
-        SystemVersion::parse(&version).map_err(|error| error.to_string())
-    }
-
-    fn current_schema(&self) -> Result<u32, String> {
-        self.schema_version().map_err(|error| error.to_string())
-    }
 }
 
 /// 有界命令输出。
@@ -278,23 +260,17 @@ impl UpgradeHostProbe for LinuxUpgradeHostProbe {
     }
 }
 
-/// 将已提交发布一致性与 Linux 状态探测组合成领域预检端口。
+/// 将只读 Linux 状态探测封装为领域预检端口。
 pub struct SystemUpgradePreflight {
     probe: Arc<dyn UpgradeHostProbe>,
     upgrade_root: PathBuf,
-    database: Arc<dyn UpgradeDatabaseSnapshot>,
 }
 
 impl SystemUpgradePreflight {
-    pub fn new(
-        probe: Arc<dyn UpgradeHostProbe>,
-        upgrade_root: PathBuf,
-        database: Arc<dyn UpgradeDatabaseSnapshot>,
-    ) -> Self {
+    pub fn new(probe: Arc<dyn UpgradeHostProbe>, upgrade_root: PathBuf) -> Self {
         Self {
             probe,
             upgrade_root,
-            database,
         }
     }
 
@@ -305,14 +281,6 @@ impl SystemUpgradePreflight {
 
 impl UpgradePreflight for SystemUpgradePreflight {
     fn check(&self, request: &UpgradePreflightRequest) -> Result<(), UpgradeError> {
-        let current_version = Self::probe_failure(self.database.current_version())?;
-        let current_schema = Self::probe_failure(self.database.current_schema())?;
-        if current_version != request.source_version || current_schema != request.schema_from {
-            return Err(UpgradeError::Preflight(
-                UpgradePreflightFailure::ProbeFailed("数据库升级源状态不一致".into()),
-            ));
-        }
-
         let required = request
             .package_size
             .checked_add(request.deb_size)

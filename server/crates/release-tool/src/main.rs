@@ -26,24 +26,16 @@ where
             generate_key(key_id, &PathBuf::from(key_dir))?;
             println!("upgrade key material created");
         }
-        [_, command, deb_option, deb, key_dir_option, key_dir, output_option, output, minimum_option, minimum, schema_option, schema]
+        [_, command, deb_option, deb, key_dir_option, key_dir, output_option, output]
             if command == "build-bin"
                 && deb_option == "--deb"
                 && key_dir_option == "--key-dir"
-                && output_option == "--output"
-                && minimum_option == "--minimum-current-version"
-                && schema_option == "--schema-from" =>
+                && output_option == "--output" =>
         {
-            let minimum_current_version = system_upgrade::SystemVersion::parse(minimum)?;
-            let schema_from = schema.parse::<u32>().map_err(|_| {
-                ReleaseToolError::InvalidInput("schema-from 必须是无符号整数".into())
-            })?;
             let manifest = build_bin(BuildBinRequest {
                 deb_path: &PathBuf::from(deb),
                 key_dir: &PathBuf::from(key_dir),
                 output_path: &PathBuf::from(output),
-                minimum_current_version,
-                schema_from,
             })?;
             println!("upgrade BIN created for V{}", manifest.package_version);
         }
