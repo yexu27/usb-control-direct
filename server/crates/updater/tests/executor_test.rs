@@ -86,7 +86,20 @@ fn arrange() -> (
 
 fn success_runner() -> FakeCommandRunner {
     let runner = FakeCommandRunner::default();
-    for output in ["", "", "", "", "", "0\n", "", "active\n", "42\n", "0\n", ""] {
+    for output in [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "0\n",
+        "",
+        "active\n",
+        "42\n",
+        "0\n",
+        "",
+        "ClamAV 1.4.4/28063/Fri Jul 17 14:24:28 2026\n",
+    ] {
         runner.push_success(output);
     }
     runner
@@ -135,9 +148,12 @@ fn successful_upgrade_runs_one_install_chain_and_commits() {
             .status,
         UpgradeStatus::Committed
     );
-    assert_eq!(database.state().system_version, "3.0.2");
+    assert_eq!(
+        database.install_state(),
+        ("3.0.2".into(), "28063".into(), 1_784_298_268, 200)
+    );
     assert_eq!(database.read_count(), 1);
-    assert_eq!(database.compare_count(), 1);
+    assert_eq!(database.online_commit_count(), 1);
     assert!(runner.observations().into_iter().all(|exists| exists));
     assert!(!paths.managed_marker.exists());
 }
@@ -178,7 +194,7 @@ fn source_version_mismatch_fails_before_stopping_service() {
     .is_err());
 
     assert!(runner.calls().is_empty());
-    assert_eq!(database.compare_count(), 0);
+    assert_eq!(database.online_commit_count(), 0);
     assert_failed(&paths, "revalidating");
 }
 
@@ -291,14 +307,38 @@ fn health_failure_records_failed_without_changing_database_version() {
     .is_err());
     assert_failed(&paths, "health_checking");
     assert_eq!(database.state().system_version, "3.0.1");
-    assert_eq!(database.compare_count(), 0);
+    assert_eq!(database.online_commit_count(), 0);
     assert!(!paths.managed_marker.exists());
 }
 
 #[test]
-fn compare_and_set_failure_writes_failed_committing_result() {
+fn clamav_status_failure_writes_failed_without_committing_state() {
     let (_dir, paths, revalidator, database) = arrange();
-    database.fail_compare();
+    let runner = FakeCommandRunner::default();
+    for output in ["", "", "", "", "", "0\n", "", "active\n", "42\n", "0\n", ""] {
+        runner.push_success(output);
+    }
+    runner.push_failure("reading_virus_database_status");
+
+    assert!(UpgradeExecutor::new(
+        paths.clone(),
+        runner,
+        revalidator,
+        Arc::new(database.clone()),
+        FakeClock::fixed(200)
+    )
+    .execute("upgrade-test")
+    .is_err());
+
+    assert_eq!(database.state().system_version, "3.0.1");
+    assert_eq!(database.online_commit_count(), 0);
+    assert_failed(&paths, "reading_virus_database_status");
+}
+
+#[test]
+fn online_commit_failure_writes_failed_committing_result() {
+    let (_dir, paths, revalidator, database) = arrange();
+    database.fail_online_commit();
     let runner = success_runner();
 
     assert!(UpgradeExecutor::new(
@@ -312,7 +352,7 @@ fn compare_and_set_failure_writes_failed_committing_result() {
     .is_err());
 
     assert_eq!(database.state().system_version, "3.0.1");
-    assert_eq!(database.compare_count(), 1);
+    assert_eq!(database.online_commit_count(), 1);
     assert_failed(&paths, "committing");
     assert_ne!(
         UpgradeResultStore::new(paths.root)

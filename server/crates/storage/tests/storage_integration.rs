@@ -10,15 +10,73 @@ fn setup() -> (Storage, TestDb) {
     (s, db)
 }
 
+fn installation_state_snapshot(
+    path: &std::path::Path,
+) -> (i64, Vec<(String, Option<String>, i64)>) {
+    let conn = rusqlite::Connection::open(path).unwrap();
+    let user_version = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT config_key, config_value, updated_at
+             FROM system_config
+             WHERE config_key IN (
+                 'system_version',
+                 'virus_db_package_version',
+                 'virus_db_version',
+                 'virus_db_updated_at'
+             )
+             ORDER BY config_key",
+        )
+        .unwrap();
+    let configs = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    (user_version, configs)
+}
+
 #[test]
-fn open_rejects_uninitialized_database() {
+fn open_rejects_missing_database_without_creating_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("missing.db");
+
+    assert!(Storage::open(&path).is_err());
+    assert!(!path.exists());
+}
+
+#[test]
+fn open_rejects_existing_empty_database_without_initializing_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("empty.db");
-    let result = Storage::open(&path);
+    std::fs::File::create(&path).unwrap();
+
     assert!(matches!(
-        result,
+        Storage::open(&path),
         Err(StorageError::DatabaseNotInitialized(_))
     ));
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn repeated_open_does_not_change_installation_state() {
+    let db = TestDb::new();
+    let before = installation_state_snapshot(db.path());
+
+    drop(Storage::open(db.path()).unwrap());
+    drop(Storage::open(db.path()).unwrap());
+
+    assert_eq!(installation_state_snapshot(db.path()), before);
 }
 
 #[test]

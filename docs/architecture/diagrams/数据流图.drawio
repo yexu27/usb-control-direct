@@ -269,7 +269,7 @@
         <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="系统程序升级数据流" vertex="1">
           <mxGeometry x="30" y="20" width="1140" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="系统管理员上传签名 .bin → 主服务校验并先返回受理响应 → 独立 updater 安装 DEB → 健康检查后提交数据库系统版本。对应 05-数据流设计 §8。" vertex="1">
+        <mxCell id="sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="系统管理员上传签名 .bin → 主服务校验并先返回受理响应 → 独立 updater 安装 DEB → 健康检查后提交完整安装状态。对应 05-数据流设计 §8。" vertex="1">
           <mxGeometry x="60" y="60" width="1080" height="28" as="geometry" />
         </mxCell>
 
@@ -319,7 +319,7 @@
         <mxCell id="n07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=8;" value="updater 获取状态锁并重新读取数据库状态&#xa;重新校验任务、升级包、DEB 与安装条件" vertex="1">
           <mxGeometry x="390" y="745" width="320" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n08" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=8;" value="停止主服务 → 安装目标 DEB → 事务化迁移&#xa;重载 systemd → 启动服务 → 健康检查" vertex="1">
+        <mxCell id="n08" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=8;" value="停止主服务 → 安装 DEB → 迁移 → 启动服务&#xa;健康检查 → 读取 ClamAV 实际病毒库状态" vertex="1">
           <mxGeometry x="380" y="815" width="340" height="50" as="geometry" />
         </mxCell>
         <mxCell id="d3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;" value="执行与健康&#xa;检查成功？" vertex="1">
@@ -329,7 +329,7 @@
           <mxGeometry x="750" y="885" width="180" height="50" as="geometry" />
         </mxCell>
 
-        <mxCell id="n09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="以源版本为条件原子更新数据库系统版本&#xa;持久化 COMMITTED 结果" vertex="1">
+        <mxCell id="n09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="CAS 事务提交系统版本、病毒库版本与时间&#xa;不修改病毒库包版本 → COMMITTED" vertex="1">
           <mxGeometry x="390" y="975" width="320" height="50" as="geometry" />
         </mxCell>
         <mxCell id="n10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F7;strokeColor=#00A3A3;fontSize=12;arcSize=8;" value="主服务运行后幂等导入升级终态操作日志" vertex="1">
@@ -394,7 +394,7 @@
           <mxGeometry relative="1" as="geometry"><mxPoint x="550" y="1165" as="sourcePoint" /><mxPoint x="550" y="1195" as="targetPoint" /></mxGeometry>
         </mxCell>
 
-        <mxCell id="note1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="说明：&#xa;• system_config.system_version 是系统业务版本权威，release.json 用于校验安装程序和健康状态&#xa;• 系统版本必须严格递增；病毒库“逢 4 跳过”规则不适用于系统升级&#xa;• 成功响应只表示升级包已接收，安装结果通过服务恢复后的系统信息和操作日志确认&#xa;• 在线升级失败不自动回滚，数据库系统版本不会提交为目标版本" vertex="1">
+        <mxCell id="note1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="说明：&#xa;• system_config.system_version 是系统业务版本权威，release.json 用于校验安装程序和健康状态&#xa;• 系统版本必须严格递增；病毒库“逢 4 跳过”规则不适用于系统升级&#xa;• 成功响应只表示升级包已接收，安装结果通过服务恢复后的系统信息和操作日志确认&#xa;• 在线升级失败不自动回滚，数据库安装状态不会提交为目标状态" vertex="1">
           <mxGeometry x="60" y="1275" width="760" height="110" as="geometry" />
         </mxCell>
       </root>

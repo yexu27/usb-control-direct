@@ -17,6 +17,7 @@ use usb_control_db_migrate::UpgradeDatabaseState;
 use wait_timeout::ChildExt;
 
 use crate::health::{check_health, read_restart_count, HealthExpectation};
+use crate::install::read_virus_database_status;
 use crate::migration::run_migration;
 use crate::{ManagedInstallGuard, UpdaterError, UpgradeDatabase};
 
@@ -539,7 +540,7 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
             }
         };
 
-        let install_result = (|| -> Result<(), UpdaterError> {
+        let install_result = (|| -> Result<clamav_status::ClamavStatus, UpdaterError> {
             transition(
                 &tasks,
                 &lock,
@@ -608,18 +609,24 @@ impl<R: CommandRunner, V: PackageRevalidator, C: Clock> UpgradeExecutor<R, V, C>
                     start_attempt_at,
                     restarts_before,
                 },
-            )
+            )?;
+            read_virus_database_status(&self.runner)
         })();
-        if let Err(error) = install_result {
-            let stage = stage_of(&error);
-            return Err(self.finish_failed(&stores, &task, &stage, error, &mut last_timestamp));
-        }
+        let virus = match install_result {
+            Ok(virus) => virus,
+            Err(error) => {
+                let stage = stage_of(&error);
+                return Err(self.finish_failed(&stores, &task, &stage, error, &mut last_timestamp));
+            }
+        };
 
         let committed_at = next_time(&self.clock, &mut last_timestamp)?;
         let mut warnings = Vec::new();
-        if let Err(error) = self.database.compare_and_set_version(
+        if let Err(error) = self.database.compare_and_commit_online_install_state(
             &database_version.to_string(),
             &manifest.package_version.to_string(),
+            &virus.virus_db_version,
+            virus.virus_db_updated_at,
             committed_at,
         ) {
             return Err(self.finish_failed(

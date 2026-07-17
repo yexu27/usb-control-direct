@@ -10,6 +10,7 @@ name = "usb-control-updater"
 path = "src/main.rs"
 
 [dependencies]
+clamav-status = { path = "../clamav-status" }
 hex = { workspace = true }
 release-info = { workspace = true }
 rustls-pemfile = { workspace = true }

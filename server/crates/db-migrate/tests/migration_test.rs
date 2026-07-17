@@ -2,7 +2,8 @@ mod support;
 
 use support::{business_table_names, scalar_i64, scalar_string, table_exists, Fixture};
 use usb_control_db_migrate::{
-    compare_and_set_system_version, read_upgrade_database_state, run_migrations, set_system_version,
+    commit_direct_install_state, compare_and_commit_online_install_state,
+    read_upgrade_database_state, run_migrations,
 };
 
 const BUSINESS_TABLES: &[&str] = &[
@@ -262,38 +263,72 @@ fn read_rejects_missing_system_version() {
 }
 
 #[test]
-fn compare_and_set_updates_matching_source_once() {
+fn direct_install_commits_system_and_clamav_state_atomically() {
     let fixture = Fixture::new();
     run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    let conn = fixture.connection();
+    let package_updated_at = scalar_i64(
+        &conn,
+        "SELECT updated_at FROM system_config WHERE config_key='virus_db_package_version'",
+    );
+    drop(conn);
 
-    compare_and_set_system_version(&fixture.database, "1.0.0", "3.0.2", 1234).unwrap();
+    commit_direct_install_state(&fixture.database, "3.0.2", "28063", 1_784_271_468, 1234).unwrap();
 
     let conn = fixture.connection();
+    for (key, expected) in [
+        ("system_version", "3.0.2"),
+        ("virus_db_version", "28063"),
+        ("virus_db_updated_at", "1784271468"),
+    ] {
+        assert_eq!(
+            scalar_string(
+                &conn,
+                &format!("SELECT config_value FROM system_config WHERE config_key='{key}'")
+            ),
+            expected
+        );
+        assert_eq!(
+            scalar_i64(
+                &conn,
+                &format!("SELECT updated_at FROM system_config WHERE config_key='{key}'")
+            ),
+            1234
+        );
+    }
     assert_eq!(
         scalar_string(
             &conn,
-            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_package_version'"
         ),
-        "3.0.2"
+        "v0.0.0"
     );
     assert_eq!(
         scalar_i64(
             &conn,
-            "SELECT updated_at FROM system_config WHERE config_key='system_version'"
+            "SELECT updated_at FROM system_config WHERE config_key='virus_db_package_version'"
         ),
-        1234
+        package_updated_at
     );
 }
 
 #[test]
-fn compare_and_set_rejects_changed_source_without_writing() {
+fn direct_install_missing_required_config_rolls_back_all_updates() {
     let fixture = Fixture::new();
     run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+    fixture
+        .connection()
+        .execute(
+            "DELETE FROM system_config WHERE config_key='virus_db_version'",
+            [],
+        )
+        .unwrap();
 
-    let error =
-        compare_and_set_system_version(&fixture.database, "3.0.1", "3.0.2", 1234).unwrap_err();
+    assert!(
+        commit_direct_install_state(&fixture.database, "3.0.2", "28063", 1_784_271_468, 1234)
+            .is_err()
+    );
 
-    assert!(error.contains("source"), "unexpected error: {error}");
     let conn = fixture.connection();
     assert_eq!(
         scalar_string(
@@ -305,7 +340,105 @@ fn compare_and_set_rejects_changed_source_without_writing() {
 }
 
 #[test]
-fn set_version_rejects_prefixed_or_non_three_part_version() {
+fn online_install_commits_matching_source_and_clamav_state() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    compare_and_commit_online_install_state(
+        &fixture.database,
+        "1.0.0",
+        "3.0.2",
+        "28063",
+        1_784_271_468,
+        1234,
+    )
+    .unwrap();
+
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+        ),
+        "3.0.2"
+    );
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_version'"
+        ),
+        "28063"
+    );
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_updated_at'"
+        ),
+        "1784271468"
+    );
+}
+
+#[test]
+fn online_install_rejects_changed_source_without_writing_any_state() {
+    let fixture = Fixture::new();
+    run_migrations(&fixture.database, &fixture.sql_root).unwrap();
+
+    let error = compare_and_commit_online_install_state(
+        &fixture.database,
+        "3.0.1",
+        "3.0.2",
+        "28063",
+        1_784_271_468,
+        1234,
+    )
+    .unwrap_err();
+
+    assert!(error.contains("source"), "unexpected error: {error}");
+    let conn = fixture.connection();
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='system_version'"
+        ),
+        "1.0.0"
+    );
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_version'"
+        ),
+        ""
+    );
+    assert_eq!(
+        scalar_string(
+            &conn,
+            "SELECT config_value FROM system_config WHERE config_key='virus_db_updated_at'"
+        ),
+        "0"
+    );
+}
+
+#[test]
+fn non_migration_database_operations_do_not_create_missing_database() {
+    let directory = tempfile::tempdir().unwrap();
+
+    for operation in ["read", "direct", "online"] {
+        let path = directory.path().join(format!("{operation}.db"));
+        let result = match operation {
+            "read" => read_upgrade_database_state(&path).map(|_| ()),
+            "direct" => commit_direct_install_state(&path, "3.0.2", "28063", 1, 2),
+            "online" => {
+                compare_and_commit_online_install_state(&path, "3.0.1", "3.0.2", "28063", 1, 2)
+            }
+            _ => unreachable!(),
+        };
+        assert!(result.is_err(), "{operation} unexpectedly succeeded");
+        assert!(!path.exists(), "{operation} created a database file");
+    }
+}
+
+#[test]
+fn direct_install_rejects_prefixed_or_non_three_part_version() {
     let fixture = Fixture::new();
     run_migrations(&fixture.database, &fixture.sql_root).unwrap();
 
@@ -320,7 +453,7 @@ fn set_version_rejects_prefixed_or_non_three_part_version() {
         "18446744073709551616.0.0",
     ] {
         assert!(
-            set_system_version(&fixture.database, invalid, 1234).is_err(),
+            commit_direct_install_state(&fixture.database, invalid, "28063", 1, 1234).is_err(),
             "invalid version accepted: {invalid}"
         );
     }

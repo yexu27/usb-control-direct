@@ -7,7 +7,7 @@
         <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="装置侧数据库 ER 图" vertex="1">
           <mxGeometry height="36" width="1940" x="30" y="20" as="geometry" />
         </mxCell>
-        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="SQLite · 路径 /var/lib/usb-control/device.db · WAL 模式 · auto_vacuum=FULL · busy_timeout=5000 · 单进程多线程 1写+N读连接池" vertex="1">
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" value="SQLite · 路径 /var/lib/usb-control/device.db · 安装期设置 WAL 模式 · busy_timeout=5000 · 单进程多线程 1写+N读连接池" vertex="1">
           <mxGeometry height="24" width="1860" x="70" y="60" as="geometry" />
         </mxCell>
         <mxCell id="grp-biz" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#E67E22;" value="业务配置表（T01 - T04）" vertex="1">
@@ -167,13 +167,13 @@
         <mxCell id="rules" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="业务规则与约束" vertex="1">
           <mxGeometry height="240" width="330" x="1470" y="130" as="geometry" />
         </mxCell>
-        <mxCell id="rules-f" parent="rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="日志滚动覆盖（一进一出）:&#xa;  装置整体存储 &gt; 80% → 删该类最旧 1 条&#xa;  不跨类别覆盖&#xa;  覆盖行为记录到 T11&#xa;&#xa;人工清理:&#xa;  半年以内日志禁止清理&#xa;  分批执行(500-1000条/批)&#xa;&#xa;Rust 服务运行日志:&#xa;  本地文件, 不进 T05/T06/T10&#xa;&#xa;Schema 版本: PRAGMA user_version&#xa;业务版本: T07 system_version&#xa;空间回收: auto_vacuum = FULL" vertex="1">
+        <mxCell id="rules-f" parent="rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="日志滚动覆盖（一进一出）:&#xa;  装置整体存储 &gt; 80% → 删该类最旧 1 条&#xa;  不跨类别覆盖&#xa;  覆盖行为记录到 T11&#xa;&#xa;人工清理:&#xa;  半年以内日志禁止清理&#xa;  分批执行(500-1000条/批)&#xa;&#xa;Rust 服务运行日志:&#xa;  本地文件, 不进 T05/T06/T10&#xa;&#xa;Schema 版本: PRAGMA user_version&#xa;业务版本: T07 system_version&#xa;删除页由后续写入复用" vertex="1">
           <mxGeometry height="216" width="330" y="24" as="geometry" />
         </mxCell>
         <mxCell id="init" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="数据库初始化与迁移" vertex="1">
           <mxGeometry height="210" width="330" x="1470" y="400" as="geometry" />
         </mxCell>
-        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 初始化 T01-T11 业务表&#xa;3. T02: 38 种默认文件类型黑名单&#xa;4. T03: 3 个开关初始关闭&#xa;5. T04: 4 种内置可执行程序类型&#xa;6. T07: 8 项系统配置&#xa;7. T08: 3 个内置账号 (is_builtin=1)&#xa;8. T09: 6 行角色权限预置数据&#xa;9. 设置 PRAGMA user_version = 1&#xa;10. Schema + seed + 版本同事务提交" vertex="1">
+        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. DEB 安装期设置 WAL / busy_timeout&#xa;2. 初始化 T01-T11 业务表&#xa;3. T02: 38 种默认文件类型黑名单&#xa;4. T03: 3 个开关初始关闭&#xa;5. T04: 4 种内置可执行程序类型&#xa;6. T07: 8 项系统配置&#xa;7. T08: 3 个内置账号 (is_builtin=1)&#xa;8. T09: 6 行角色权限预置数据&#xa;9. 设置 PRAGMA user_version = 1&#xa;10. Schema + seed + 版本同事务提交" vertex="1">
           <mxGeometry height="186" width="330" y="24" as="geometry" />
         </mxCell>
         <mxCell id="legend" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="图例" vertex="1">

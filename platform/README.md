@@ -724,11 +724,11 @@ sudo apt-get install -y ./usb-control_V3.0.1_arm64.deb
 sudo apt-get install -y ./usb-control_V3.0.2_arm64.deb
 ```
 
-直接安装和升级由 DEB 完成数据库初始化或迁移、服务启动和健康检查。数据库不存在或为空时初始化 Schema 和默认数据；已有数据库执行尚未应用的迁移。健康检查成功后，将安装版本写入 SQLite `system_config.system_version`。升级保留配置、密钥、数据库、授权状态和日志。
+直接安装和升级由 DEB 完成数据库初始化或迁移、服务启动和健康检查。数据库不存在或为空时初始化 Schema 和默认数据；已有数据库执行尚未应用的迁移。健康检查成功后，在一个事务中更新 SQLite 的 `system_version`、`virus_db_version` 和 `virus_db_updated_at`；`virus_db_package_version` 不由 DEB 修改。升级保留配置、密钥、数据库、授权状态和日志。
 
 在线升级时，在 Windows Client 的“系统升级”界面选择 `usb-control_V3.0.2_arm64.bin`。Client 根据文件内容计算 SHA-256 并将升级包、目标版本和摘要上传到 RK3568。服务端完整接收、校验并持久化升级任务后先返回受理结果，Client 应显示“升级包已接收，Server 开始升级”。随后主服务停止，Client 按正常连接机制显示断开；新服务启动后重新连接，在操作日志中查询最终成功或失败结果。
 
-在线升级由主服务受理任务并启动短周期 `usb-control-updater`。updater 在停服前读取 SQLite 中的业务版本和 Schema，复验签名包、内部 DEB 及升级源约束，调用系统包管理器安装，再执行数据库迁移、服务启动和健康检查。健康检查成功后，updater 使用 compare-and-set 将 `system_config.system_version` 从任务源版本提交为目标版本；只有数据库提交成功才记录升级成功结果。updater 完成后退出，不作为常驻服务运行。
+在线升级由主服务受理任务并启动短周期 `usb-control-updater`。updater 在停服前读取 SQLite 中的业务版本和 Schema，复验签名包、内部 DEB 及升级源约束，调用系统包管理器安装，再执行数据库迁移、服务启动和健康检查。健康检查成功后，updater 读取 ClamAV 实际病毒库状态，并使用 compare-and-set 在一个事务中提交目标系统版本、病毒库版本和病毒库时间；只有数据库提交成功才记录升级成功结果。updater 完成后退出，不作为常驻服务运行。
 
 Windows Client 查询和显示的是 SQLite `system_config.system_version` 中已经提交的业务版本。服务就绪和健康检查使用 `release.json` 中的实际运行版本，两者职责不同。系统不使用 `active-release.json` 或 `install-meta/VERSION` 保存当前版本。
 

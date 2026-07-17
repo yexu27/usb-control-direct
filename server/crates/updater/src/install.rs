@@ -5,13 +5,29 @@ use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use system_upgrade::read_installed_release;
 
 use crate::executor::run_command;
 use crate::health::{check_health, read_restart_count, HealthExpectation};
 use crate::migration::run_migration;
-use crate::{Clock, CommandRunner, UpdaterError, UpgradeDatabase, UpgradePaths};
+use crate::{Clock, CommandRunner, CommandSpec, UpdaterError, UpgradeDatabase, UpgradePaths};
+
+pub(crate) fn read_virus_database_status(
+    runner: &dyn CommandRunner,
+) -> Result<clamav_status::ClamavStatus, UpdaterError> {
+    let output = runner.run(&CommandSpec {
+        stage: "reading_virus_database_status".into(),
+        program: "/usr/bin/clamscan".into(),
+        args: vec!["--version".into()],
+        timeout: Duration::from_secs(30),
+    })?;
+    let stdout = std::str::from_utf8(&output.stdout)
+        .map_err(|_| UpdaterError::TaskInvalid("ClamAV 版本输出不是 UTF-8".into()))?;
+    clamav_status::parse_clamav_version_output(stdout)
+        .map_err(|error| UpdaterError::TaskInvalid(error.to_string()))
+}
 
 /// 在线升级期间供 DEB 维护脚本识别 updater 管理安装的短期标记。
 pub struct ManagedInstallGuard {
@@ -111,9 +127,14 @@ impl<R: CommandRunner, C: Clock> InstallFinalizer<R, C> {
                 restarts_before,
             },
         )?;
+        let virus = read_virus_database_status(&self.runner)?;
         let committed_at = self.clock.now()?;
-        self.database
-            .set_version(&installed.version.to_string(), committed_at)
+        self.database.commit_direct_install_state(
+            &installed.version.to_string(),
+            &virus.virus_db_version,
+            virus.virus_db_updated_at,
+            committed_at,
+        )
     }
 }
 

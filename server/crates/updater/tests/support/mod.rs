@@ -133,11 +133,15 @@ impl PackageRevalidator for FakePackageRevalidator {
 #[derive(Clone)]
 pub struct FakeUpgradeDatabase {
     state: Arc<Mutex<UpgradeDatabaseState>>,
+    virus_db_version: Arc<Mutex<String>>,
+    virus_db_updated_at: Arc<Mutex<i64>>,
+    committed_at: Arc<Mutex<i64>>,
     fail_read: Arc<Mutex<bool>>,
-    fail_compare: Arc<Mutex<bool>>,
-    fail_set: Arc<Mutex<bool>>,
+    fail_online_commit: Arc<Mutex<bool>>,
+    fail_direct_commit: Arc<Mutex<bool>>,
     read_count: Arc<Mutex<usize>>,
-    compare_count: Arc<Mutex<usize>>,
+    online_commit_count: Arc<Mutex<usize>>,
+    direct_commit_count: Arc<Mutex<usize>>,
 }
 
 impl FakeUpgradeDatabase {
@@ -147,11 +151,15 @@ impl FakeUpgradeDatabase {
                 system_version: system_version.into(),
                 schema_version,
             })),
+            virus_db_version: Arc::new(Mutex::new(String::new())),
+            virus_db_updated_at: Arc::new(Mutex::new(0)),
+            committed_at: Arc::new(Mutex::new(0)),
             fail_read: Arc::new(Mutex::new(false)),
-            fail_compare: Arc::new(Mutex::new(false)),
-            fail_set: Arc::new(Mutex::new(false)),
+            fail_online_commit: Arc::new(Mutex::new(false)),
+            fail_direct_commit: Arc::new(Mutex::new(false)),
             read_count: Arc::new(Mutex::new(0)),
-            compare_count: Arc::new(Mutex::new(0)),
+            online_commit_count: Arc::new(Mutex::new(0)),
+            direct_commit_count: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -159,12 +167,12 @@ impl FakeUpgradeDatabase {
         self.state.lock().unwrap().system_version = version.into();
     }
 
-    pub fn fail_compare(&self) {
-        *self.fail_compare.lock().unwrap() = true;
+    pub fn fail_online_commit(&self) {
+        *self.fail_online_commit.lock().unwrap() = true;
     }
 
-    pub fn fail_set(&self) {
-        *self.fail_set.lock().unwrap() = true;
+    pub fn fail_direct_commit(&self) {
+        *self.fail_direct_commit.lock().unwrap() = true;
     }
 
     pub fn state(&self) -> UpgradeDatabaseState {
@@ -175,8 +183,21 @@ impl FakeUpgradeDatabase {
         *self.read_count.lock().unwrap()
     }
 
-    pub fn compare_count(&self) -> usize {
-        *self.compare_count.lock().unwrap()
+    pub fn install_state(&self) -> (String, String, i64, i64) {
+        (
+            self.state().system_version,
+            self.virus_db_version.lock().unwrap().clone(),
+            *self.virus_db_updated_at.lock().unwrap(),
+            *self.committed_at.lock().unwrap(),
+        )
+    }
+
+    pub fn online_commit_count(&self) -> usize {
+        *self.online_commit_count.lock().unwrap()
+    }
+
+    pub fn direct_commit_count(&self) -> usize {
+        *self.direct_commit_count.lock().unwrap()
     }
 }
 
@@ -191,16 +212,18 @@ impl UpgradeDatabase for FakeUpgradeDatabase {
         Ok(self.state())
     }
 
-    fn compare_and_set_version(
+    fn compare_and_commit_online_install_state(
         &self,
         expected_source: &str,
         target: &str,
-        _updated_at: i64,
+        virus_db_version: &str,
+        virus_db_updated_at: i64,
+        committed_at: i64,
     ) -> Result<(), UpdaterError> {
-        *self.compare_count.lock().unwrap() += 1;
-        if *self.fail_compare.lock().unwrap() {
+        *self.online_commit_count.lock().unwrap() += 1;
+        if *self.fail_online_commit.lock().unwrap() {
             return Err(UpdaterError::TaskInvalid(
-                "injected compare-and-set failure".into(),
+                "injected online commit failure".into(),
             ));
         }
         let mut state = self.state.lock().unwrap();
@@ -210,16 +233,29 @@ impl UpgradeDatabase for FakeUpgradeDatabase {
             ));
         }
         state.system_version = target.into();
+        *self.virus_db_version.lock().unwrap() = virus_db_version.into();
+        *self.virus_db_updated_at.lock().unwrap() = virus_db_updated_at;
+        *self.committed_at.lock().unwrap() = committed_at;
         Ok(())
     }
 
-    fn set_version(&self, target: &str, _updated_at: i64) -> Result<(), UpdaterError> {
-        if *self.fail_set.lock().unwrap() {
+    fn commit_direct_install_state(
+        &self,
+        target: &str,
+        virus_db_version: &str,
+        virus_db_updated_at: i64,
+        committed_at: i64,
+    ) -> Result<(), UpdaterError> {
+        *self.direct_commit_count.lock().unwrap() += 1;
+        if *self.fail_direct_commit.lock().unwrap() {
             return Err(UpdaterError::TaskInvalid(
-                "injected set version failure".into(),
+                "injected direct commit failure".into(),
             ));
         }
         self.state.lock().unwrap().system_version = target.into();
+        *self.virus_db_version.lock().unwrap() = virus_db_version.into();
+        *self.virus_db_updated_at.lock().unwrap() = virus_db_updated_at;
+        *self.committed_at.lock().unwrap() = committed_at;
         Ok(())
     }
 }

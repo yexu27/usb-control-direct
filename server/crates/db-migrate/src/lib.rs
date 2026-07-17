@@ -3,7 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{
+    params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Migration {
@@ -26,7 +28,7 @@ pub struct UpgradeDatabaseState {
 
 /// 从同一数据库连接读取业务版本和 Schema 版本。
 pub fn read_upgrade_database_state(database_path: &Path) -> Result<UpgradeDatabaseState, String> {
-    let conn = open_connection(database_path)?;
+    let conn = open_existing_read_connection(database_path)?;
     let system_version = conn
         .query_row(
             "SELECT config_value FROM system_config WHERE config_key='system_version'",
@@ -44,56 +46,74 @@ pub fn read_upgrade_database_state(database_path: &Path) -> Result<UpgradeDataba
     })
 }
 
-/// 仅当数据库仍处于预期源版本时提交目标业务版本。
-pub fn compare_and_set_system_version(
+/// 仅当数据库仍处于预期源版本时提交在线安装状态。
+pub fn compare_and_commit_online_install_state(
     database_path: &Path,
     expected_source: &str,
     target: &str,
-    updated_at: i64,
+    virus_db_version: &str,
+    virus_db_updated_at: i64,
+    committed_at: i64,
 ) -> Result<(), String> {
     validate_system_version(expected_source)?;
     validate_system_version(target)?;
-    let mut conn = open_connection(database_path)?;
+    let mut conn = open_existing_write_connection(database_path)?;
     let transaction = begin_immediate(&mut conn)?;
     let changed = transaction
         .execute(
             "UPDATE system_config
              SET config_value = ?1, updated_at = ?2
              WHERE config_key = 'system_version' AND config_value = ?3",
-            params![target, updated_at, expected_source],
+            params![target, committed_at, expected_source],
         )
         .map_err(|error| format!("compare-and-set system_version failed: {error}"))?;
     if changed != 1 {
         return Err("system_version source does not match".into());
     }
+    update_required_config(
+        &transaction,
+        "virus_db_version",
+        virus_db_version,
+        committed_at,
+    )?;
+    update_required_config(
+        &transaction,
+        "virus_db_updated_at",
+        &virus_db_updated_at.to_string(),
+        committed_at,
+    )?;
     transaction
         .commit()
-        .map_err(|error| format!("commit system_version failed: {error}"))
+        .map_err(|error| format!("commit online install state failed: {error}"))
 }
 
-/// 直接安装健康成功后设置已安装业务版本。
-pub fn set_system_version(
+/// 直接安装健康成功后提交完整安装状态。
+pub fn commit_direct_install_state(
     database_path: &Path,
     target: &str,
-    updated_at: i64,
+    virus_db_version: &str,
+    virus_db_updated_at: i64,
+    committed_at: i64,
 ) -> Result<(), String> {
     validate_system_version(target)?;
-    let mut conn = open_connection(database_path)?;
+    let mut conn = open_existing_write_connection(database_path)?;
     let transaction = begin_immediate(&mut conn)?;
-    let changed = transaction
-        .execute(
-            "UPDATE system_config
-             SET config_value = ?1, updated_at = ?2
-             WHERE config_key = 'system_version'",
-            params![target, updated_at],
-        )
-        .map_err(|error| format!("set system_version failed: {error}"))?;
-    if changed != 1 {
-        return Err("system_version is missing".into());
-    }
+    update_required_config(&transaction, "system_version", target, committed_at)?;
+    update_required_config(
+        &transaction,
+        "virus_db_version",
+        virus_db_version,
+        committed_at,
+    )?;
+    update_required_config(
+        &transaction,
+        "virus_db_updated_at",
+        &virus_db_updated_at.to_string(),
+        committed_at,
+    )?;
     transaction
         .commit()
-        .map_err(|error| format!("commit system_version failed: {error}"))
+        .map_err(|error| format!("commit direct install state failed: {error}"))
 }
 
 pub fn run_migrations(database_path: &Path, sql_root: &Path) -> Result<MigrationReport, String> {
@@ -107,7 +127,7 @@ pub fn run_migrations(database_path: &Path, sql_root: &Path) -> Result<Migration
         .last()
         .map(|migration| migration.version)
         .ok_or_else(|| "no database migrations found".to_string())?;
-    let mut conn = open_connection(database_path)?;
+    let mut conn = open_migration_connection(database_path)?;
     let current_version = read_user_version(&conn)?;
     if current_version > supported_max {
         return Err(format!(
@@ -139,9 +159,40 @@ pub fn run_migrations(database_path: &Path, sql_root: &Path) -> Result<Migration
     })
 }
 
-fn open_connection(database_path: &Path) -> Result<Connection, String> {
+fn open_migration_connection(database_path: &Path) -> Result<Connection, String> {
     let conn = Connection::open(database_path)
         .map_err(|error| format!("open database {} failed: {error}", database_path.display()))?;
+    configure_write_connection(conn)
+}
+
+fn open_existing_read_connection(database_path: &Path) -> Result<Connection, String> {
+    let conn = Connection::open_with_flags(
+        database_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|error| {
+        format!(
+            "open existing database {} for read failed: {error}",
+            database_path.display()
+        )
+    })?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(|error| format!("set busy timeout failed: {error}"))?;
+    Ok(conn)
+}
+
+fn open_existing_write_connection(database_path: &Path) -> Result<Connection, String> {
+    let conn = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|error| {
+            format!(
+                "open existing database {} failed: {error}",
+                database_path.display()
+            )
+        })?;
+    configure_write_connection(conn)
+}
+
+fn configure_write_connection(conn: Connection) -> Result<Connection, String> {
     conn.busy_timeout(Duration::from_secs(5))
         .map_err(|error| format!("set busy timeout failed: {error}"))?;
     conn.pragma_update(None, "foreign_keys", "ON")
@@ -264,6 +315,24 @@ fn apply_migration(conn: &mut Connection, migration: &Migration) -> Result<(), S
 fn begin_immediate(conn: &mut Connection) -> Result<Transaction<'_>, String> {
     conn.transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|error| format!("begin immediate transaction failed: {error}"))
+}
+
+fn update_required_config(
+    transaction: &Transaction<'_>,
+    key: &str,
+    value: &str,
+    committed_at: i64,
+) -> Result<(), String> {
+    let changed = transaction
+        .execute(
+            "UPDATE system_config SET config_value=?1, updated_at=?2 WHERE config_key=?3",
+            params![value, committed_at, key],
+        )
+        .map_err(|error| format!("update {key} failed: {error}"))?;
+    if changed != 1 {
+        return Err(format!("required system_config missing: {key}"));
+    }
+    Ok(())
 }
 
 fn read_sql(path: &Path) -> Result<String, String> {

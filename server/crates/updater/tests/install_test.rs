@@ -88,17 +88,22 @@ fn direct_finalize_runs_migrate_reload_start_health_commit() {
             ("systemctl".into(), Some("show".into())),
             ("systemctl".into(), Some("show".into())),
             ("openssl".into(), Some("s_client".into())),
+            ("/usr/bin/clamscan".into(), Some("--version".into())),
         ]
     );
 }
 
 #[test]
-fn direct_install_sets_installed_version_after_health() {
+fn direct_install_commits_installed_and_clamav_state_after_health() {
     let fixture = FinalizerFixture::new(FakeClock::fixed(200));
 
     fixture.finalizer().finalize().unwrap();
 
-    assert_eq!(fixture.database.state().system_version, "3.0.2");
+    assert_eq!(
+        fixture.database.install_state(),
+        ("3.0.2".into(), "28063".into(), 1_784_298_268, 200)
+    );
+    assert_eq!(fixture.database.direct_commit_count(), 1);
 }
 
 #[test]
@@ -108,6 +113,7 @@ fn direct_finalize_stops_before_database_set_when_clock_fails() {
     assert!(fixture.finalizer().finalize().is_err());
 
     assert_eq!(fixture.database.state().system_version, "3.0.1");
+    assert_eq!(fixture.database.direct_commit_count(), 0);
 }
 
 #[test]
@@ -132,12 +138,28 @@ fn health_failure_does_not_set_version() {
     assert!(fixture.finalizer().finalize().is_err());
 
     assert_eq!(fixture.database.state().system_version, "3.0.1");
+    assert_eq!(fixture.database.direct_commit_count(), 0);
 }
 
 #[test]
-fn database_set_failure_fails_finalize_install() {
+fn clamav_status_failure_does_not_commit_install_state() {
     let fixture = FinalizerFixture::new(FakeClock::fixed(200));
-    fixture.database.fail_set();
+    fixture.runner.clear_outputs();
+    for output in ["", "", "0\n", "", "active\n", "42\n", "0\n", ""] {
+        fixture.runner.push_success(output);
+    }
+    fixture.runner.push_failure("reading_virus_database_status");
+
+    assert!(fixture.finalizer().finalize().is_err());
+
+    assert_eq!(fixture.database.state().system_version, "3.0.1");
+    assert_eq!(fixture.database.direct_commit_count(), 0);
+}
+
+#[test]
+fn database_commit_failure_fails_finalize_install() {
+    let fixture = FinalizerFixture::new(FakeClock::fixed(200));
+    fixture.database.fail_direct_commit();
 
     assert!(fixture.finalizer().finalize().is_err());
 
@@ -157,7 +179,17 @@ impl FinalizerFixture {
         let temp = tempfile::tempdir().unwrap();
         let paths = UpgradePaths::for_root(temp.path().join("upgrade"));
         let runner = FakeCommandRunner::default();
-        for output in ["", "", "0\n", "", "active\n", "42\n", "0\n", ""] {
+        for output in [
+            "",
+            "",
+            "0\n",
+            "",
+            "active\n",
+            "42\n",
+            "0\n",
+            "",
+            "ClamAV 1.4.4/28063/Fri Jul 17 14:24:28 2026\n",
+        ] {
             runner.push_success(output);
         }
         for path in [

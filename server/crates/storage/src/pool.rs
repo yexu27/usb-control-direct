@@ -33,7 +33,7 @@ impl Pool {
     /// 打开数据库文件并初始化连接池。
     ///
     /// 参数:
-    /// - `path`: 数据库文件路径；不存在时自动创建。
+    /// - `path`: 已完成安装初始化的数据库文件路径；不存在时返回错误。
     /// - `read_pool_size`: 只读连接池大小；传 `0` 时使用默认值 `4`。
     ///
     /// 返回:
@@ -195,16 +195,8 @@ impl Pool {
 
     /// 打开并初始化写连接。
     fn open_write_connection(path: &str) -> Result<Connection, StorageError> {
-        let conn = Connection::open(path)?;
-        // WAL 模式提升并发读写性能
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        debug!("启用 WAL 模式");
-        // 锁等待超时 5000ms，避免写冲突时立即报错
-        conn.execute_batch("PRAGMA busy_timeout=5000;")?;
-        // 启用自动清理，保持数据库文件紧凑（须在建表前设置）
-        conn.execute_batch("PRAGMA auto_vacuum=FULL;")?;
-        // 启动时截断 WAL 文件，避免 WAL 无限增长
-        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         Ok(conn)
     }
 
@@ -214,8 +206,7 @@ impl Pool {
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-        conn.execute_batch("PRAGMA busy_timeout=5000;")?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         Ok(conn)
     }
 }
@@ -322,23 +313,5 @@ mod tests {
             .expect("读取失败");
 
         assert!(!found, "回滚后数据不应存在");
-    }
-
-    #[test]
-    fn wal_mode_enabled() {
-        let (pool, _tmp) = make_pool();
-
-        let mode: String = pool
-            .with_read(|conn| {
-                let m = conn.query_row(
-                    "PRAGMA journal_mode;",
-                    [],
-                    |row| row.get(0),
-                )?;
-                Ok(m)
-            })
-            .expect("读取 journal_mode 失败");
-
-        assert_eq!(mode, "wal", "journal_mode 应为 WAL");
     }
 }
