@@ -41,10 +41,10 @@
           <mxGeometry height="26" width="300" x="70" y="460" as="geometry" />
         </mxCell>
         <mxCell id="t07" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T07 system_config（系统配置 KV）" vertex="1">
-          <mxGeometry height="230" width="280" x="70" y="490" as="geometry" />
+          <mxGeometry height="260" width="280" x="70" y="490" as="geometry" />
         </mxCell>
-        <mxCell id="t07f" parent="t07" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  config_key  TEXT&#xa;    config_value  TEXT (JSON 序列化)&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;device_description  设备描述(≤32字符)&#xa;auth_status  授权状态&#xa;    (authorized/unauthorized/expired/failed)&#xa;auth_expire_time  授权到期时间&#xa;machine_code  机器码(Base64)&#xa;system_version  系统版本号&#xa;virus_db_version  病毒库版本&#xa;virus_db_updated_at  病毒库更新时间" vertex="1">
-          <mxGeometry height="204" width="280" y="26" as="geometry" />
+        <mxCell id="t07f" parent="t07" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="PK  config_key  TEXT&#xa;    config_value  TEXT&#xa;    updated_at  INTEGER NOT NULL&#xa;────────────&#xa;device_description  设备描述(≤32字符)&#xa;auth_status  授权状态&#xa;    (authorized/unauthorized/expired/failed)&#xa;auth_expire_time  授权到期时间&#xa;machine_code  机器码(Base64)&#xa;system_version  系统业务版本（权威）&#xa;virus_db_package_version  病毒库包版本&#xa;virus_db_version  ClamAV 病毒特征库版本序号&#xa;virus_db_updated_at  病毒库更新时间" vertex="1">
+          <mxGeometry height="234" width="280" y="26" as="geometry" />
         </mxCell>
         <mxCell id="t08" parent="1" style="swimlane;fontStyle=1;align=center;startSize=26;fontSize=12;collapsible=0;fillColor=#F3E8FF;strokeColor=#8E44AD;rounded=0;whiteSpace=wrap;html=1;" value="T08 users（用户表）" vertex="1">
           <mxGeometry height="268" width="280" x="420" y="490" as="geometry" />
@@ -167,13 +167,13 @@
         <mxCell id="rules" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="业务规则与约束" vertex="1">
           <mxGeometry height="240" width="330" x="1470" y="130" as="geometry" />
         </mxCell>
-        <mxCell id="rules-f" parent="rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="日志滚动覆盖（一进一出）:&#xa;  装置整体存储 &gt; 80% → 删该类最旧 1 条&#xa;  不跨类别覆盖&#xa;  覆盖行为记录到 T11&#xa;&#xa;人工清理:&#xa;  半年以内日志禁止清理&#xa;  分批执行(500-1000条/批)&#xa;&#xa;Rust 服务运行日志:&#xa;  本地文件, 不进 T05/T06/T10&#xa;&#xa;Schema 版本: PRAGMA user_version = 1&#xa;空间回收: auto_vacuum = FULL" vertex="1">
+        <mxCell id="rules-f" parent="rules" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="日志滚动覆盖（一进一出）:&#xa;  装置整体存储 &gt; 80% → 删该类最旧 1 条&#xa;  不跨类别覆盖&#xa;  覆盖行为记录到 T11&#xa;&#xa;人工清理:&#xa;  半年以内日志禁止清理&#xa;  分批执行(500-1000条/批)&#xa;&#xa;Rust 服务运行日志:&#xa;  本地文件, 不进 T05/T06/T10&#xa;&#xa;Schema 版本: PRAGMA user_version&#xa;业务版本: T07 system_version&#xa;空间回收: auto_vacuum = FULL" vertex="1">
           <mxGeometry height="216" width="330" y="24" as="geometry" />
         </mxCell>
-        <mxCell id="init" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="数据库初始化（首次启动）" vertex="1">
+        <mxCell id="init" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FEF9E7;strokeColor=#D4AC0D;rounded=0;whiteSpace=wrap;html=1;" value="数据库初始化与迁移" vertex="1">
           <mxGeometry height="210" width="330" x="1470" y="400" as="geometry" />
         </mxCell>
-        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 创建 T01-T11 所有表&#xa;3. T02: 38 种默认文件类型黑名单 (is_default=1)&#xa;4. T03: 3 个开关初始关闭&#xa;5. T04: 4 种内置可执行程序类型&#xa;6. T07: 7 项系统配置&#xa;7. T08: 3 个内置账号 (is_builtin=1)&#xa;     admin@123 / operator@123 / audit@123&#xa;8. T09: 6 行角色权限预置数据&#xa;9. PRAGMA user_version = 1" vertex="1">
+        <mxCell id="init-f" parent="init" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. PRAGMA 配置 (WAL/auto_vacuum/busy_timeout)&#xa;2. 初始化 T01-T11 业务表&#xa;3. 建立 schema_migrations 迁移账本&#xa;4. T02: 38 种默认文件类型黑名单&#xa;5. T03: 3 个开关初始关闭&#xa;6. T04: 4 种内置可执行程序类型&#xa;7. T07: 8 项系统配置&#xa;8. T08: 3 个内置账号 (is_builtin=1)&#xa;9. T09: 6 行角色权限预置数据&#xa;10. PRAGMA user_version 与迁移账本一致" vertex="1">
           <mxGeometry height="186" width="330" y="24" as="geometry" />
         </mxCell>
         <mxCell id="legend" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="图例" vertex="1">
@@ -182,11 +182,11 @@
         <mxCell id="legend-f" parent="legend" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="橙色: 业务配置表 (T01-T04)&#xa;紫色: 系统与权限表 (T07-T09)&#xa;绿色: 日志表 (T05-T06, T10-T11)&#xa;黄色: 规则与初始化&#xa;────────────&#xa;N:1 灰色虚线: 业务关联 (非外键约束)&#xa;橙色虚线: 开关控制关系&#xa;绿色虚线: 日志覆盖关系&#xa;PK = 主键 / UK = 唯一约束" vertex="1">
           <mxGeometry height="156" width="330" y="24" as="geometry" />
         </mxCell>
-        <mxCell id="notes" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#FFFFFF;strokeColor=#BDC3C7;rounded=0;whiteSpace=wrap;html=1;" value="关键说明" vertex="1">
-          <mxGeometry height="180" width="330" x="1470" y="850" as="geometry" />
+        <mxCell id="notes" parent="1" style="swimlane;fontStyle=1;align=center;startSize=24;fontSize=12;collapsible=0;fillColor=#F5F5F5;strokeColor=#8C8C8C;rounded=0;whiteSpace=wrap;html=1;" value="关键说明与迁移账本" vertex="1">
+          <mxGeometry height="245" width="330" x="1470" y="850" as="geometry" />
         </mxCell>
-        <mxCell id="notes-f" parent="notes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="1. 装置端共 11 张表, S11 统一封装访问&#xa;2. 管理端不创建业务数据库&#xa;3. 关系为业务关联, 不使用数据库外键&#xa;4. 日志通过 device_sn / username /&#xa;   log_category 做追溯和覆盖&#xa;5. 所有时间字段存 Unix 时间戳 (INTEGER)&#xa;6. JSON 字段用于不可结构化的补充信息&#xa;7. 连续登录失败 5 次锁定 5 分钟" vertex="1">
-          <mxGeometry height="156" width="330" y="24" as="geometry" />
+        <mxCell id="notes-f" parent="notes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=6;spacingRight=4;overflow=hidden;fontSize=11;whiteSpace=wrap;html=1;" value="业务表: T01-T11（11 张）&#xa;基础设施表: schema_migrations&#xa;  PK version INTEGER&#xa;     name TEXT NOT NULL&#xa;     checksum TEXT NOT NULL&#xa;     applied_at INTEGER NOT NULL&#xa;────────────&#xa;· migration 校验已应用脚本 checksum&#xa;· PRAGMA user_version 与账本最高版本一致&#xa;· migration 不修改 T07 system_version&#xa;· 管理端不创建业务数据库&#xa;· 业务关系不使用数据库外键" vertex="1">
+          <mxGeometry height="221" width="330" y="24" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

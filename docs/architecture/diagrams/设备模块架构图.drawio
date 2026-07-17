@@ -190,19 +190,19 @@
         <mxCell id="kernel_chip_5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C8C8C;fontSize=10;align=center;verticalAlign=middle;arcSize=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;UTF-8/Unicode&lt;/font&gt;" vertex="1">
           <mxGeometry height="28" width="105" x="1735" y="841" as="geometry" />
         </mxCell>
-        <mxCell id="db_sqlite" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#F1E5FF;strokeColor=#7B61A8;strokeWidth=1.4;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;SQLite&lt;br&gt;账号 / 授权 / 策略 / 白名单&lt;br&gt;USB审计 / 恶意代码 / 操作日志&lt;/font&gt;" vertex="1">
+        <mxCell id="db_sqlite" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#F1E5FF;strokeColor=#7B61A8;strokeWidth=1.4;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;SQLite（业务数据权威）&lt;br&gt;账号 / 授权 / 策略 / 白名单 / 系统版本&lt;br&gt;USB 审计 / 恶意代码 / 操作日志&lt;/font&gt;" vertex="1">
           <mxGeometry height="100" width="320" x="230" y="994" as="geometry" />
         </mxCell>
         <mxCell id="file_policy" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略包 / 授权文件&lt;br&gt;策略 .bin 国密加密签名&lt;br&gt;license 由授权服务生成后导入&lt;/font&gt;" vertex="1">
           <mxGeometry height="100" width="300" x="640" y="994" as="geometry" />
         </mxCell>
-        <mxCell id="file_virus" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;病毒库与升级包&lt;br&gt;病毒库 .zip&lt;br&gt;系统升级 .bin&lt;/font&gt;" vertex="1">
+        <mxCell id="file_virus" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#FFF8E1;strokeColor=#D4A72C;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;病毒库与升级包&lt;br&gt;病毒库 .zip&lt;br&gt;签名系统升级 .bin（内含正式 DEB）&lt;/font&gt;" vertex="1">
           <mxGeometry height="100" width="260" x="1030" y="994" as="geometry" />
         </mxCell>
         <mxCell id="memory_state" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F0;strokeColor=#F28E2B;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;管理端进程内状态&lt;br&gt;token / role / 页面快照&lt;br&gt;不落盘、不记住 IP&lt;/font&gt;" vertex="1">
           <mxGeometry height="100" width="260" x="1380" y="994" as="geometry" />
         </mxCell>
-        <mxCell id="local_files" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;装置本地运行文件&lt;br&gt;证书 / 配置 / 安装元数据&lt;br&gt;旧程序副本用于失败回滚&lt;/font&gt;" vertex="1">
+        <mxCell id="local_files" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;strokeWidth=1.2;fontSize=10;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;装置本地运行文件&lt;br&gt;证书 / 配置 / release.json&lt;br&gt;升级暂存 / 任务状态 / 终态结果&lt;/font&gt;" vertex="1">
           <mxGeometry height="100" width="190" x="1700" y="994" as="geometry" />
         </mxCell>
         <mxCell id="sec_rbac" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8E63CE;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=middle;arcSize=8;spacingLeft=8;spacingRight=8;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;权限控制&lt;br&gt;三权分立&lt;br&gt;装置端强制校验&lt;br&gt;UI 权限仅作展示&lt;/font&gt;" vertex="1">

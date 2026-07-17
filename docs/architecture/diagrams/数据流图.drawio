@@ -269,14 +269,14 @@
         <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" value="系统程序升级数据流" vertex="1">
           <mxGeometry x="30" y="20" width="1140" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="系统管理员上传升级包 → 装置端校验、版本比对、原子替换 → 重启服务 → 管理端断连。对应 05-数据流设计 §8。" vertex="1">
+        <mxCell id="sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontColor=#555555;" value="系统管理员上传签名 .bin → 主服务校验并先返回受理响应 → 独立 updater 安装 DEB → 健康检查后提交数据库系统版本。对应 05-数据流设计 §8。" vertex="1">
           <mxGeometry x="60" y="60" width="1080" height="28" as="geometry" />
         </mxCell>
 
         <mxCell id="n01" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="系统管理员上传 .bin 升级包" vertex="1">
           <mxGeometry x="420" y="110" width="260" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="n02" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="Electron 读取文件字节流" vertex="1">
+        <mxCell id="n02" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="Electron 校验文件可读和大小，读取字节流" vertex="1">
           <mxGeometry x="420" y="180" width="260" height="40" as="geometry" />
         </mxCell>
         <mxCell id="n03" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="C03 发送 CMD_UPLOAD_SYSTEM_UPGRADE" vertex="1">
@@ -287,52 +287,58 @@
           <mxGeometry x="420" y="310" width="260" height="25" as="geometry" />
         </mxCell>
 
-        <mxCell id="n04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="校验文件格式和完整性（SHA256）" vertex="1">
-          <mxGeometry x="420" y="350" width="260" height="40" as="geometry" />
+        <mxCell id="n04" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="暂存升级包并读取数据库版本 / Schema&#xa;校验容器、签名、DEB、版本、平台与兼容性" vertex="1">
+          <mxGeometry x="390" y="345" width="320" height="50" as="geometry" />
         </mxCell>
         <mxCell id="d1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=11;" value="通过？" vertex="1">
           <mxGeometry x="500" y="420" width="100" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="err1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="返回 FORMAT_ERROR&#xa;S07 记录操作日志" vertex="1">
-          <mxGeometry x="750" y="430" width="180" height="40" as="geometry" />
+        <mxCell id="err1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="REJECTED&#xa;清理暂存内容，返回失败原因&#xa;记录校验结果" vertex="1">
+          <mxGeometry x="750" y="425" width="200" height="55" as="geometry" />
         </mxCell>
 
-        <mxCell id="n05" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="比对版本号（必须大于当前版本）" vertex="1">
-          <mxGeometry x="420" y="510" width="260" height="40" as="geometry" />
+        <mxCell id="n05" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="持久化 PREPARED 任务&#xa;服务端返回 RspCommon(success=true, result_code=0)" vertex="1">
+          <mxGeometry x="390" y="505" width="320" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="d2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=11;" value="版本更高？" vertex="1">
+        <mxCell id="client-accepted-tip" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=11;arcSize=8;" value="管理端收到成功响应后显示：&#xa;“升级包已接收，Server 开始升级”" vertex="1">
+          <mxGeometry x="70" y="500" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e-client-accepted-tip" edge="1" parent="1" source="n05" target="client-accepted-tip" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#F28E2B;fontSize=10;" value="客户端展示">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=11;" value="响应完整&#xa;发送成功？" vertex="1">
           <mxGeometry x="495" y="580" width="110" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="err2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="返回 VERSION_TOO_LOW&#xa;S07 记录操作日志" vertex="1">
+        <mxCell id="err2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="CANCELLED&#xa;清理暂存内容&#xa;不调度 updater" vertex="1">
           <mxGeometry x="750" y="590" width="180" height="40" as="geometry" />
         </mxCell>
 
-        <mxCell id="n06" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="将升级包写入临时目录" vertex="1">
-          <mxGeometry x="420" y="680" width="260" height="40" as="geometry" />
+        <mxCell id="n06" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="任务进入 ACCEPTED，记录升级开始&#xa;非阻塞调度 usb-control-updater.service" vertex="1">
+          <mxGeometry x="390" y="675" width="320" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="校验新版本文件完整性" vertex="1">
-          <mxGeometry x="420" y="750" width="260" height="40" as="geometry" />
+        <mxCell id="n07" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=8;" value="updater 获取状态锁并重新读取数据库状态&#xa;重新校验任务、升级包、DEB 与安装条件" vertex="1">
+          <mxGeometry x="390" y="745" width="320" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n08" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="原子切换方式替换当前运行版本" vertex="1">
-          <mxGeometry x="420" y="820" width="260" height="40" as="geometry" />
+        <mxCell id="n08" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=8;" value="停止主服务 → 安装目标 DEB → 事务化迁移&#xa;重载 systemd → 启动服务 → 健康检查" vertex="1">
+          <mxGeometry x="380" y="815" width="340" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="d3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=11;" value="成功？" vertex="1">
+        <mxCell id="d3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;" value="执行与健康&#xa;检查成功？" vertex="1">
           <mxGeometry x="500" y="890" width="100" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="err3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="保留原版本&#xa;返回失败原因&#xa;S07 记录操作日志" vertex="1">
+        <mxCell id="err3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;fontSize=11;arcSize=8;" value="FAILED&#xa;持久化失败阶段和原因&#xa;不自动恢复旧 DEB" vertex="1">
           <mxGeometry x="750" y="885" width="180" height="50" as="geometry" />
         </mxCell>
 
-        <mxCell id="n09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="返回成功响应，S07 记录操作日志" vertex="1">
-          <mxGeometry x="420" y="980" width="260" height="40" as="geometry" />
+        <mxCell id="n09" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="以源版本为条件原子更新数据库系统版本&#xa;持久化 COMMITTED 结果" vertex="1">
+          <mxGeometry x="390" y="975" width="320" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#9C6ADE;fontSize=12;arcSize=8;" value="装置端重启服务（systemd restart）" vertex="1">
+        <mxCell id="n10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F7;strokeColor=#00A3A3;fontSize=12;arcSize=8;" value="主服务运行后幂等导入升级终态操作日志" vertex="1">
           <mxGeometry x="420" y="1050" width="260" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="n11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="管理端收到连接断开&#xa;显示连接断开提示" vertex="1">
+        <mxCell id="n11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#F28E2B;fontSize=12;arcSize=8;" value="升级期间管理端按现有机制显示连接断开&#xa;服务恢复后重新连接" vertex="1">
           <mxGeometry x="420" y="1120" width="260" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="n12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="提示&quot;升级完成，请重新连接&quot;" vertex="1">
+        <mxCell id="n12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2D8A4F;fontSize=12;arcSize=8;" value="查询数据库中的当前系统版本与操作日志" vertex="1">
           <mxGeometry x="420" y="1195" width="260" height="40" as="geometry" />
         </mxCell>
 
@@ -388,8 +394,8 @@
           <mxGeometry relative="1" as="geometry"><mxPoint x="550" y="1165" as="sourcePoint" /><mxPoint x="550" y="1195" as="targetPoint" /></mxGeometry>
         </mxCell>
 
-        <mxCell id="note1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="说明：&#xa;• 升级包版本必须大于当前版本，不允许降版本或同版本覆盖&#xa;• 原子切换保证升级失败时自动回滚到原版本&#xa;• 升级成功后装置端重启服务，管理端按断开连接流程处理&#xa;• 管理端需重新连接并重新登录" vertex="1">
-          <mxGeometry x="60" y="1280" width="500" height="100" as="geometry" />
+        <mxCell id="note1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=6;" value="说明：&#xa;• system_config.system_version 是系统业务版本权威，release.json 用于校验安装程序和健康状态&#xa;• 系统版本必须严格递增；病毒库“逢 4 跳过”规则不适用于系统升级&#xa;• 成功响应只表示升级包已接收，安装结果通过服务恢复后的系统信息和操作日志确认&#xa;• 在线升级失败不自动回滚，数据库系统版本不会提交为目标版本" vertex="1">
+          <mxGeometry x="60" y="1275" width="760" height="110" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

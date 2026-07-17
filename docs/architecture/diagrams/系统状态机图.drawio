@@ -263,104 +263,55 @@
     </mxGraphModel>
   </diagram>
   <diagram name="系统程序升级状态机" id="d06-upgrade-state">
-    <mxGraphModel dx="1000" dy="550" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="530" math="0" shadow="0">
+    <mxGraphModel dx="1300" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
         <mxCell id="up-title" value="系统程序升级状态机" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="30" y="15" width="790" height="32" as="geometry" />
+          <mxGeometry x="30" y="15" width="1140" height="32" as="geometry" />
         </mxCell>
-        <mxCell id="up-sub" value="管理端推送升级包后触发。SHA256 校验 + 版本号必须高于当前版本。升级失败自动回滚。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
-          <mxGeometry x="60" y="48" width="730" height="22" as="geometry" />
+        <mxCell id="up-sub" value="主服务负责接收、校验、响应和调度；独立 updater 负责重新校验、安装、迁移、启动、健康检查和版本提交。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="60" y="50" width="1080" height="22" as="geometry" />
         </mxCell>
         <mxCell id="up-start" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#333333;strokeColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="365" y="78" width="20" height="20" as="geometry" />
+          <mxGeometry x="55" y="130" width="20" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="up-idle" value="IDLE&#xa;空闲" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#666666;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="295" y="108" width="160" height="42" as="geometry" />
+        <mxCell id="up-validating" value="VALIDATING&#xa;暂存与接收校验" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="100" y="115" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-prepared" value="PREPARED&#xa;等待响应发送结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="300" y="115" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-accepted" value="ACCEPTED&#xa;允许调度 updater" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="500" y="115" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-stopping" value="STOPPING&#xa;停止主服务" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="700" y="115" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-installing" value="INSTALLING&#xa;安装目标 DEB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="900" y="115" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-migrating" value="MIGRATING&#xa;执行数据库迁移" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="900" y="270" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-starting" value="STARTING&#xa;启动目标服务" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="700" y="270" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-health" value="HEALTH_CHECKING&#xa;校验版本 / Schema / 运行态" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="480" y="270" width="190" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-committed" value="COMMITTED&#xa;数据库版本已提交" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B7E1CD;strokeColor=#2D8A4F;fontSize=11;arcSize=10;strokeWidth=2;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="270" y="270" width="160" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-rejected" value="REJECTED&#xa;接收校验失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="100" y="205" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-cancelled" value="CANCELLED&#xa;响应未完整发送" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="300" y="205" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-schedule-failed" value="SCHEDULE_FAILED&#xa;updater 调度失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=10;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="500" y="205" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="up-failed" value="FAILED&#xa;重新校验、准备或任一执行阶段失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;arcSize=10;strokeWidth=2;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="515" y="420" width="280" height="55" as="geometry" /></mxCell>
+
+        <mxCell id="e-up-start" edge="1" parent="1" source="up-start" target="up-validating" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#333333;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-rejected" value="校验失败" edge="1" parent="1" source="up-validating" target="up-rejected" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-prepared" value="校验通过" edge="1" parent="1" source="up-validating" target="up-prepared" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-cancelled" value="发送失败" edge="1" parent="1" source="up-prepared" target="up-cancelled" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-accepted" value="响应发送成功" edge="1" parent="1" source="up-prepared" target="up-accepted" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-schedule-failed" value="调度失败" edge="1" parent="1" source="up-accepted" target="up-schedule-failed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-stopping" value="调度成功" edge="1" parent="1" source="up-accepted" target="up-stopping" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-installing" edge="1" parent="1" source="up-stopping" target="up-installing" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-migrating" edge="1" parent="1" source="up-installing" target="up-migrating" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-starting" edge="1" parent="1" source="up-migrating" target="up-starting" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-health" edge="1" parent="1" source="up-starting" target="up-health" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-up-committed" value="健康通过并 CAS 提交版本" edge="1" parent="1" source="up-health" target="up-committed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2D8A4F;fontSize=10;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="up-failure-rule" value="进入 FAILED：&#xa;• ACCEPTED：重新校验或安装准备失败&#xa;• STOPPING 至 HEALTH_CHECKING：任一执行阶段失败&#xa;• HEALTH_CHECKING：版本提交失败" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2F2;strokeColor=#B85450;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="845" y="405" width="260" height="85" as="geometry" />
         </mxCell>
-        <mxCell id="up-val" value="VALIDATING&#xa;SHA256 + 版本校验" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="280" y="200" width="190" height="42" as="geometry" />
+        <mxCell id="e-up-failure-rule" edge="1" parent="1" source="up-failure-rule" target="up-failed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#B85450;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="up-note" value="终态：REJECTED、CANCELLED、SCHEDULE_FAILED、COMMITTED、FAILED。在线升级不自动回滚；只有目标服务健康检查通过且数据库系统版本提交成功后，任务才进入 COMMITTED。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="100" y="535" width="950" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="up-upg" value="UPGRADING&#xa;程序替换中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="280" y="298" width="190" height="42" as="geometry" />
-        </mxCell>
-        <mxCell id="up-restart" value="RESTARTING&#xa;重启中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;arcSize=12;strokeWidth=2;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="160" y="400" width="160" height="42" as="geometry" />
-        </mxCell>
-        <mxCell id="up-roll" value="ROLLBACK&#xa;回滚中" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;arcSize=12;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="440" y="400" width="160" height="42" as="geometry" />
-        </mxCell>
-        <mxCell id="e-up-s" value="" style="endArrow=block;endFill=1;strokeColor=#333333;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="375" y="98" as="sourcePoint" />
-            <mxPoint x="375" y="108" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-iv" value="收到升级包" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#333333;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="375" y="150" as="sourcePoint" />
-            <mxPoint x="375" y="200" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-vu" value="校验通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#1F77B4;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="375" y="242" as="sourcePoint" />
-            <mxPoint x="375" y="298" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-vi" value="校验失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="280" y="215" as="sourcePoint" />
-            <Array as="points">
-              <mxPoint x="230" y="215" />
-              <mxPoint x="230" y="135" />
-            </Array>
-            <mxPoint x="295" y="135" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-ur" value="替换完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="340" y="340" as="sourcePoint" />
-            <Array as="points">
-              <mxPoint x="340" y="370" />
-              <mxPoint x="240" y="370" />
-            </Array>
-            <mxPoint x="240" y="400" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-ub" value="升级异常" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="410" y="340" as="sourcePoint" />
-            <Array as="points">
-              <mxPoint x="410" y="370" />
-              <mxPoint x="520" y="370" />
-            </Array>
-            <mxPoint x="520" y="400" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-ri" value="新程序启动成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#82B366;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="160" y="421" as="sourcePoint" />
-            <Array as="points">
-              <mxPoint x="100" y="421" />
-              <mxPoint x="100" y="123" />
-            </Array>
-            <mxPoint x="295" y="123" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e-up-bi" value="回滚完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;html=1;endArrow=block;endFill=1;strokeColor=#B85450;fontSize=10;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="600" y="421" as="sourcePoint" />
-            <Array as="points">
-              <mxPoint x="680" y="421" />
-              <mxPoint x="680" y="129" />
-            </Array>
-            <mxPoint x="455" y="129" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="up-note" value="说明：版本号只允许升级（version &gt; current），不允许降级。回滚恢复原二进制，回滚完成后状态归 IDLE。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4A72C;fontSize=10;arcSize=6;align=left;verticalAlign=top;spacing=6;" vertex="1" parent="1">
-          <mxGeometry x="60" y="470" width="700" height="35" as="geometry" />
+        <mxCell id="up-note2" value="失败结果记录失败阶段、原因、源版本和目标版本；主服务运行后将终态结果幂等写入操作日志。系统版本必须严格大于数据库中的当前版本，病毒库“逢 4 跳过”规则不适用于系统升级。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#8C8C8C;fontSize=11;arcSize=6;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="100" y="610" width="950" height="55" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

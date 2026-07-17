@@ -40,7 +40,7 @@
         <mxCell id="deploy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#8a6a18;strokeColor=#8a6a18;fontColor=#ffffff;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" value="部署形态" vertex="1">
           <mxGeometry height="28" width="180" x="20" y="1100" as="geometry" />
         </mxCell>
-        <mxCell id="deploy_list" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=10;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;USB 管控装置&lt;br&gt;RK3568 / 4GB / 32GB&lt;br&gt;━━━━━━━━━━&lt;br&gt;USB OTG 连受控主机&lt;br&gt;USB Host 接入 U盘/键鼠&lt;br&gt;━━━━━━━━━━&lt;br&gt;Windows 管理端安装包&lt;br&gt;装置端离线安装包&lt;br&gt;━━━━━━━━━━&lt;br&gt;升级包校验后覆盖升级&lt;br&gt;失败回滚程序文件&lt;/font&gt;" vertex="1">
+        <mxCell id="deploy_list" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=1;fontSize=10;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;USB 管控装置&lt;br&gt;RK3568 / 4GB / 32GB&lt;br&gt;━━━━━━━━━━&lt;br&gt;USB OTG 连受控主机&lt;br&gt;USB Host 接入 U盘/键鼠&lt;br&gt;━━━━━━━━━━&lt;br&gt;Windows 管理端安装包&lt;br&gt;装置端 ARM64 DEB&lt;br&gt;━━━━━━━━━━&lt;br&gt;签名 .bin 承载正式 DEB&lt;br&gt;失败记录终态，不自动回滚&lt;/font&gt;" vertex="1">
           <mxGeometry height="360" width="155" x="30" y="1140" as="geometry" />
         </mxCell>
         <mxCell id="L7_bar" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#5d3a78;strokeColor=#5d3a78;fontColor=#ffffff;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" value="L7" vertex="1">
@@ -94,7 +94,7 @@
         <mxCell id="L6_m4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2d8a4f;strokeWidth=1;fontSize=12;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;策略生命周期&lt;br&gt;导入 / 导出 / 激活&lt;br&gt;失败保留原策略&lt;/font&gt;" vertex="1">
           <mxGeometry height="85" width="240" x="1060" y="336" as="geometry" />
         </mxCell>
-        <mxCell id="L6_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2d8a4f;strokeWidth=1;fontSize=12;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;系统维护&lt;br&gt;系统升级 / 病毒库升级&lt;br&gt;版本逢 4 跳过&lt;/font&gt;" vertex="1">
+        <mxCell id="L6_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2d8a4f;strokeWidth=1;fontSize=12;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;系统维护&lt;br&gt;系统版本严格递增&lt;br&gt;病毒库版本逢 4 跳过&lt;/font&gt;" vertex="1">
           <mxGeometry height="85" width="240" x="1315" y="336" as="geometry" />
         </mxCell>
         <mxCell id="L6_m6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2d8a4f;strokeWidth=1;fontSize=12;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;管理端运行边界&lt;br&gt;仅内存 token / 角色 / 页面快照&lt;br&gt;不记住 IP&lt;/font&gt;" vertex="1">
@@ -184,7 +184,7 @@
         <mxCell id="L4_m7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;审计与日志服务&lt;br&gt;事件归类 / SQLite 写入&lt;br&gt;日志滚动覆盖&lt;/font&gt;" vertex="1">
           <mxGeometry height="125" width="205" x="1570" y="742" as="geometry" />
         </mxCell>
-        <mxCell id="L4_m8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;升级执行器&lt;br&gt;安装包校验 / 替换&lt;br&gt;失败回滚程序文件&lt;/font&gt;" vertex="1">
+        <mxCell id="L4_m8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;系统升级执行器&lt;br&gt;二次校验 / DEB 安装 / 迁移&lt;br&gt;启动 / 健康检查 / 版本提交&lt;/font&gt;" vertex="1">
           <mxGeometry height="125" width="205" x="1790" y="742" as="geometry" />
         </mxCell>
         <mxCell id="L4_m9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;国密策略包服务&lt;br&gt;SM2 / SM3 / SM4&lt;br&gt;签名与加解密边界&lt;/font&gt;" vertex="1">
@@ -244,7 +244,7 @@
         <mxCell id="L2_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00a3a3;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;病毒库与扫描结果&lt;br&gt;ClamAV DB&lt;br&gt;命中文件标记&lt;/font&gt;" vertex="1">
           <mxGeometry height="110" width="230" x="1295" y="1123" as="geometry" />
         </mxCell>
-        <mxCell id="L2_m6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00a3a3;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;升级与安装元数据&lt;br&gt;当前版本 / 旧程序副本&lt;br&gt;回滚状态&lt;/font&gt;" vertex="1">
+        <mxCell id="L2_m6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00a3a3;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;升级与安装元数据&lt;br&gt;数据库业务版本 / release.json&lt;br&gt;升级任务 / 终态结果&lt;/font&gt;" vertex="1">
           <mxGeometry height="110" width="230" x="1545" y="1123" as="geometry" />
         </mxCell>
         <mxCell id="L2_m7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00a3a3;strokeWidth=1;fontSize=11;fontStyle=0;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;装置本地文件&lt;br&gt;配置 / 证书 / 策略包&lt;br&gt;UTF-8 文本&lt;/font&gt;" vertex="1">
@@ -271,7 +271,7 @@
         <mxCell id="L1_m4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;管理主机&lt;br&gt;Windows&lt;br&gt;安装管理端桌面 App&lt;/font&gt;" vertex="1">
           <mxGeometry height="110" width="290" x="1260" y="1336" as="geometry" />
         </mxCell>
-        <mxCell id="L1_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;装置端安装包&lt;br&gt;.deb 或 .run&lt;br&gt;一次性部署服务与依赖&lt;/font&gt;" vertex="1">
+        <mxCell id="L1_m5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;装置端安装包&lt;br&gt;正式 ARM64 DEB&lt;br&gt;应用文件与 systemd unit&lt;/font&gt;" vertex="1">
           <mxGeometry height="110" width="300" x="1585" y="1336" as="geometry" />
         </mxCell>
         <mxCell id="L1_m6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;font style=&quot;font-size: 14px; font-weight: normal;&quot;&gt;管理端安装包&lt;br&gt;NSIS .exe&lt;br&gt;覆盖安装不迁移业务数据&lt;/font&gt;" vertex="1">
